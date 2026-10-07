@@ -51,7 +51,13 @@ export const SHAPE_KINDS: readonly ShapeKind[] = [
   "cloud",
 ];
 
+export type LineStyle = "solid" | "dashed" | "dotted";
+
 export interface Stroke {
+  /** Absent is Solid; only Pen input creates non-solid styles. */
+  lineStyle?: LineStyle;
+  /** Arc-length origin retained by partial erasing. */
+  dashOffset?: number;
   id: string;
   color: string;
   size: number;

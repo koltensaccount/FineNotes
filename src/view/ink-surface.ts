@@ -1,3 +1,4 @@
+import { lineStyleOf } from "../ink/line-style";
 import { bindScrollThumb } from "./scroll-thumb-drag";
 import type { PdfRenderArea } from "../canvas/pdf-raster";
 /**
@@ -3071,6 +3072,9 @@ export class InkSurface {
       size: this.strokeSize(),
       tool,
       usePressure: pressureEnabled,
+      ...(this.toolState.tool === "pen" && lineStyleOf(this.toolState.lineStyle) !== "solid"
+        ? { lineStyle: lineStyleOf(this.toolState.lineStyle) }
+        : {}),
     };
   }
 
@@ -3440,7 +3444,12 @@ export class InkSurface {
     if (!page || page.id !== lift.pageId) return null;
     const style = this.currentStyle();
     const { stroke } = lift;
-    if (style.color !== stroke.color || style.size !== stroke.size || style.tool !== stroke.tool) {
+    if (
+      style.color !== stroke.color ||
+      style.size !== stroke.size ||
+      style.tool !== stroke.tool ||
+      lineStyleOf(style.lineStyle) !== lineStyleOf(stroke.lineStyle)
+    ) {
       return null;
     }
     const distance = Math.hypot(at.x - lift.x, at.y - lift.y);
@@ -4038,13 +4047,14 @@ export class InkSurface {
     );
 
     // Stored as it was drawn on the wet layer: the same colour, width and ink.
-    const { color, size, tool } = this.currentStyle();
+    const { color, size, tool, lineStyle } = this.currentStyle();
     const stroke: Stroke = {
       id: this.strokeIds.next(),
       color,
       size,
       tool,
       pts: shape ? shape.pts : builder.points(),
+      ...(lineStyle && lineStyle !== "solid" ? { lineStyle } : {}),
       ...(shape ? { shape: shape.kind } : {}),
     };
     const command = this.commitStroke(box, page, stroke);

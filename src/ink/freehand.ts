@@ -55,6 +55,8 @@ export function radiusAt(pressure: number, pen: PenOptions): number {
  * round caps and joins. One point draws a round dot.
  */
 export interface InkRun {
+  /** A patterned dot is filled as a circle, not a zero-length dash. */
+  dot?: boolean;
   /** Line width, page px. */
   width: number;
   /** The polyline, flat `[x, y, …]`. */

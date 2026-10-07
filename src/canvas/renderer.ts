@@ -1,3 +1,5 @@
+import { lineStyleOf, patternedRuns } from "../ink/line-style";
+import type { LineStyle } from "../model/document";
 /**
  * Paginated wet/dry canvas renderer (DOM).
  *
@@ -78,6 +80,8 @@ const WET_HIDDEN = "goodobsidian-wet-hidden";
 
 /** A stroke's look without its points: what the wet layer draws a stroke in progress with. */
 export interface StrokeStyle {
+  lineStyle?: LineStyle;
+  dashOffset?: number;
   color: string;
   /** Nib width, in page px. */
   size: number;
@@ -187,6 +191,12 @@ export function paintInk(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   runs.forEach((run, i) => {
+    if (run.dot) {
+      ctx.beginPath();
+      ctx.arc(run.pts[0], run.pts[1], run.width / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
     ctx.lineWidth = run.width;
     ctx.stroke(paths?.[i] ?? pathOf(run));
   });
@@ -999,13 +1009,18 @@ export class Renderer {
     const pressure = pressureFor(stroke.tool, usePressure);
     const pts = stroke.pts;
     const n = pts.length;
-    const fingerprint = `${pressure ? 1 : 0}|${n}|${pts[0]}|${pts[1]}|${pts[n - 3]}|${pts[n - 2]}`;
+    const fingerprint = `${stroke.lineStyle ?? "solid"}|${stroke.dashOffset ?? 0}|${stroke.size}|${pressure ? 1 : 0}|${n}|${pts[0]}|${pts[1]}|${pts[n - 3]}|${pts[n - 2]}`;
     const cached = this.paths.get(stroke);
     if (cached && cached.fingerprint === fingerprint) return cached;
     let runs: InkRun[] = [];
     let bounds: Bounds | null = null;
     if (n >= 3) {
-      runs = inkRuns(pts, penOptions(stroke.size, pressure), stroke.shape !== undefined);
+      runs = patternedRuns(
+        inkRuns(pts, penOptions(stroke.size, pressure), stroke.shape !== undefined),
+        stroke.tool === "pen" ? lineStyleOf(stroke.lineStyle) : "solid",
+        stroke.size,
+        stroke.dashOffset,
+      );
       const b = strokeBounds(stroke);
       if (b) {
         const pad = stroke.size;
@@ -1225,7 +1240,15 @@ export class Renderer {
 /** The style a stored stroke is drawn with, `pressure` being the user's setting. */
 export function styleOf(stroke: Stroke, pressure: boolean): StrokeStyle {
   const { color, size, tool, shape } = stroke;
-  return { color, size, tool, usePressure: pressure, shape: shape !== undefined };
+  return {
+    color,
+    size,
+    tool,
+    usePressure: pressure,
+    shape: shape !== undefined,
+    lineStyle: stroke.lineStyle,
+    dashOffset: stroke.dashOffset,
+  };
 }
 
 /**
@@ -1236,7 +1259,7 @@ export function styleOf(stroke: Stroke, pressure: boolean): StrokeStyle {
 function paintStroke(
   ctx: CanvasRenderingContext2D,
   ink: { runs: readonly InkRun[]; paths?: readonly Path2D[] },
-  style: { color: string; tool: Tool },
+  style: { color: string; tool: Tool; size: number; lineStyle?: LineStyle; dashOffset?: number },
   highlighterAlpha: number,
 ): void {
   const highlighter = style.tool === "highlighter";
@@ -1249,7 +1272,14 @@ function paintStroke(
   // painted exactly as stored. It is never remapped to suit the app theme —
   // that is how a note written on one device stays legible on another.
   ctx.fillStyle = style.color;
-  paintInk(ctx, ink.runs, ink.paths);
+  const styled = style.tool === "pen" && lineStyleOf(style.lineStyle) !== "solid" && !ink.paths;
+  paintInk(
+    ctx,
+    styled
+      ? patternedRuns(ink.runs, lineStyleOf(style.lineStyle), style.size, style.dashOffset)
+      : ink.runs,
+    styled ? undefined : ink.paths,
+  );
   ctx.restore();
 }
 

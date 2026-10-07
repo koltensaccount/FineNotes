@@ -135,3 +135,33 @@ describe("existing PDF export integration", () => {
     ).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+it.each(["dashed", "dotted"] as const)(
+  "PDF-backed overlays retain %s Pen metadata through the existing exporter",
+  async (lineStyle) => {
+    const page = pdfPage();
+    page.strokes = [
+      {
+        id: "styled",
+        tool: "pen",
+        color: "#000",
+        size: 3,
+        pts: [0, 0, 0.5, 100, 10, 0.8],
+        lineStyle,
+      },
+    ];
+    const bytes = await exportPagesToPdf(
+      [page],
+      { ...sources, readPdf: source },
+      { title: "Styled PDF" },
+    );
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+    expect(
+      vi
+        .mocked(renderPageThumbnail)
+        .mock.calls.some((call) =>
+          call[1].strokes.some((stroke) => stroke.lineStyle === lineStyle),
+        ),
+    ).toBe(true);
+  },
+);

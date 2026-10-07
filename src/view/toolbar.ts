@@ -1,3 +1,5 @@
+import { lineStyleOf } from "../ink/line-style";
+import type { LineStyle } from "../model/document";
 /**
  * The two-tier toolbar of the ink note view.
  *
@@ -242,6 +244,7 @@ export function eraserSizeFor(state: ToolbarState): number {
 }
 
 export interface ToolbarState {
+  lineStyle?: LineStyle;
   tool: ActiveTool;
   color: string;
   size: number;
@@ -288,6 +291,7 @@ export interface ToolbarState {
 }
 
 export interface ToolbarCallbacks {
+  onLineStyleChange?: (style: LineStyle) => void;
   // Declared as properties holding functions, not as method signatures.
   // A method signature makes `callbacks.onFoo` an unbound method reference,
   // which @typescript-eslint/unbound-method rejects in CI's plugin-review
@@ -742,6 +746,32 @@ export class Toolbar {
       this.widthButtons.set(width, button);
     }
     this.chevron("More widths", (button) => this.toggleWidthList(button));
+    if (this.state.tool === "pen") {
+      const style = lineStyleOf(this.state.lineStyle);
+      const button = this.optionsEl.createEl("button", {
+        cls: "clickable-icon",
+        text: style === "solid" ? "━" : style === "dashed" ? "╍" : "•••",
+        attr: { "aria-label": `Line style: ${style}`, title: `Line style: ${style}` },
+      });
+      button.addEventListener("click", () => {
+        const body = this.openPopover("line-style", button);
+        for (const value of ["solid", "dashed", "dotted"] as const) {
+          const option = body.createEl("button", {
+            cls: "goodobsidian-wide clickable-icon",
+            text: value[0].toUpperCase() + value.slice(1),
+            attr: { "aria-pressed": String(value === style) },
+          });
+          option.toggleClass("is-active", value === style);
+          option.addEventListener("click", () => {
+            this.state.lineStyle = value;
+            this.callbacks.onLineStyleChange?.(value);
+            this.closePopover();
+            this.buildOptions();
+          });
+        }
+        this.keepPopoverInside(button);
+      });
+    }
 
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
 

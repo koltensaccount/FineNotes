@@ -1,0 +1,117 @@
+[
+  {
+    "style": "solid",
+    "doc": {
+      "version": 2,
+      "view": {
+        "scrollY": 0,
+        "width": 1024,
+        "scale": 1
+      },
+      "pages": [
+        {
+          "id": "p1",
+          "kind": "ink",
+          "geometry": {
+            "width": 1024,
+            "height": 1448
+          },
+          "backdrop": {
+            "kind": "blank"
+          },
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "color": "#123456",
+              "size": 3,
+              "pts": [10, 10, 0.5, 100, 50, 0.8]
+            }
+          ],
+          "images": [],
+          "textBoxes": []
+        }
+      ]
+    },
+    "payload": "v2:VY7dCsIwDIXfJd72oqtVpJe+hYgXcwtbWF1GW9x07N1NdYISCDn5+XJmuGOIxD04o+BOOIKbIVaBvT+B0wpGqlMLrtDGKhmUHkUsCoaywQjuPAPV4GAoQEFHfa6p70Q0yDdM4ZGBf5AWqWmTKGsPArqWVVcHHvLeCrj6UhAyo9v65aIg4ZSOPH1lTIG7XwcxO6jYcxCxKczW7vbSifQUx1u5Z/bZKPbSHVK+LLTW6pPM4V1otcvJaHtZcrwA",
+    "file": "---\ngoodobsidian: true\n---\n\nMy prose.\n\n%%goodobsidian\nv2:VY7dCsIwDIXfJd72oqtVpJe+hYgXcwtbWF1GW9x07N1NdYISCDn5+XJmuGOIxD04o+BOOIKbIVaBvT+B0wpGqlMLrtDGKhmUHkUsCoaywQjuPAPV4GAoQEFHfa6p70Q0yDdM4ZGBf5AWqWmTKGsPArqWVVcHHvLeCrj6UhAyo9v65aIg4ZSOPH1lTIG7XwcxO6jYcxCxKczW7vbSifQUx1u5Z/bZKPbSHVK+LLTW6pPM4V1otcvJaHtZcrwA\n%%\n"
+  },
+  {
+    "style": "dashed",
+    "doc": {
+      "version": 2,
+      "view": {
+        "scrollY": 0,
+        "width": 1024,
+        "scale": 1
+      },
+      "pages": [
+        {
+          "id": "p1",
+          "kind": "ink",
+          "geometry": {
+            "width": 1024,
+            "height": 1448
+          },
+          "backdrop": {
+            "kind": "blank"
+          },
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "color": "#123456",
+              "size": 3,
+              "pts": [10, 10, 0.5, 100, 50, 0.8],
+              "lineStyle": "dashed",
+              "dashOffset": 6.75
+            }
+          ],
+          "images": [],
+          "textBoxes": []
+        }
+      ]
+    },
+    "payload": "v2:VU/LagMxDPwX9WqKd+NNg4/9gR56KiUHZ63sinWsxTZ5dMm/V24TSDCIGckzGi1wxJSJI9hWwZHwBHaB3CcO4QusVnAiX0awjW6NkoELKOSqYHYDZrDfC5AHC3MDCiaKFVOchAzIByzpUg2fTEakYSzCjNmI0c71k0881383g11wYiEzOty2bBUUPJd3Pt9pLomnxwS5Jug5cBLy0rQr062lk+lHEq9EzxxqUIzSnUtVNlpr9V/azR/Qqqul1UZWBIr4WS71YvAuj+hFWcHHfp9RLli/vnXXrbxf",
+    "file": "---\ngoodobsidian: true\n---\n\nMy prose.\n\n%%goodobsidian\nv2:VU/LagMxDPwX9WqKd+NNg4/9gR56KiUHZ63sinWsxTZ5dMm/V24TSDCIGckzGi1wxJSJI9hWwZHwBHaB3CcO4QusVnAiX0awjW6NkoELKOSqYHYDZrDfC5AHC3MDCiaKFVOchAzIByzpUg2fTEakYSzCjNmI0c71k0881383g11wYiEzOty2bBUUPJd3Pt9pLomnxwS5Jug5cBLy0rQr062lk+lHEq9EzxxqUIzSnUtVNlpr9V/azR/Qqqul1UZWBIr4WS71YvAuj+hFWcHHfp9RLli/vnXXrbxf\n%%\n"
+  },
+  {
+    "style": "dotted",
+    "doc": {
+      "version": 2,
+      "view": {
+        "scrollY": 0,
+        "width": 1024,
+        "scale": 1
+      },
+      "pages": [
+        {
+          "id": "p1",
+          "kind": "ink",
+          "geometry": {
+            "width": 1024,
+            "height": 1448
+          },
+          "backdrop": {
+            "kind": "blank"
+          },
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "color": "#123456",
+              "size": 3,
+              "pts": [10, 10, 0.5, 100, 50, 0.8],
+              "lineStyle": "dotted",
+              "dashOffset": 6.75
+            }
+          ],
+          "images": [],
+          "textBoxes": []
+        }
+      ]
+    },
+    "payload": "v2:VU9Na8MwDP0v2tUMJ3W64uP+wA47jdGDG6uJiWsFW/Rjof998tZCi0DoSXpPTwscMZdACWyr4BjwBHaB0meK8QusVnAKnkewjW6NkoGLKOCqYHYDFrDfCwQPFuYGFEwh1TqkScCAdEDOlyr4JDJiGEYWZMxGhHaun3ymue7dBHbRiYTMwuF2ZauA8czvdL7DwpmmRwelOugpUhbw0rQr062lU8KPOF4JnyhWo5ikO3NlNlpr9Z/azV+hVVdTq42ciCHhJ1/qx+CJGb0wvSvjx35fUD5Yv751163ELw==",
+    "file": "---\ngoodobsidian: true\n---\n\nMy prose.\n\n%%goodobsidian\nv2:VU9Na8MwDP0v2tUMJ3W64uP+wA47jdGDG6uJiWsFW/Rjof998tZCi0DoSXpPTwscMZdACWyr4BjwBHaB0meK8QusVnAKnkewjW6NkoGLKOCqYHYDFrDfCwQPFuYGFEwh1TqkScCAdEDOlyr4JDJiGEYWZMxGhHaun3ymue7dBHbRiYTMwuF2ZauA8czvdL7DwpmmRwelOugpUhbw0rQr062lU8KPOF4JnyhWo5ikO3NlNlpr9Z/azV+hVVdTq42ciCHhJ1/qx+CJGb0wvSvjx35fUD5Yv751163ELw==\n%%\n"
+  }
+]

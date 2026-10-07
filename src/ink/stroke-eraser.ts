@@ -1,3 +1,4 @@
+import { distanceAlongPoints } from "./line-style";
 /**
  * The "standard" (partial) eraser: cut the part of a stroke that lies under a
  * circular eraser and keep what is left, possibly as several pieces.
@@ -187,6 +188,7 @@ export function eraseCircleFromStroke(
 ): Stroke[] | null {
   const pieces = eraseCircleFromPoints(stroke.pts, stroke.size, cx, cy, radius);
   if (pieces === null) return null;
+  let minimum = 0;
   return pieces.map((pts) => {
     const piece: Stroke = {
       id: nextId(),
@@ -195,6 +197,12 @@ export function eraseCircleFromStroke(
       tool: stroke.tool,
       pts,
     };
+    if (stroke.lineStyle && stroke.lineStyle !== "solid") {
+      piece.lineStyle = stroke.lineStyle;
+      const distance = distanceAlongPoints(stroke.pts, pts[0], pts[1], minimum);
+      piece.dashOffset = (stroke.dashOffset ?? 0) + distance;
+      minimum = distance + polylineLength(pts);
+    }
     if (stroke.t0 !== undefined) piece.t0 = stroke.t0;
     if (stroke.shape !== undefined) piece.shape = stroke.shape;
     return piece;
