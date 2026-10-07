@@ -20,6 +20,7 @@ function setup() {
     syncActive: vi.fn(),
   }) as unknown as {
     setPenColor(color: string): void;
+    activateColorPreset(anchor: HTMLElement, id: string, color: string): void;
     setWidth(width: number): void;
     choosePenType(spec: (typeof PEN_TYPES)[number]): void;
     quickColors(): string[];
@@ -57,10 +58,10 @@ describe("toolbar preset integration", () => {
     s.presets.palettes.pen = [];
     expect(s.toolbar.quickColors()).toEqual([]);
   });
-  it("keeps the live quick width in numerical order", () => {
+  it("keeps every stored width in user order without injecting a slider value", () => {
     const s = setup();
     s.state.size = 1.22;
-    expect(s.toolbar.quickWidths()).toEqual([1.22, 2, 3]);
+    expect(s.toolbar.quickWidths()).toEqual(s.presets.widths);
   });
   it("an edited selected color follows its slot and reports persistence", () => {
     const s = setup();
@@ -81,4 +82,18 @@ it.each([1, 5, 6, 20])("the quick strip includes every one of %s colors in user 
   s.state.color = s.presets.palettes.pen[count - 1].color;
   expect(s.toolbar.quickColors()).toHaveLength(count);
   expect(s.state.color).toBe(s.presets.palettes.pen[count - 1].color);
+});
+
+it("tap unselected selects; tap the selected ID again edits that exact record regardless of elapsed time", () => {
+  const s = setup();
+  const editor = vi.fn();
+  Object.assign(s.toolbar, { presetPopover: editor });
+  const red = s.presets.palettes.pen[2];
+  const anchor = {} as HTMLElement;
+  s.toolbar.activateColorPreset(anchor, red.id, red.color);
+  expect(s.presets.selectedIds.pen).toBe(red.id);
+  expect(s.state.color).toBe(red.color);
+  expect(editor).not.toHaveBeenCalled();
+  s.toolbar.activateColorPreset(anchor, red.id, red.color);
+  expect(editor).toHaveBeenCalledExactlyOnceWith(anchor, { id: red.id });
 });

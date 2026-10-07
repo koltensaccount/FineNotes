@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bindContextInput } from "../../src/view/context-input";
+import { bindContextInput, bindPressDismissal } from "../../src/view/context-input";
 class Surface extends EventTarget {
   setTimeout = globalThis.setTimeout;
   clearTimeout = globalThis.clearTimeout;
@@ -73,6 +73,7 @@ describe("context input modality and lifetime", () => {
   it.each(["pen", "mouse"])("does not open a hold for %s", (type) => {
     const s = setup();
     s.pointer("pointerdown", type);
+    expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(1000);
     expect(s.open).not.toHaveBeenCalled();
   });
@@ -153,5 +154,40 @@ describe("context input modality and lifetime", () => {
     s.pointer("pointerdown");
     vi.advanceTimersByTime(500);
     expect(s.open).toHaveBeenCalledOnce();
+  });
+});
+
+describe("transient Paste bar dismissal", () => {
+  it.each(["touch", "pen", "mouse"])(
+    "outside %s down dismisses without preventing the underlying action",
+    (pointerType) => {
+      const s = setup();
+      let opened = true;
+      const dismiss = vi.fn(() => {
+        opened = false;
+      });
+      const dispose = bindPressDismissal(s.el as unknown as HTMLElement, () => opened, dismiss);
+      const inside = send(s.doc, "pointerdown", { composedPath: () => [s.el], pointerType });
+      expect(dismiss).not.toHaveBeenCalled();
+      expect(inside.defaultPrevented).toBe(false);
+      const outside = send(s.doc, "pointerdown", { composedPath: () => [], pointerType });
+      expect(dismiss).toHaveBeenCalledOnce();
+      expect(outside.defaultPrevented).toBe(false);
+      opened = true;
+      dispose();
+      send(s.doc, "pointerdown", { composedPath: () => [], pointerType });
+      expect(dismiss).toHaveBeenCalledOnce();
+    },
+  );
+  it("Escape and keyboard popup activation dismiss, but the hold release click does not", () => {
+    const s = setup();
+    const dismiss = vi.fn();
+    const dispose = bindPressDismissal(s.el as unknown as HTMLElement, () => true, dismiss);
+    send(s.doc, "click", { detail: 1, composedPath: () => [] });
+    expect(dismiss).not.toHaveBeenCalled();
+    send(s.doc, "click", { detail: 0, composedPath: () => [] });
+    send(s.doc, "keydown", { key: "Escape" });
+    expect(dismiss).toHaveBeenCalledTimes(2);
+    dispose();
   });
 });

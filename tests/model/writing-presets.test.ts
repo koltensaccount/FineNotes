@@ -14,48 +14,51 @@ import {
   selectedPreset,
   removeColor,
   selectColor,
+  selectWidth,
+  widthSlotsFor,
+  selectWidthSlot,
 } from "../../src/model/writing-presets";
 const fresh = () => migrateWritingPresets({ ...DEFAULT_SETTINGS });
 describe("writing width presets", () => {
   it.each([
-    [1.22, [1.22, 2, 3, 5]],
-    [2.5, [2, 2.5, 3, 5]],
+    [1.22, [2, 3, 5, 1.22]],
+    [2.5, [2, 3, 5, 2.5]],
     [12, [2, 3, 5, 12]],
-  ])("adds %s in numerical order", (value, expected) => {
+  ])("appends %s in user order", (value, expected) => {
     const p = fresh();
     p.widths = [2, 3, 5];
-    p.selectedWidth = 3;
+    selectWidth(p, "pen", 3);
     saveWidth(p, value as number);
     expect(p.widths).toEqual(expected);
     expect(p.selectedWidth).toBe(3);
   });
-  it("edits and resorts while following the selected value", () => {
+  it("edits in place while following the selected value", () => {
     const p = fresh();
-    p.selectedWidth = 3;
+    selectWidth(p, "pen", 3);
     saveWidth(p, 10, 3);
-    expect(p.widths).toEqual([2, 5, 8, 10, 12]);
+    expect(p.widths).toEqual([2, 10, 5, 8, 12]);
     expect(p.selectedWidth).toBe(10);
   });
-  it("normalizes precision/range and merges meaningful duplicates", () => {
+  it("normalizes new edits while retaining duplicate slots", () => {
     const p = fresh();
     saveWidth(p, 3.01);
-    expect(p.widths).toEqual([2, 3, 5, 8, 12]);
+    expect(p.widths).toEqual([2, 3, 5, 8, 12, 3]);
     expect(normalizeWidth(-100)).toBe(0.98);
     expect(normalizeWidth(100)).toBe(12);
     saveWidth(p, 5, 3);
-    expect(p.widths).toEqual([2, 5, 8, 12]);
+    expect(p.widths).toEqual([2, 5, 5, 8, 12, 3]);
   });
   it("removal keeps active ink and supports an empty list after reload", () => {
     const p = fresh();
     p.widths = [3];
-    p.selectedWidth = 3;
+    selectWidth(p, "pen", 3);
     removeWidth(p, 3);
     expect(p.selectedWidth).toBe(3);
     expect(migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: p }).widths).toEqual([]);
   });
-  it("persists sorted presets and selected width through JSON/reload", () => {
+  it("persists user slots and selected width through JSON/reload", () => {
     const p = fresh();
-    p.selectedWidth = 5;
+    selectWidth(p, "pen", 5);
     saveWidth(p, 2.5);
     const saved = JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, writingPresets: p }));
     expect(migrateWritingPresets(saved)).toEqual(p);
@@ -159,11 +162,11 @@ describe("stable mutable color presets", () => {
       selectedColors: { pen: "#0000ff", highlighter: "#def" },
     };
     const p = migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: old });
-    expect(p.version).toBe(3);
+    expect(p.version).toBe(4);
     expect(colors(p)).toEqual(["#ff0000", "#0000ff"]);
     expect(selectedColor(p, "pen")).toBe("#0000ff");
     expect(selectedColor(p, "highlighter")).toBe("#ddeeff");
-    expect(p.widths).toEqual([2, 5]);
+    expect(p.widths).toEqual([5, 2]);
     expect(p.selectedWidth).toBe(9.75);
     expect(migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: p })).toEqual(p);
   });
@@ -193,4 +196,26 @@ describe("stable mutable color presets", () => {
     expect(shownValue(settings, "defaultColor")).toBe("#abcdef");
     expect(selectedColor(settings.writingPresets, "pen")).toBe(DEFAULT_SETTINGS.defaultColor);
   });
+});
+
+it("duplicate widths keep distinct IDs, edit exact selected slot in place and reload", () => {
+  const p = fresh();
+  const slots = widthSlotsFor(p, "pen");
+  selectWidthSlot(p, "pen", slots[1].id);
+  saveWidth(p, 5, slots[1].id);
+  expect(p.widths).toEqual([2, 5, 5, 8, 12]);
+  expect(p.selectedWidthIds.pen).toBe(slots[1].id);
+  expect(widthSlotsFor(p, "pen")[2].id).toBe(slots[2].id);
+  saveWidth(p, 10, slots[1].id);
+  expect(p.widths).toEqual([2, 10, 5, 8, 12]);
+  saveWidth(p, 3);
+  saveWidth(p, 3);
+  expect(p.widths).toHaveLength(7);
+  expect(new Set(widthSlotsFor(p, "pen").map((slot) => slot.id)).size).toBe(7);
+  expect(
+    migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: JSON.parse(JSON.stringify(p)) }),
+  ).toEqual(p);
+  const before = structuredClone(p);
+  saveWidth(p, 6, "removed-id");
+  expect(p).toEqual(before);
 });

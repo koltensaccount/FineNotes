@@ -20,7 +20,9 @@ export function bindContextInput(
   };
   const controls = (target: EventTarget | null): boolean =>
     target instanceof Element &&
-    !!target.closest("button, input, textarea, [contenteditable], [role=menu], [role=toolbar]");
+    !!target.closest(
+      "button, input, textarea, [contenteditable], [role=menu], [role=toolbar], .goodobsidian-image-ui, .goodobsidian-selection-ui, .goodobsidian-crop-ui",
+    );
   const down = (event: PointerEvent): void => {
     lastType = event.pointerType;
     cancel();
@@ -76,5 +78,37 @@ export function bindContextInput(
     doc.removeEventListener("visibilitychange", visibility);
     win?.removeEventListener("blur", reset);
     element.removeEventListener("contextmenu", context);
+  };
+}
+
+/** Dismiss only the transient press UI; leave the outside pointer action untouched. */
+export function bindPressDismissal(
+  menu: HTMLElement,
+  isOpen: () => boolean,
+  dismiss: () => void,
+): () => void {
+  const doc = menu.ownerDocument;
+  const outside = (event: Event): void => {
+    if (
+      isOpen() &&
+      !event
+        .composedPath()
+        .some((node) => node === menu || (node instanceof Node && menu.contains(node)))
+    )
+      dismiss();
+  };
+  const click = (event: MouseEvent): void => {
+    if (event.detail === 0) outside(event); // Keyboard popup activation; never the held finger's release click.
+  };
+  const key = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && isOpen()) dismiss();
+  };
+  doc.addEventListener("pointerdown", outside, { capture: true });
+  doc.addEventListener("click", click, { capture: true });
+  doc.addEventListener("keydown", key, { capture: true });
+  return () => {
+    doc.removeEventListener("pointerdown", outside, { capture: true });
+    doc.removeEventListener("click", click, { capture: true });
+    doc.removeEventListener("keydown", key, { capture: true });
   };
 }

@@ -5688,3 +5688,51 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   width: 100%;
   min-width: 0;
 }
+
+/* Ink is data: contrast comes from chrome and paper, never color inversion. */
+.goodobsidian-swatch::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.35;
+}
+.goodobsidian-color-strip .goodobsidian-swatch.is-active {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+.goodobsidian-preview-paper {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+.goodobsidian-quick-widths {
+  flex: 1 1 220px;
+  min-width: 44px;
+  max-width: 220px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.goodobsidian-quick-widths .goodobsidian-width {
+  flex: 0 0 44px;
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: pan-x;
+}
+.goodobsidian-width-more {
+  flex: 0 0 44px;
+  min-width: 44px;
+}
+
+.goodobsidian-color-disc,
+.goodobsidian-color-preview {
+  border: 1px solid var(--background-modifier-border);
+}
+.goodobsidian-preview-paper {
+  stroke-opacity: 0.25;
+}
+.goodobsidian-live-stroke .goodobsidian-preview-paper {
+  stroke: none;
+}
