@@ -1,3 +1,12 @@
+import { writingPopoverFit } from "./writing-popover-fit";
+import {
+  createStrokePreview,
+  previewThicknessLabel,
+  highlighterSwatch,
+  TOOL_HINTS,
+  type StrokePreviewOptions,
+} from "./stroke-preview";
+import { renderThicknessEditor } from "./thickness-editor";
 /**
  * The two-tier toolbar of the ink note view.
  *
@@ -59,7 +68,7 @@
 
 import { drawingToolOf, selectedTool } from "./tool-return";
 import { setIcon } from "obsidian";
-import { DEFAULT_ERASER_SIZE, ERASER_SIZES, PALETTE } from "../constants";
+import { DEFAULT_ERASER_SIZE, ERASER_SIZES, PALETTE, SIZES } from "../constants";
 import {
   CONNECTOR_PRESETS,
   SHAPE_PRESETS,
@@ -89,8 +98,8 @@ import type { ListKind } from "../model/text-list";
 import { keyboardHeight } from "./keyboard";
 import { renderColorPicker } from "./color-picker";
 import { DEFAULT_SHAPE_COLOR, contrastMark, pushRecentColor, sameColor } from "../model/colors";
-import { formatMm } from "../model/units";
-import { chosenWidth, nearestStop, widthStops } from "../model/pen-widths";
+
+import { widthStops } from "../model/pen-widths";
 import { PANEL_SLIDE_MS, prefersReducedMotion } from "./motion";
 import {
   DEFAULT_TABLE_SIZE,
@@ -353,6 +362,8 @@ export interface ToolbarCallbacks {
 export interface ToolbarOptions {
   /** The pen width the width popover's reset returns to; default the middle preset. */
   defaultSize?: number;
+  highlighterAlpha?: number;
+  previewPaper?: () => string;
 }
 
 /** Minimum gap between the pill and the edge of the page area, in CSS px. */
@@ -422,6 +433,8 @@ export class Toolbar {
   /** The button under a pointer that is down on a bar, drawn pressed. */
   private pressed: HTMLElement | null = null;
   private palette: string[];
+  private quickWidthEl: HTMLElement | null = null;
+  private widthEditorRefresh: (() => void) | null = null;
   /** The pen or highlighter last in use, which "select again" goes back to. */
   private drawingTool: ActiveTool = "pen";
 
@@ -678,6 +691,9 @@ export class Toolbar {
     const before = this.pillBox();
     this.stopPillMorph();
     this.optionsEl.empty();
+    this.quickWidthEl = null;
+    if (this.popoverKind === "widths" && !["pen", "highlighter", "shape"].includes(this.state.tool))
+      this.closePopover();
     this.colorSwatches.clear();
     this.widthButtons.clear();
     this.penTypeButtons.clear();
@@ -724,7 +740,9 @@ export class Toolbar {
     // remain one tap away in its menu, keeping the writing area clear.
     const active = this.activePenType();
     const pen = this.optionsEl.createEl("button", { cls: "goodobsidian-pentype" });
-    pen.append(penGlyph(active, this.state.color));
+    pen.append(
+      createStrokePreview({ ...this.previewOptions(), compact: true }, this.host.ownerDocument),
+    );
     pen.setAttribute("aria-label", `${active.label} options`);
     pen.setAttribute("title", `${active.label} options`);
     pen.addEventListener("click", () => this.togglePenTypeList());
@@ -733,14 +751,8 @@ export class Toolbar {
 
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
 
-    // Stroke widths, drawn as literal strokes of increasing weight.
-    for (const width of this.quickWidths()) {
-      const button = widthButton(this.optionsEl, width, () => {
-        this.setWidth(width);
-        this.syncActive();
-      });
-      this.widthButtons.set(width, button);
-    }
+    this.quickWidthEl = this.optionsEl.createDiv({ cls: "goodobsidian-quick-widths" });
+    this.refreshQuickWidths();
     this.chevron("More widths", (button) => this.toggleWidthList(button));
 
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
@@ -855,7 +867,12 @@ export class Toolbar {
     // itself rather than chrome; everything else comes from Obsidian's vars.
     // The colour only: the `background` shorthand would reset the stylesheet's
     // `background-clip`, which keeps the disc smaller than its target.
-    swatch.setCssStyles({ backgroundColor: color });
+    swatch.setCssStyles({
+      backgroundColor:
+        this.state.tool === "highlighter"
+          ? highlighterSwatch(color, this.options.highlighterAlpha, this.options.previewPaper?.())
+          : color,
+    });
     // The chosen swatch wears a ▾ in whichever of dark or white reads on it.
     swatch.setCssProps({ "--gob-swatch-mark": contrastMark(color) });
     iconOrText(swatch.createSpan({ cls: "goodobsidian-swatch-mark" }), "chevron-down", "▾");
@@ -1523,6 +1540,42 @@ export class Toolbar {
 
   // --- Popovers -------------------------------------------------------------
 
+  private previewOptions(width = this.state.size): StrokePreviewOptions {
+    const state = this.state as ToolbarState & { lineStyle?: "solid" | "dashed" | "dotted" };
+    return {
+      type: this.state.tool === "shape" ? "ball" : this.activePenType().id,
+      width,
+      color: this.state.color,
+      lineStyle: state.lineStyle,
+      pressure: this.state.pressureEnabled,
+      highlighterAlpha: this.options.highlighterAlpha,
+      paper: this.options.previewPaper?.() ?? "#ffffff",
+    };
+  }
+  private refreshQuickWidths(): void {
+    if (!this.quickWidthEl) return;
+    this.quickWidthEl.empty();
+    this.widthButtons.clear();
+    for (const width of this.quickWidths()) {
+      const label = previewThicknessLabel(this.previewOptions().type, width);
+      const button = this.quickWidthEl.createEl("button", {
+        cls: "goodobsidian-width clickable-icon",
+        attr: { "aria-label": `${label} thickness`, title: label },
+      });
+      button.append(
+        createStrokePreview(
+          { ...this.previewOptions(width), compact: true },
+          this.host.ownerDocument,
+        ),
+      );
+      button.addEventListener("click", () => {
+        this.setWidth(width);
+        this.refreshQuickWidths();
+        this.syncActive();
+      });
+      this.widthButtons.set(width, button);
+    }
+  }
   private toggleWidthList(anchor: HTMLElement): void {
     if (this.popoverKind === "widths") {
       this.closePopover();
@@ -1530,67 +1583,22 @@ export class Toolbar {
     }
     const body = this.openPopover("widths", anchor);
     body.addClass("goodobsidian-width-popover");
-    // GoodNotes' Stroke Settings: the width in millimetres (a pen stroke has
-    // the same real thickness on every paper size), a reset, a slider whose
-    // track widens like the stroke does, and the presets.
-    const head = body.createDiv({ cls: "goodobsidian-width-head" });
-    head.createDiv({ cls: "goodobsidian-popover-label", text: "Stroke width" });
-    const readout = head.createSpan({ cls: "goodobsidian-width-readout" });
-    const reset = head.createEl("button", {
-      cls: "goodobsidian-width-reset clickable-icon",
-      attr: { "aria-label": "Reset stroke width", title: "Reset stroke width" },
+    this.widthEditorRefresh = renderThicknessEditor(body, {
+      current: () => this.previewOptions(),
+      presets: () => this.widths,
+      stops: widthStops(SIZES, this.state.tool !== "highlighter"),
+      select: (width) => {
+        this.setWidth(width);
+        this.refreshQuickWidths();
+        this.syncActive();
+      },
+      reset: () => {
+        this.setWidth(this.options.defaultSize ?? SIZES[1]);
+        this.refreshQuickWidths();
+        this.syncActive();
+      },
     });
-    iconOrText(reset, "rotate-ccw", "Reset");
-    const slider = body.createDiv({ cls: "goodobsidian-width-slider" });
-    slider.append(widthWedge());
-    const range = slider.createEl("input", {
-      cls: "goodobsidian-width-range",
-      type: "range",
-      attr: { "aria-label": "Stroke width" },
-    });
-    // Stops, not widths: the pens' fine end steps in 0.05 mm, the rest in
-    // half px (FineNotes#7). The highlighter keeps the thinnest preset.
-    const highlighter =
-      this.state.tool !== "shape" && penTypeFor(this.state).tool === "highlighter";
-    const floor = highlighter ? Math.min(...this.widths) : 0;
-    const stops = widthStops(this.widths, !highlighter);
-    range.min = "0";
-    range.max = String(stops.length - 1);
-    range.step = "1";
-    const row = body.createDiv({ cls: "goodobsidian-sizes" });
-    const presets = new Map<number, HTMLElement>();
-    // The readout, the thumb and the presets always show the live width.
-    const show = (): void => {
-      const width = chosenWidth(this.state.size, floor);
-      readout.setText(formatMm(width));
-      range.value = String(nearestStop(stops, width));
-      markChosen(presets, this.state.size);
-    };
-    const pick = (width: number): void => {
-      this.setWidth(width);
-      show();
-    };
-    // After a preset or a reset, the pill's quick widths are rebuilt around it.
-    const settle = (): void => {
-      this.buildOptions();
-      this.syncActive();
-    };
-    for (const width of this.widths) {
-      const preset = widthButton(row, width, () => {
-        pick(width);
-        this.closePopover();
-        settle();
-      });
-      presets.set(width, preset);
-    }
-    // Live while dragging; the pill's widths follow once the thumb is let go.
-    range.addEventListener("input", () => pick(stops[Number(range.value)] ?? this.state.size));
-    range.addEventListener("change", settle);
-    reset.addEventListener("click", () => {
-      pick(this.options.defaultSize ?? this.widths[Math.floor(this.widths.length / 2)]);
-      settle();
-    });
-    show();
+    this.keepPopoverInside(anchor);
   }
 
   /** A new pen width, from a preset, the slider or a reset. */
@@ -1681,7 +1689,26 @@ export class Toolbar {
   private renderPenTypes(body: HTMLElement, openGestures: () => void): void {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
     for (const spec of PEN_MENU_TYPES) {
-      const button = body.createEl("button", { cls: "goodobsidian-wide", text: spec.label });
+      const button = body.createEl("button", {
+        cls: "goodobsidian-wide goodobsidian-pen-choice clickable-icon",
+        attr: { "aria-label": spec.label, title: spec.label },
+      });
+      button.append(
+        createStrokePreview(
+          {
+            type: spec.id,
+            width: spec.id === "highlighter" ? 8 : spec.id === "brush" ? 5 : 3,
+            color: "currentColor",
+            pressure: true,
+            compact: true,
+          },
+          this.host.ownerDocument,
+        ),
+      );
+      const caption = button.createSpan({ cls: "goodobsidian-pen-caption" });
+      caption.createSpan({ text: spec.label });
+      caption.createSpan({ cls: "goodobsidian-pen-hint", text: TOOL_HINTS[spec.id] });
+      button.setAttribute("aria-pressed", String(spec.id === this.activePenType().id));
       button.toggleClass("is-active", spec.id === this.activePenType().id);
       button.addEventListener("click", () => {
         this.closePopover();
@@ -1771,6 +1798,7 @@ export class Toolbar {
     this.popover = null;
     this.popoverKind = null;
     this.popoverRender = null;
+    this.widthEditorRefresh = null;
   }
 
   /**
@@ -1784,6 +1812,19 @@ export class Toolbar {
     if (!popover) return;
     const hostBox = this.host.getBoundingClientRect();
     const anchorBox = anchor.getBoundingClientRect();
+    if (
+      ["widths", "pens", "pen-color", "color-actions", "line-style"].includes(
+        this.popoverKind ?? "",
+      )
+    ) {
+      const fit = writingPopoverFit(hostBox, anchorBox);
+      popover.setCssStyles({
+        top: `${Math.round(fit.top)}px`,
+        maxHeight: `${Math.floor(fit.maxHeight)}px`,
+        maxWidth: `${Math.floor(fit.maxWidth)}px`,
+        transform: fit.above ? "translate(-50%, -100%)" : "translateX(-50%)",
+      });
+    }
     const box = popover.getBoundingClientRect();
     let shift = 0;
     if (box.right > hostBox.right - EDGE_INSET) shift = hostBox.right - EDGE_INSET - box.right;
@@ -1981,6 +2022,19 @@ export class Toolbar {
   /** Mark every choice button that matches the state, and unmark the rest. */
   syncActive(): void {
     const { state } = this;
+    this.widthEditorRefresh?.();
+    const penControl = this.toolButtons.get("pen");
+    if (penControl) {
+      penControl.empty();
+      penControl.append(
+        createStrokePreview(
+          { ...this.previewOptions(), color: "currentColor", compact: true },
+          this.host.ownerDocument,
+        ),
+      );
+      penControl.setAttribute("aria-label", `${this.activePenType().label} (P)`);
+      penControl.setAttribute("title", `${this.activePenType().label} (P)`);
+    }
     // Highlighter is a pen type, so the pen button stands for both.
     markChosen(this.toolButtons, state.tool === "highlighter" ? "pen" : state.tool, true);
     markChosen(this.colorSwatches, state.color);
@@ -2035,40 +2089,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
  * SVG polygon stretched over its box, rather than a CSS clip-path, which the
  * plugin review flags as only partly supported.
  */
-function widthWedge(): SVGElement {
-  const svg = activeDocument.createElementNS(SVG_NS, "svg");
-  svg.classList.add("goodobsidian-width-wedge");
-  svg.setAttribute("viewBox", "0 0 100 100");
-  svg.setAttribute("preserveAspectRatio", "none");
-  svg.setAttribute("aria-hidden", "true");
-  const shape = activeDocument.createElementNS(SVG_NS, "polygon");
-  shape.setAttribute("points", "0,44 100,0 100,100 0,56");
-  svg.append(shape);
-  return svg;
-}
-
 /** A pen-type swatch: a nib silhouette tinted with the current ink colour. */
-function penGlyph(spec: PenTypeSpec, color: string): SVGElement {
-  const svg = activeDocument.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 24 34");
-  svg.setAttribute("width", "20");
-  svg.setAttribute("height", "28");
-  svg.setAttribute("aria-hidden", "true");
-
-  const body = activeDocument.createElementNS(SVG_NS, "path");
-  const wide = spec.id === "highlighter";
-  body.setAttribute("d", wide ? "M5 4h14v18l-7 10-7-10z" : "M7 4h10v16l-5 12-5-12z");
-  body.setAttribute("fill", "currentColor");
-  body.setAttribute("opacity", "0.35");
-
-  const nib = activeDocument.createElementNS(SVG_NS, "path");
-  nib.setAttribute("d", wide ? "M5 22h14l-7 10z" : "M7 20h10l-5 12z");
-  nib.setAttribute("fill", color);
-
-  svg.append(body, nib);
-  return svg;
-}
-
 /**
  * A Shape-tool control, drawn as the outline it places. Auto-shape is a
  * square and a circle overlapping, after the reference screenshot.
@@ -2175,32 +2196,6 @@ function eraserSizeGlyph(size: number): SVGElement {
  * A preset pen width, in the pill or in the widths popover: the stroke
  * itself, named in millimetres for screen readers and on hover.
  */
-function widthButton(parent: HTMLElement, width: number, onPick: () => void): HTMLButtonElement {
-  const button = parent.createEl("button", { cls: "goodobsidian-width" });
-  button.append(widthGlyph(width));
-  button.setAttribute("aria-label", `Width ${formatMm(width)}`);
-  button.setAttribute("title", formatMm(width));
-  button.addEventListener("click", onPick);
-  return button;
-}
-
-/** A stroke-width control drawn as a literal stroke of that weight. */
-function widthGlyph(size: number): SVGElement {
-  const svg = activeDocument.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 28 24");
-  svg.setAttribute("width", "28");
-  svg.setAttribute("height", "24");
-  svg.setAttribute("aria-hidden", "true");
-  const line = activeDocument.createElementNS(SVG_NS, "path");
-  line.setAttribute("d", "M3 12h22");
-  line.setAttribute("stroke", "currentColor");
-  line.setAttribute("stroke-linecap", "round");
-  line.setAttribute("stroke-width", String(Math.max(1.5, Math.min(12, size))));
-  line.setAttribute("fill", "none");
-  svg.append(line);
-  return svg;
-}
-
 /** An outlined 24 × 24 glyph in the pill's own colour, for the text controls. */
 function textGlyph(
   draw: (add: (tag: string, attrs: Record<string, string>) => void) => void,

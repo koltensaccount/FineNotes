@@ -964,7 +964,16 @@ export class InkView extends TextFileView {
         onSearch: () => void this.openSearch(),
         onMore: (anchor) => this.toggleMorePanel(anchor),
       },
-      { defaultSize: this.settings.defaultSize },
+      {
+        defaultSize: this.settings.defaultSize,
+        highlighterAlpha: this.settings.highlighterAlpha,
+        previewPaper: () => {
+          const page = this.surface?.document.pages[this.surface.currentPage];
+          return page && "paperColor" in page.backdrop
+            ? (page.backdrop.paperColor ?? paperTheme(this.surface?.darkPaper ?? false).paper)
+            : paperTheme(this.surface?.darkPaper ?? false).paper;
+        },
+      },
     );
 
     const pdfCache = new PdfBackdropCache(this.app);

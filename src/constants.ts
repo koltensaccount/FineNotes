@@ -123,6 +123,10 @@ export const PAPER_GROWTH_MARGIN = 600;
 /** The pen and highlighter widths the toolbar offers, in page px. */
 export const SIZES = [2, 3, 5, 8, 12] as const;
 
+/** Nominal widths: existing Highlighter 4× nib gives 4.1, 6.6 and 9.8 mm. */
+export const HIGHLIGHTER_SIZES = [5, 8, 12] as const;
+export const HIGHLIGHTER_COLORS = ["#f2d45c", "#8bcb84", "#78c3df", "#e99cb5", "#f2af7e"] as const;
+
 /**
  * The built-in ink colours, first the default. Chosen to stay legible on
  * white paper and on the darker papers alike.
