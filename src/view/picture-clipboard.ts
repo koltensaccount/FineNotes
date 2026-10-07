@@ -23,14 +23,17 @@ import { decodeToCanvas, releaseCanvas } from "./image-import";
  * over at once with a promise of the pixels, which WebKit accepts while the
  * gesture lasts and Chromium accepts anyway.
  */
-export function copyPictureToSystemClipboard(app: App, image: ImageElement): void {
+export function copyPictureToSystemClipboard(app: App, image: ImageElement, marker?: string): void {
   const clip = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
   if (!clip || typeof clip.write !== "function" || typeof ClipboardItem === "undefined") return;
   const png = pictureAsPng(app, image);
   // Nobody else may be left holding a rejection.
   png.catch(() => undefined);
   try {
-    const item = new ClipboardItem({ "image/png": png });
+    const item = new ClipboardItem({
+      "image/png": png,
+      ...(marker ? { "text/plain": new Blob([marker], { type: "text/plain" }) } : {}),
+    });
     clip.write([item]).catch(() => undefined);
   } catch {
     // An engine that refuses a promise inside a ClipboardItem: skip.

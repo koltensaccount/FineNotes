@@ -757,3 +757,17 @@ describe("space held: the hand (FineNotes#7)", () => {
     expect(rig.take()).toContain("start 1005,2005 p=0.5 tilt=0,0");
   });
 });
+
+describe("mouse context-button safety", () => {
+  it("right and middle mouse buttons do not start ink or acquire pointer capture", () => {
+    const rig = new Rig();
+    rig.controller.attach();
+    for (const button of [1, 2]) {
+      const event = Object.assign(eventFor(12, "mouse", { x: 50, y: 70 }), { button });
+      rig.el.listeners.get("pointerdown")?.(event);
+    }
+    expect(rig.log).toEqual([]);
+    expect(rig.el.captured.size).toBe(0);
+    rig.controller.detach();
+  });
+});

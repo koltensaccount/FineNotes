@@ -193,6 +193,10 @@ export class SelectionActionBar {
 
   // --- The "…" menu -----------------------------------------------------------
 
+  openMenu(): void {
+    if (!this.menuEl) this.toggleMenu();
+  }
+
   private toggleMenu(): void {
     if (this.menuEl) {
       this.closeMenu();
