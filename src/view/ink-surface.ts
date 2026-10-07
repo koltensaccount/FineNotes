@@ -9,6 +9,7 @@ import {
   readSystemClipboard,
   writeSelectionMarker,
 } from "./clipboard-read";
+import { bindMultiTouchInput } from "./multitouch-input";
 import { bindScrollThumb } from "./scroll-thumb-drag";
 import type { PdfRenderArea } from "../canvas/pdf-raster";
 /**
@@ -698,6 +699,7 @@ interface GroupDrag {
 }
 
 export class InkSurface {
+  private resetMultiTouch: () => void = () => {};
   readonly surfaceEl: HTMLElement;
   private readonly scrollEl: HTMLElement;
   private readonly paperEl: HTMLElement;
@@ -1274,6 +1276,19 @@ export class InkSurface {
     input.attach();
     this.pointerInput = input;
     this.disposers.push(() => input.detach());
+    const multitouch = bindMultiTouchInput(this.scrollEl, {
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+      blocked: () =>
+        this.handHeld ||
+        !!this.builder ||
+        !!this.lasso ||
+        !!this.imageDrag ||
+        !!this.groupDrag ||
+        !!this.cropping,
+    });
+    this.resetMultiTouch = multitouch.reset;
+    this.disposers.push(multitouch.dispose);
 
     // iOS WebKit runs its own long-press recogniser on the raw *touch* stream,
     // and when it claims a stationary pen it ends the pointer in pointercancel
@@ -1461,6 +1476,7 @@ export class InkSurface {
     this.pasteGate.cancel();
     this.pasteRequest = null;
     this.lastPastePoint = {};
+    this.resetMultiTouch();
     this.doc = doc;
     this.strokeIds.restart(strokeIdsOf(doc));
     this.textBoxIds.restart(textBoxIdsOf(doc));
