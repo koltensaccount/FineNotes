@@ -1,3 +1,4 @@
+import { lineStyleOf } from "../ink/line-style";
 /**
  * How a notebook is kept on disk. A note is ordinary Markdown with one data
  * block after the user's text:
@@ -125,6 +126,8 @@ export function dequantizePts(pts: number[]): number[] {
 // place.
 
 interface StoredStroke {
+  lineStyle?: string;
+  dashOffset?: number;
   id: string;
   color: string;
   size: number;
@@ -183,6 +186,17 @@ function storeStroke(stroke: Stroke): StoredStroke {
     // Absent means "unknown", which is not the same as 0 (ledger: clamping
     // an out-of-range value invents a meaning it does not have).
     t0: isTime(stroke.t0) ? Math.round(stroke.t0) : undefined,
+    lineStyle:
+      stroke.tool === "pen" && lineStyleOf(stroke.lineStyle) !== "solid"
+        ? lineStyleOf(stroke.lineStyle)
+        : undefined,
+    dashOffset:
+      stroke.tool === "pen" &&
+      lineStyleOf(stroke.lineStyle) !== "solid" &&
+      Number.isFinite(stroke.dashOffset) &&
+      stroke.dashOffset! > 0
+        ? stroke.dashOffset
+        : undefined,
   };
 }
 
@@ -338,6 +352,12 @@ function readStroke(raw: unknown, position: number): Stroke | null {
     // is how they arrive here.
     pts: dequantizePts(Array.isArray(raw.pts) ? raw.pts.map(finiteOrZero) : []),
   };
+  const lineStyle = lineStyleOf(raw.lineStyle);
+  if (stroke.tool === "pen" && lineStyle !== "solid") {
+    stroke.lineStyle = lineStyle;
+    if (typeof raw.dashOffset === "number" && Number.isFinite(raw.dashOffset) && raw.dashOffset > 0)
+      stroke.dashOffset = raw.dashOffset;
+  }
   const shape = asShape(raw.shape);
   if (shape) stroke.shape = shape;
   if (isTime(raw.t0)) stroke.t0 = Math.round(raw.t0);

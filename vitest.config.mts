@@ -13,6 +13,7 @@ export default defineConfig({
         "src/settings-data.ts",
         "src/model/**/*.ts",
         "src/ink/freehand.ts",
+        "src/ink/line-style.ts",
         "src/ink/stroke-builder.ts",
         "src/ink/shape-recognizer.ts",
         "src/ink/shape-geometry.ts",

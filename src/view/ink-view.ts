@@ -1,4 +1,5 @@
 import { migrateWritingPresets } from "../model/writing-presets";
+import { lineStyleOf } from "../ink/line-style";
 /**
  * The notebook view: one ink note (`.notebook.md`, `.page.md`, or the older
  * `.ink.md`) open in a tab. Obsidian reads and writes the file; this view
@@ -169,6 +170,7 @@ const ignore = (): void => undefined;
 function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
   return {
     tool: s.defaultTool,
+    lineStyle: lineStyleOf(s.penLineStyle),
     color:
       s.writingPresets?.selectedColors[s.defaultTool === "highlighter" ? "highlighter" : "pen"] ??
       s.defaultColor,
@@ -936,6 +938,10 @@ export class InkView extends TextFileView {
         // The toolbar writes colour and size into the shared tool state,
         // which is where the surface reads them.
         onColorChange: ignore,
+        onLineStyleChange: (style) => {
+          this.settings.penLineStyle = style;
+          void this.plugin.saveSettings();
+        },
         onSizeChange: ignore,
         onPressureToggle: () => this.updateSidebarRendering(),
         pressureAllowed: () => this.settings.pressureWidth,

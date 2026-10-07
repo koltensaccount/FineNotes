@@ -5,7 +5,7 @@
      An agent that finds this contract wrong does NOT edit it — it finishes
      what it can and requests the change in its final report. -->
 
-Version: 8
+Version: 9
 
 ## Scope of this contract
 
@@ -891,3 +891,18 @@ change the note format.
 At zoom up to 2.5×, notebook ink tiles and their previews share a cached whole-page PDF image. Above that threshold, the renderer supplies one clipped visible region per page, independently of the 512 px ink-tile grid. These patches overlay the page fallback before images and ink, never cover annotations, and use at most two PDF render tasks concurrently (including thumbnail/page work).
 
 Replacing the viewport cancels obsolete queued/active detail requests, evicts their canvases, and prevents stale completion callbacks or cached failure placeholders. Ordinary page and sidebar rasters retain their existing byte budgets. Mid-pinch frames retain the previous full-page resolution and start no new detail work. Writing holds background starts; explicitly awaited export/thumbnail requests remain available. Clear/unload cancels pending work.
+
+## Optional Pen line styles
+
+The existing ink schema gains optional stroke `lineStyle: "dashed" | "dotted"`
+and nonnegative finite `dashOffset` (page-unit arc length, retained on eraser
+fragments). Missing, invalid or explicit Solid reads as Solid and is not emitted.
+Highlighter ignores line styles. No ink schema version bump or whole-notebook
+migration is needed: old Solid notes and all existing goldens remain byte-stable.
+Styled notes require this build to preserve the optional fields when editing.
+Copy/move/undo retain style and phase; partial erase retains the fragment origin.
+The shared wet/dry/thumbnail/PDF renderer patterns a whole traced stroke by arc
+length using base nib width, not input segments or instantaneous pressure.
+Dotted ink is filled round circles. The Shape tool remains Solid; a Pen stroke
+that snaps keeps its explicitly chosen Pen style. Old-client appearance falls
+back to Solid; do not edit styled notes with older FineNotes builds.

@@ -1,4 +1,5 @@
 import { colorList, type WritingPresets } from "./model/writing-presets";
+import type { LineStyle } from "./model/document";
 /**
  * The plugin's stored settings (`data.json`) and the pure rules around them.
  * No Obsidian and no DOM, so all of it is tested; `settings.ts` draws the tab.
@@ -33,6 +34,7 @@ export type ToolId = "pen" | "highlighter" | "eraser" | "select";
 export interface GoodObsidianSettings {
   /** Versioned user-managed toolbar preferences, upgraded explicitly on load. */
   writingPresets?: WritingPresets;
+  penLineStyle?: LineStyle;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;
