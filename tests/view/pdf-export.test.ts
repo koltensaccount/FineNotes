@@ -186,3 +186,38 @@ describe("companion uses the same high-quality PDF exporter", () => {
     },
   );
 });
+
+it.each(["dashed", "dotted"] as const)(
+  "personal integration: companion ownership and %s overlay share PDF-backed composition",
+  async (lineStyle) => {
+    const page = pdfPage();
+    page.strokes = [
+      {
+        id: "styled",
+        tool: "pen",
+        color: "#1971c2",
+        size: 3,
+        pts: [0, 0, 0.5, 100, 10, 0.8],
+        lineStyle,
+      },
+    ];
+    const subject = "FineNotes companion a3f9211234567890";
+    const bytes = await exportPagesToPdf(
+      [page],
+      { ...sources, readPdf: source },
+      { title: "Biology", subject },
+    );
+    const result = await PDFDocument.load(bytes);
+    expect(result.getSubject()).toBe(subject);
+    expect(result.getPages()[0].node.Resources()?.keys().length).toBeGreaterThan(0);
+    expect(
+      vi
+        .mocked(renderPageThumbnail)
+        .mock.calls.some((call) =>
+          call[1].strokes.some(
+            (stroke) => stroke.color === "#1971c2" && stroke.lineStyle === lineStyle,
+          ),
+        ),
+    ).toBe(true);
+  },
+);
