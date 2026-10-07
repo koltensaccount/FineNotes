@@ -57,6 +57,8 @@ export default defineConfig({
         "src/input/palm-rejection.ts",
         "src/input/pen-rejoin.ts",
         "src/input/finger-gesture.ts",
+        "src/input/multitouch-double-tap.ts",
+        "src/view/multitouch-input.ts",
         "src/recognition/text-layer.ts",
         "src/recognition/registry.ts",
         "src/recognition/manual.ts",

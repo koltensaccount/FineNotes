@@ -1,0 +1,13 @@
+# Multi-touch Undo/Redo
+
+Independent `feature/multitouch-undo-redo` branch, based on upstream FineNotes 1.5.0. It contains no preset, line-style, clipboard or companion changes.
+
+Two-finger double tap calls the surface's existing Undo. Three-finger double tap calls its existing Redo. There is no additional history stack. The pure `MultiTouchDoubleTap` recognizer consumes touch pointers only: 2/3 overlapping contacts must assemble within 80 ms, release within 220 ms, and repeat within 350 ms and 32 CSS px. It permits tiny jitter; movement over 8 px, relative pair-distance change over 4 px (pinch), or centre movement over 6 px (pan) invalidates the sequence. Single/four-finger taps, changed counts, long holds, cancellation and non-overlapping contacts do nothing. Completed pairs cannot reuse a tap for another command.
+
+A Pen contact cancels pending touch recognition; fingers during Pen input remain ineligible. The page adapter observes pointer input without preventing or capturing it. Multi-finger touch-start cancellation suppresses competing native editing callouts using the existing surface mechanism; pointer events remain unaffected. FineNotes' original controller continues to handle Pencil writing, one-finger pan and two-finger pinch. Pointer-up recognition runs after its normal page gesture processing. Controls, toolbar/popovers, text editors, selection/image/crop controls and contacts outside paper do not count, and invalidate any pending first tap. Mouse and compatibility clicks cannot invoke the gesture.
+
+Blur, hiding, document replacement and disposal clear recognition state and listeners. No polling or gesture timer is required: all timing derives from pointer timestamps. The tolerances are explicit and testable; physical iPad evaluation is still pending.
+
+Tests cover valid/repeated Undo/Redo, one/four fingers, different counts, assembly/hold/double-tap timeouts, movement/pan/pinch, tiny jitter, all-contact participation, cancellation, spatial separation, Pencil plus fingers, duplicate ups, existing pan/pinch operation, control exclusions, active-tool blockers, repeated adapter initialization, hiding/blur/document reset and disposal.
+
+On iPad, test Undo and Redo on paper with several ink/image/text history steps. Check tiny natural finger jitter and timing, then pan/pinch, rest a palm while drawing, hold the Pencil for existing shape/circle gestures, and try the same taps inside menus/toolbar/color strip. Verify exactly one history step per valid pair and no command from any excluded interaction. Repeat after tab reopen and document switching. No physical gesture verification is claimed.
