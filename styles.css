@@ -5577,3 +5577,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
     max-height: 132px;
   }
 }
+.goodobsidian-popover .goodobsidian-pen-choice.is-active .goodobsidian-pen-hint {
+  color: var(--text-on-accent);
+  opacity: 0.82;
+}

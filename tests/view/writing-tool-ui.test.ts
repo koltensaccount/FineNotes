@@ -175,6 +175,7 @@ describe("pen choice state", () => {
       const chosen = vi.fn(),
         toolbar = Object.assign(Object.create(Toolbar.prototype) as object, {
           host: new El(),
+          options: {},
           state,
           callbacks: {
             onToolChange: vi.fn(),
