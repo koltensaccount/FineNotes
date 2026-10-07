@@ -406,18 +406,22 @@ export default class GoodObsidianPlugin extends Plugin {
     }
   }
 
-  private presetSave = Promise.resolve();
+  private settingsSave = Promise.resolve();
 
   /** Serialize rapid slider/palette changes so an older write cannot finish last. */
   saveWritingPresets(presets: WritingPresets): Promise<void> {
     this.settings.writingPresets = presets;
-    this.presetSave = this.presetSave.catch(() => {}).then(() => this.saveSettings());
-    return this.presetSave;
+    return this.saveSettings();
   }
 
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
-    this.syncExplorerNotebookButton();
+    this.settingsSave = this.settingsSave
+      .catch(() => {})
+      .then(async () => {
+        await this.saveData(this.settings);
+        this.syncExplorerNotebookButton();
+      });
+    await this.settingsSave;
   }
 
   // --- API keys and AI configuration -----------------------------------------

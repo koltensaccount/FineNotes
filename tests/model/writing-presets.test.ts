@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE } from "../../src/constants";
-import { DEFAULT_SETTINGS, storeShownValue } from "../../src/settings-data";
+import { DEFAULT_SETTINGS, shownValue, storeShownValue } from "../../src/settings-data";
 import {
   migrateWritingPresets,
   moveColor,
@@ -124,5 +124,40 @@ describe("writing color presets", () => {
     expect(settings.writingPresets.palettes.pen).not.toContain(PALETTE[0]);
     expect(settings.writingPresets.palettes.pen).not.toContain("#aabbcc");
     expect(settings.writingPresets.palettes.highlighter).toContain("#ddeeff");
+  });
+});
+
+describe("default tool and empty preset edges", () => {
+  it("default ink color follows the opening tool without changing the other tool", () => {
+    const settings = { ...DEFAULT_SETTINGS, writingPresets: fresh() };
+    storeShownValue(settings, "defaultTool", "highlighter");
+    storeShownValue(settings, "defaultColor", "#abcdef");
+    expect(settings.writingPresets.selectedColors.highlighter).toBe("#abcdef");
+    expect(settings.writingPresets.selectedColors.pen).toBe(DEFAULT_SETTINGS.defaultColor);
+    expect(shownValue(settings, "defaultColor")).toBe("#abcdef");
+    storeShownValue(settings, "defaultTool", "pen");
+    expect(shownValue(settings, "defaultColor")).toBe(DEFAULT_SETTINGS.defaultColor);
+  });
+  it.each(["pen", "highlighter"] as const)(
+    "empty %s palette keeps ink and accepts a first color or reset",
+    (tool) => {
+      const p = fresh();
+      const selected = p.selectedColors[tool];
+      p.palettes[tool] = [];
+      expect(p.selectedColors[tool]).toBe(selected);
+      expect(saveColor(p, tool, "#abc")).toBe(true);
+      expect(p.palettes[tool]).toEqual(["#aabbcc"]);
+      p.palettes[tool] = [];
+      restoreColors(p, tool);
+      expect(p.palettes[tool]).toEqual(PALETTE);
+    },
+  );
+  it("the first width added after empty/removing active width is usable", () => {
+    const p = fresh();
+    p.widths = [];
+    p.selectedWidth = 3;
+    saveWidth(p, 2.5);
+    expect(p.widths).toEqual([2.5]);
+    expect(p.selectedWidth).toBe(3);
   });
 });

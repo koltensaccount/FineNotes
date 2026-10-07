@@ -117,7 +117,8 @@ const DESC = {
   notebookFolder:
     "Where the New notebook dialog puts new notebooks and pages. Leave empty to use the " +
     "folder of the note that is open.",
-  inkColor: "The pen color an ink note opens with.",
+  inkColor:
+    "The ink color an ink note opens with for the selected default tool (Pen or Highlighter). The other tool keeps its own selected color.",
   tool: "The tool that is picked when you open an ink note.",
   strokeSize: "How thick the pen writes when you open an ink note.",
   highlighter: "How opaque highlighter strokes are.",

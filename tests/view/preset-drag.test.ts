@@ -25,7 +25,17 @@ function setup() {
     addClass: (s: string) => classes.add(s),
     removeClass: (s: string) => classes.delete(s),
     ownerDocument: {
-      defaultView: { setTimeout, clearTimeout },
+      defaultView: {
+        setTimeout,
+        clearTimeout,
+        addEventListener: (name: string, fn: (e: never) => void) =>
+          handlers.set("window:" + name, fn),
+        removeEventListener: (name: string) => handlers.delete("window:" + name),
+      },
+      visibilityState: "hidden",
+      addEventListener: (name: string, fn: (e: never) => void) =>
+        handlers.set("document:" + name, fn),
+      removeEventListener: (name: string) => handlers.delete("document:" + name),
       elementFromPoint: () => ({ closest: () => hit }),
     },
   };
@@ -91,14 +101,17 @@ describe("preset pointer reorder", () => {
     expect(s.drop).not.toHaveBeenCalled();
     expect(s.dragging).not.toHaveBeenCalledWith(true);
   });
-  it.each(["pointercancel", "lostpointercapture"])("cancels on %s", (name) => {
-    const s = setup();
-    s.fire("pointerdown");
-    s.fire("pointermove");
-    s.fire(name);
-    s.fire("pointerup");
-    expect(s.drop).not.toHaveBeenCalled();
-  });
+  it.each(["pointercancel", "lostpointercapture", "window:blur", "document:visibilitychange"])(
+    "cancels on %s",
+    (name) => {
+      const s = setup();
+      s.fire("pointerdown");
+      s.fire("pointermove");
+      s.fire(name);
+      s.fire("pointerup");
+      expect(s.drop).not.toHaveBeenCalled();
+    },
+  );
   it("ignores another pointer and supports keyboard movement", () => {
     const s = setup();
     s.fire("pointerdown");
@@ -118,7 +131,7 @@ describe("preset pointer reorder", () => {
     vi.advanceTimersByTime(500);
     expect(s.dragging).not.toHaveBeenCalledWith(true);
     const dispose = s.bind();
-    expect(s.handlers.size).toBe(7);
+    expect(s.handlers.size).toBe(9);
     s.fire("keydown", { key: "ArrowDown" });
     expect(s.drop).toHaveBeenCalledOnce();
     dispose();

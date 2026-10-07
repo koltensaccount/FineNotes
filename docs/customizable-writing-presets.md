@@ -60,8 +60,8 @@ Preset writes are serialized, and failed writes show a notice.
 
 The settings tab's legacy Custom colors field remains a bulk import into both
 palettes; its description explains that behavior. Individual changes in the
-Pen manager do not mutate Highlighter. Default color/size settings continue
-setting the opening selection. Removing a selected preset or restoring colors
+Pen manager do not mutate Highlighter. Default color applies to the selected opening tool; changing Default tool refreshes
+the displayed color without altering the other tool. Default size sets the opening width. Removing a selected preset or restoring colors
 keeps the active ink value; it need not remain a palette slot.
 
 No notebook file format change is involved.
@@ -95,7 +95,7 @@ npm run format:check
 npm run build
 ```
 
-Verified on the 1.5.0 upstream base: **3,011 tests passed across 145 files**;
+Verified on the 1.5.0 upstream base: **3,020 tests passed across 145 files**;
 TypeScript, ESLint, plugin-review lint, formatting and production build passed.
 
 Tests cover width insertion at each position, resorting on edit, normalization,
@@ -156,3 +156,26 @@ must pass the checklist before proposing this upstream. Widths intentionally
 remain shared, the bulk settings importer intentionally affects both palettes,
 and both tools use upstream's original common palette as their reset values.
 Confirm those product choices with the maintainer during later review.
+
+## Focused follow-up audit
+
+Base and original feature commit remain `1ebdfa3` and `4381eb9`; no rebase.
+The audit fixes Default ink color for a Highlighter default tool, serializes
+all settings writes together (including writes outside the preset manager),
+and cancels reorder capture/timers on document hiding and window blur.
+An empty width list no longer receives a hidden negative-index array entry.
+Regression tests cover opening a Highlighter notebook, failed-write retry,
+empty collections, mixed settings/preset writes and background cancellation.
+Validation uses Node 22.23.3; npm install reports zero vulnerabilities.
+
+The fork has Actions enabled at repository level, but its Actions API lists no
+registered workflows or runs. Its CI file exists and triggers only main pushes
+and pull requests. In the fork's Actions tab, click **I understand my workflows,
+go ahead and enable them** if shown. Then open a pull request **within the fork**
+(base `koltensaccount/FineNotes:main`, head the preset feature branch) to trigger
+the unchanged upstream CI. No upstream PR or workflow edits are necessary.
+
+Shortest physical pass: finger hold-and-drag with Pencil present; repeat in
+portrait, landscape and Split View; scroll a long palette; enter HEX with the
+onscreen keyboard; restart Obsidian and verify both palettes, order and ink
+selection. No physical iPad/WebKit validation has been performed.

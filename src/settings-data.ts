@@ -264,6 +264,10 @@ function conversion(key: string) {
 
 /** A stored value as its settings control shows it. */
 export function shownValue(settings: GoodObsidianSettings, key: string): unknown {
+  if (key === "defaultColor" && settings.writingPresets)
+    return settings.writingPresets.selectedColors[
+      settings.defaultTool === "highlighter" ? "highlighter" : "pen"
+    ];
   const stored = (settings as unknown as Record<string, unknown>)[key];
   const convert = conversion(key);
   return convert ? convert.show(stored) : stored;
@@ -277,7 +281,14 @@ export function storeShownValue(settings: GoodObsidianSettings, key: string, sho
   if (settings.writingPresets && key === "defaultSize")
     settings.writingPresets.selectedWidth = settings.defaultSize;
   if (settings.writingPresets && key === "defaultColor")
-    settings.writingPresets.selectedColors.pen = settings.defaultColor;
+    settings.writingPresets.selectedColors[
+      settings.defaultTool === "highlighter" ? "highlighter" : "pen"
+    ] = settings.defaultColor;
+  if (settings.writingPresets && key === "defaultTool")
+    settings.defaultColor =
+      settings.writingPresets.selectedColors[
+        settings.defaultTool === "highlighter" ? "highlighter" : "pen"
+      ];
   // Retain the legacy settings field as a bulk importer for both palettes.
   if (key === "customColors" && settings.writingPresets) {
     const old = colorList(previous);
@@ -301,6 +312,7 @@ export function changesTabLayout(key: string): boolean {
     key === "recognitionProviderId" ||
     key === "llmVendor" ||
     key === "imageVendor" ||
-    key === "pressureWidth"
+    key === "pressureWidth" ||
+    key === "defaultTool"
   );
 }

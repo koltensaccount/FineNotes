@@ -10,7 +10,11 @@ class Element {
   value = "";
   attrs: Record<string, string> = {};
   handlers = new Map<string, Set<(e: unknown) => void>>();
-  ownerDocument = { defaultView: { setTimeout, clearTimeout } };
+  ownerDocument = {
+    defaultView: { setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} },
+    addEventListener() {},
+    removeEventListener() {},
+  };
   createDiv(options: { text?: string; attr?: Record<string, string> } = {}) {
     return this.createEl("div", options);
   }

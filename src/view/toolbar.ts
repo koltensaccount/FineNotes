@@ -1557,7 +1557,7 @@ export class Toolbar {
     const quick = this.widths.slice(0, QUICK_WIDTHS);
     // The live width takes the last slot, a preset or one set on the slider.
     const size = this.state.size;
-    if (!quick.includes(size) && Number.isFinite(size) && size > 0) {
+    if (quick.length > 0 && !quick.includes(size) && Number.isFinite(size) && size > 0) {
       quick[quick.length - 1] = size;
     }
     return quick.sort((a, b) => a - b);

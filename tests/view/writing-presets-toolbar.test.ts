@@ -29,6 +29,12 @@ function setup() {
   return { toolbar, state, presets, save };
 }
 describe("toolbar preset integration", () => {
+  it("empty quick widths do not manufacture an undefined slot", () => {
+    const s = setup();
+    s.presets.widths = [];
+    expect(s.toolbar.quickWidths()).toEqual([]);
+    expect(s.state.size).toBe(3);
+  });
   it("persists selections and restores each tool's color on switch", () => {
     const s = setup();
     s.toolbar.setPenColor("#123456");

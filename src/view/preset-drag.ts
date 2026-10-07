@@ -75,6 +75,11 @@ export function bindPresetDrag(
     if (event.pointerId === pointer) finish(true);
   };
   const cancel = (): void => finish(false);
+  const visibility = (): void => {
+    if (row.ownerDocument.visibilityState === "hidden") finish(false);
+  };
+  row.ownerDocument.addEventListener("visibilitychange", visibility);
+  row.ownerDocument.defaultView?.addEventListener("blur", cancel);
   const click = (event: Event): void => {
     event.preventDefault();
     event.stopPropagation();
@@ -92,6 +97,8 @@ export function bindPresetDrag(
   handle.addEventListener("click", click);
   handle.addEventListener("keydown", key);
   return () => {
+    row.ownerDocument.removeEventListener("visibilitychange", visibility);
+    row.ownerDocument.defaultView?.removeEventListener("blur", cancel);
     handle.removeEventListener("lostpointercapture", cancel);
     finish(false);
     handle.removeEventListener("pointerdown", down);

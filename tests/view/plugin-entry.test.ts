@@ -1,3 +1,4 @@
+import { storeShownValue } from "../../src/settings-data";
 import { migrateWritingPresets } from "../../src/model/writing-presets";
 /**
  * The plugin entry (`src/main.ts`) as Obsidian sees it: what `onload`
@@ -659,6 +660,31 @@ describe("toggling between the notebook and markdown", () => {
 // --- Settings --------------------------------------------------------------------------
 
 describe("loading settings", () => {
+  it("a notebook opened with Highlighter uses its edited default ink color", async () => {
+    await load({
+      writingPresets: migrateWritingPresets(DEFAULT_SETTINGS),
+      defaultTool: "highlighter",
+    });
+    storeShownValue(plugin.settings, "defaultColor", "#abcdef");
+    const factory = registered.views.get(INK) as (leaf: WorkspaceLeaf) => unknown;
+    const view = factory(new WorkspaceLeaf(app)) as { toolState: { tool: string; color: string } };
+    expect(view.toolState).toMatchObject({ tool: "highlighter", color: "#abcdef" });
+    expect(plugin.settings.writingPresets!.selectedColors.pen).toBe(DEFAULT_SETTINGS.defaultColor);
+  });
+  it("a failed write keeps in-memory presets intact and permits retry", async () => {
+    await load({ writingPresets: migrateWritingPresets(DEFAULT_SETTINGS) });
+    const p = plugin.settings.writingPresets!;
+    p.palettes.pen.reverse();
+    const save = vi
+      .spyOn(plugin, "saveData")
+      .mockRejectedValueOnce(new Error("disk unavailable"))
+      .mockResolvedValue(undefined);
+    await expect(plugin.saveWritingPresets(p)).rejects.toThrow("disk unavailable");
+    expect(plugin.settings.writingPresets).toBe(p);
+    await plugin.saveSettings();
+    expect(save).toHaveBeenCalledTimes(2);
+    save.mockRestore();
+  });
   it("serializes rapid preset writes so the final saved order is current", async () => {
     await load({ writingPresets: migrateWritingPresets(DEFAULT_SETTINGS) });
     let release: () => void = () => {};
@@ -674,7 +700,7 @@ describe("loading settings", () => {
     const first = plugin.saveWritingPresets(p);
     await flush();
     p.palettes.pen.reverse();
-    const second = plugin.saveWritingPresets(p);
+    const second = plugin.saveSettings();
     await flush();
     expect(writes).toHaveLength(1);
     release();
