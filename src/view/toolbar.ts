@@ -693,6 +693,7 @@ export class Toolbar {
 
   private addToolButton(parent: HTMLElement, tool: ActiveTool, icon: string, label: string): void {
     const button = this.barButton(parent, icon, label, () => this.tapTool(tool, button));
+    button.setAttribute("data-tool", tool);
     if (tool === "select") {
       button.addClass("has-caret");
       iconOrText(button.createSpan({ cls: "goodobsidian-tool-caret" }), "chevron-down", "");
@@ -1073,7 +1074,13 @@ export class Toolbar {
           : color,
     });
     // The chosen swatch wears a ▾ in whichever of dark or white reads on it.
-    swatch.setCssProps({ "--gob-swatch-mark": contrastMark(color) });
+    swatch.setCssProps({
+      "--gob-swatch-mark": contrastMark(
+        this.state.tool === "highlighter"
+          ? highlighterSwatch(color, this.options.highlighterAlpha, this.options.previewPaper?.())
+          : color,
+      ),
+    });
     iconOrText(swatch.createSpan({ cls: "goodobsidian-swatch-mark" }), "chevron-down", "▾");
     swatch.setAttr("aria-label", color);
     if (onPick) swatch.addEventListener("click", onPick);
@@ -1748,8 +1755,11 @@ export class Toolbar {
     return {
       type: this.state.tool === "shape" ? "ball" : this.activePenType().id,
       width,
-      color: this.state.color,
-      lineStyle: state.lineStyle,
+      color:
+        this.state.tool === "shape"
+          ? (this.state.shapeColor ?? DEFAULT_SHAPE_COLOR)
+          : this.state.color,
+      lineStyle: state.tool === "pen" ? state.lineStyle : undefined,
       pressure: this.state.pressureEnabled,
       highlighterAlpha: this.options.highlighterAlpha,
       paper: this.options.previewPaper?.() ?? "#ffffff",
