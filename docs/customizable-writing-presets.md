@@ -179,3 +179,16 @@ Shortest physical pass: finger hold-and-drag with Pencil present; repeat in
 portrait, landscape and Split View; scroll a long palette; enter HEX with the
 onscreen keyboard; restart Obsidian and verify both palettes, order and ink
 selection. No physical iPad/WebKit validation has been performed.
+
+## Mac feedback refinement
+
+Normal taps select. Every saved color now enters a horizontal quick strip with
+room for five 44px targets; it has no total palette limit. The add button is
+outside the scrolling region and stays at its edge. Hold with a finger or
+right-click for Edit, Remove, Reorder colors or Restore defaults. Add/Edit open
+the existing color mixer and HEX field directly. Reordering is deliberately
+entered through the context action and uses the existing capture-safe handles;
+normal swipes only scroll. Strip movement/cancellation suppresses selection.
+Scroll position is retained separately per tool. Narrow panes show fewer
+full-size targets rather than shrinking them. Physical Mac feedback informed
+this change; the new strip still needs a physical iPad pass.

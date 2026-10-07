@@ -67,3 +67,15 @@ describe("toolbar preset integration", () => {
     expect(s.save).toHaveBeenCalledWith(s.presets);
   });
 });
+
+it.each([1, 5, 6, 20])("the quick strip includes every one of %s colors in user order", (count) => {
+  const s = setup();
+  s.presets.palettes.pen = Array.from(
+    { length: count },
+    (_, i) => "#" + i.toString(16).padStart(6, "0"),
+  );
+  expect(s.toolbar.quickColors()).toEqual(s.presets.palettes.pen);
+  s.state.color = s.presets.palettes.pen[count - 1];
+  expect(s.toolbar.quickColors()).toHaveLength(count);
+  expect(s.state.color).toBe(s.presets.palettes.pen[count - 1]);
+});

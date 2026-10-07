@@ -18,6 +18,8 @@ export function renderPresetColors(
   dragging: (active: boolean) => void,
   recent: () => readonly string[] = () => [],
   remember: (color: string) => void = () => {},
+  start: "list" | "add" | "restore" | number = "list",
+  finished?: (color: string) => void,
 ): () => void {
   let disposers: Array<() => void> = [];
   const clear = (): void => {
@@ -47,7 +49,8 @@ export function renderPresetColors(
       }
       if (custom) remember(color);
       changed();
-      show();
+      if (finished) finished(presets.palettes[tool][index ?? presets.palettes[tool].length - 1]);
+      else show();
     };
     const hex = body.createEl("input", {
       type: "text",
@@ -115,19 +118,23 @@ export function renderPresetColors(
       if (focusIndex === index) handle.focus();
     });
     button(body, "Add color", () => editor());
+    button(body, "Restore default colors", reset);
+  };
+  const reset = (): void => {
+    clear();
+    body.createDiv({
+      text: `Replace all ${tool} color presets with the original defaults? Widths and the selected ink color will be kept.`,
+    });
+    button(body, "Cancel", show);
     button(body, "Restore default colors", () => {
-      clear();
-      body.createDiv({
-        text: `Replace all ${tool} color presets with the original defaults? Widths and the selected ink color will be kept.`,
-      });
-      button(body, "Cancel", show);
-      button(body, "Restore default colors", () => {
-        restoreColors(presets, tool);
-        changed();
-        show();
-      });
+      restoreColors(presets, tool);
+      changed();
+      show();
     });
   };
-  show();
+  if (start === "add") editor();
+  else if (start === "restore") reset();
+  else if (typeof start === "number") editor(start);
+  else show();
   return clear;
 }

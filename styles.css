@@ -5496,3 +5496,44 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   background: var(--background-modifier-hover);
   box-shadow: inset 0 0 0 2px var(--interactive-accent);
 }
+
+/* Five full-size swatches in a native scrolling strip; add remains outside it. */
+.goodobsidian-options.is-writing {
+  touch-action: pan-x;
+}
+.goodobsidian-quick-colors {
+  display: flex;
+  align-items: center;
+  flex: 0 1 266px;
+  min-width: 88px;
+  gap: 2px;
+  position: sticky;
+  right: 0;
+  background: var(--gob-pill-bg);
+}
+.goodobsidian-color-strip {
+  display: flex;
+  flex: 1 1 220px;
+  min-width: 44px;
+  max-width: 220px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.goodobsidian-color-strip::-webkit-scrollbar {
+  display: none;
+}
+.goodobsidian-options .goodobsidian-color-strip button.goodobsidian-swatch,
+.goodobsidian-quick-colors .goodobsidian-color-more {
+  flex: 0 0 44px;
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: pan-x;
+}
+.goodobsidian-color-strip .goodobsidian-swatch-mark {
+  display: none;
+}
+.goodobsidian-color-strip .goodobsidian-swatch.is-active {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
