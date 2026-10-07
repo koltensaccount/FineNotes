@@ -48,27 +48,15 @@ Branch: `feature/customizable-writing-presets`, based on upstream main
 
 ## Settings migration
 
-`data.json` gains `writingPresets` with `version: 1`, sorted `widths`,
-`selectedWidth`, `palettes: { pen, highlighter }`, and
-`selectedColors: { pen, highlighter }`. Loading explicitly migrates legacy
-`PALETTE + customColors` into separate arrays. HEX is canonicalized and
-semantic duplicates collapse. The original legacy fields remain, including
-`customColors`, `defaultColor`, `defaultSize`, opacity and unrelated settings.
-The first upgrade of existing settings is saved immediately. Repeated loading
-retains custom ordering, empty palettes, deleted defaults and active colors.
-Preset writes are serialized, and failed writes show a notice.
+`data.json` stores version-2 `writingPresets`: sorted widths, selectedWidth, two independent palettes of `{ id, color }` records, a monotonic nextColorId and per-tool selectedIds. Legacy string palettes and color selections migrate explicitly; HEX values normalize while preset identities and user order persist. The original legacy settings fields and unrelated preferences remain. Migration is saved once, and failed writes retain the in-memory state for retry.
 
-The settings tab's legacy Custom colors field remains a bulk import into both
-palettes; its description explains that behavior. Individual changes in the
-Pen manager do not mutate Highlighter. Default color applies to the selected opening tool; changing Default tool refreshes
-the displayed color without altering the other tool. Default size sets the opening width. Removing a selected preset or restoring colors
-keeps the active ink value; it need not remain a palette slot.
+The legacy Custom colors setting still bulk-imports both palettes, retaining surviving record IDs. Default color selects or adds a real preset for the opening tool. Editing, selecting, reordering and removal operate by identity. Removing the selected color chooses the next remaining row, then the previous row at the end, with black ink for an empty palette. Restore Defaults selects a matching default color or the first default. Width removal retains its existing active-value behavior.
 
 No notebook file format change is involved.
 
 ## Resulting UI
 
-Tap the active color or the color `+` to open the active tool's manager.
+Tap selects a preset. Hold/right-click opens its compact Edit/Remove/Reorder/Restore actions; the reachable `+` opens Add color.
 Each scrollable row has a reorder handle, color/HEX select button, Edit and
 Remove. Add color opens the original mixer plus HEX input. Restore default
 colors opens a confirmation with Cancel and Restore, scoped to the active tool.
@@ -123,12 +111,12 @@ View, with light and dark Obsidian themes.
 - [ ] Remove the active width, then all widths. Confirm drawing keeps its
       selected width, the slider still works, and a new preset can be added.
 - [ ] Edit the original black and white Pen slots, delete a former default,
-      add arbitrary HEX and mixer colors, and reject duplicate HEX variants.
+      add arbitrary HEX and mixer colors, and verify equal color values can have distinct mutable identities.
 - [ ] Select distinctive colors in Pen and Highlighter. Switch between them;
       each remembers its own color. Edit/delete/reorder Pen and verify the
       Highlighter palette remains unchanged; repeat in the other direction.
 - [ ] Hold a handle with a finger for at least 350ms, drag up/down and drop.
-      Check source/destination feedback, exact order, no duplicate swatches,
+      Check source/destination feedback, exact order and no accidental extra swatches,
       no color selection and no ink beneath the popover.
 - [ ] Tap a handle without holding and move before the long press; neither
       should reorder/select. Cancel a drag by switching away/backgrounding;
@@ -192,3 +180,15 @@ normal swipes only scroll. Strip movement/cancellation suppresses selection.
 Scroll position is retained separately per tool. Narrow panes show fewer
 full-size targets rather than shrinking them. Physical Mac feedback informed
 this change; the new strip still needs a physical iPad pass.
+
+## Physical-test fix: stable color identities
+
+The version-1 palette stored color strings, selected by color value and targeted editors/removal by array index. Duplicate colors were rejected, while a rebuilt toolbar and an already-open editor could retain different references. This could leave the visible preset, editor and live color out of agreement.
+
+Version 2 stores each preset as `{ id, color }`, plus per-tool `selectedIds` and a monotonic ID counter. Defaults and custom colors use the same records. The displayed swatch and editor derive their color from the identified preset; selection follows the ID through edits and reorder. Editing to another preset's existing color is allowed without merging identities. Stale editors refuse to save if their target was removed, rather than appending or editing another row. Every mutation synchronizes the live color and notifies the drawing callback before the strip is rebuilt.
+
+Deleting the selected preset picks the next remaining row at that position, otherwise the previous final row; an empty palette uses the original black ink fallback with no selected preset. Deleting another row preserves selection. Restore Defaults creates the true default palette with fresh identities and selects a matching default color, or the first default. Width behavior and the roughly five-swatch scrolling strip/+ remain unchanged.
+
+Version-1 and pre-preset settings migrate in user order. A previously selected color outside a nonempty legacy palette is retained as an ordinary preset. Version-2 reload preserves IDs, including duplicate color values. The upgrade is persisted once; no notebook format changes are involved.
+
+Regression coverage includes actual strip rendering after selected default red is edited to existing blue, the live drawing callback, reopening the same editor after reorder, first/middle/last edits, delete fallback, added colors, independent tools, restore and both legacy migrations. Physical iPad verification remains pending.

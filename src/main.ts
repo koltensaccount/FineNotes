@@ -380,7 +380,11 @@ export default class GoodObsidianPlugin extends Plugin {
     delete loaded.trocrModel;
     // Settings found under the old id are written to this id's folder at
     // once, so the carry-over happens exactly one time.
-    if (saved && !saved.writingPresets) await this.saveSettings();
+    if (
+      saved &&
+      JSON.stringify(saved.writingPresets) !== JSON.stringify(this.settings.writingPresets)
+    )
+      await this.saveSettings();
     else if (own === null && saved !== null) await this.saveSettings();
   }
 

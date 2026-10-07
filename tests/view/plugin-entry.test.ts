@@ -1,5 +1,5 @@
 import { storeShownValue } from "../../src/settings-data";
-import { migrateWritingPresets } from "../../src/model/writing-presets";
+import { migrateWritingPresets, selectedColor } from "../../src/model/writing-presets";
 /**
  * The plugin entry (`src/main.ts`) as Obsidian sees it: what `onload`
  * registers, which view a file opens in, how saved settings load, and the
@@ -669,7 +669,9 @@ describe("loading settings", () => {
     const factory = registered.views.get(INK) as (leaf: WorkspaceLeaf) => unknown;
     const view = factory(new WorkspaceLeaf(app)) as { toolState: { tool: string; color: string } };
     expect(view.toolState).toMatchObject({ tool: "highlighter", color: "#abcdef" });
-    expect(plugin.settings.writingPresets!.selectedColors.pen).toBe(DEFAULT_SETTINGS.defaultColor);
+    expect(selectedColor(plugin.settings.writingPresets!, "pen")).toBe(
+      DEFAULT_SETTINGS.defaultColor,
+    );
   });
   it("a failed write keeps in-memory presets intact and permits retry", async () => {
     await load({ writingPresets: migrateWritingPresets(DEFAULT_SETTINGS) });
@@ -718,7 +720,7 @@ describe("loading settings", () => {
       highlighterAlpha: 0.65,
     });
     const p = plugin.settings.writingPresets!;
-    expect(p.palettes.pen).toContain("#aabbcc");
+    expect(p.palettes.pen.map((entry) => entry.color)).toContain("#aabbcc");
     expect(p.palettes.highlighter).not.toBe(p.palettes.pen);
     expect(registered.saved).toHaveLength(1);
     p.palettes.pen.reverse();

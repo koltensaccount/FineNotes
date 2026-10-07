@@ -1,4 +1,11 @@
-import { colorList, type WritingPresets } from "./model/writing-presets";
+import {
+  colorList,
+  selectedColor,
+  selectColor,
+  removeColor,
+  saveColor,
+  type WritingPresets,
+} from "./model/writing-presets";
 /**
  * The plugin's stored settings (`data.json`) and the pure rules around them.
  * No Obsidian and no DOM, so all of it is tested; `settings.ts` draws the tab.
@@ -265,9 +272,10 @@ function conversion(key: string) {
 /** A stored value as its settings control shows it. */
 export function shownValue(settings: GoodObsidianSettings, key: string): unknown {
   if (key === "defaultColor" && settings.writingPresets)
-    return settings.writingPresets.selectedColors[
-      settings.defaultTool === "highlighter" ? "highlighter" : "pen"
-    ];
+    return selectedColor(
+      settings.writingPresets,
+      settings.defaultTool === "highlighter" ? "highlighter" : "pen",
+    );
   const stored = (settings as unknown as Record<string, unknown>)[key];
   const convert = conversion(key);
   return convert ? convert.show(stored) : stored;
@@ -281,23 +289,29 @@ export function storeShownValue(settings: GoodObsidianSettings, key: string, sho
   if (settings.writingPresets && key === "defaultSize")
     settings.writingPresets.selectedWidth = settings.defaultSize;
   if (settings.writingPresets && key === "defaultColor")
-    settings.writingPresets.selectedColors[
-      settings.defaultTool === "highlighter" ? "highlighter" : "pen"
-    ] = settings.defaultColor;
+    selectColor(
+      settings.writingPresets,
+      settings.defaultTool === "highlighter" ? "highlighter" : "pen",
+      settings.defaultColor,
+    );
   if (settings.writingPresets && key === "defaultTool")
-    settings.defaultColor =
-      settings.writingPresets.selectedColors[
-        settings.defaultTool === "highlighter" ? "highlighter" : "pen"
-      ];
+    settings.defaultColor = selectedColor(
+      settings.writingPresets,
+      settings.defaultTool === "highlighter" ? "highlighter" : "pen",
+    );
   // Retain the legacy settings field as a bulk importer for both palettes.
   if (key === "customColors" && settings.writingPresets) {
     const old = colorList(previous);
     const added = colorList(settings.customColors);
     for (const tool of ["pen", "highlighter"] as const) {
-      settings.writingPresets.palettes[tool] = colorList([
-        ...settings.writingPresets.palettes[tool].filter((color) => !old.includes(color)),
-        ...added,
-      ]);
+      for (const preset of [...settings.writingPresets.palettes[tool]]) {
+        if (old.includes(preset.color) && !added.includes(preset.color))
+          removeColor(settings.writingPresets, tool, preset.id);
+      }
+      for (const color of added) {
+        if (!settings.writingPresets.palettes[tool].some((preset) => preset.color === color))
+          saveColor(settings.writingPresets, tool, color);
+      }
     }
   }
 }
