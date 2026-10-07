@@ -5536,6 +5536,8 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 .goodobsidian-color-strip .goodobsidian-swatch.is-active {
   box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
 /* Writing previews remain vectors, with normal touch targets at every pane width. */
 .goodobsidian-stroke-preview {
   display: block;
