@@ -4,6 +4,8 @@ import {
   moveColor,
   restoreColors,
   saveColor,
+  removeColor,
+  selectedColor,
   type WritingPresets,
   type WritingTool,
 } from "../model/writing-presets";
@@ -14,12 +16,12 @@ export function renderPresetColors(
   presets: WritingPresets,
   tool: WritingTool,
   changed: () => void,
-  pick: (color: string) => void,
+  pick: (id: string) => void,
   dragging: (active: boolean) => void,
   recent: () => readonly string[] = () => [],
   remember: (color: string) => void = () => {},
-  start: "list" | "add" | "restore" | number = "list",
-  finished?: (color: string) => void,
+  start: "list" | "add" | "restore" | { id: string } = "list",
+  finished?: (id: string) => void,
 ): () => void {
   let disposers: Array<() => void> = [];
   const clear = (): void => {
@@ -36,20 +38,26 @@ export function renderPresetColors(
     el.addEventListener("click", run);
     return el;
   };
-  const editor = (index?: number): void => {
+  const editor = (id?: string): void => {
     clear();
     button(body, "Back to presets", show);
-    const current =
-      index === undefined ? presets.selectedColors[tool] : presets.palettes[tool][index];
+    const preset =
+      id === undefined ? undefined : presets.palettes[tool].find((entry) => entry.id === id);
+    if (id !== undefined && !preset) {
+      show();
+      return;
+    }
+    const current = preset?.color ?? selectedColor(presets, tool);
     const feedback = body.createDiv({ attr: { role: "status" } });
     const save = (color: string, custom = true): void => {
-      if (!saveColor(presets, tool, color, index)) {
-        feedback.setText("Choose a valid color that is not already in this palette.");
+      const saved = saveColor(presets, tool, color, id);
+      if (!saved) {
+        feedback.setText("Choose a valid color. If this preset was removed, reopen the editor.");
         return;
       }
       if (custom) remember(color);
       changed();
-      if (finished) finished(presets.palettes[tool][index ?? presets.palettes[tool].length - 1]);
+      if (finished) finished(saved.id);
       else show();
     };
     const hex = body.createEl("input", {
@@ -57,13 +65,13 @@ export function renderPresetColors(
       value: current,
       attr: { "aria-label": "HEX color", placeholder: "#rrggbb" },
     });
-    button(body, index === undefined ? "Add HEX color" : "Replace with HEX color", () =>
+    button(body, id === undefined ? "Add HEX color" : "Replace with HEX color", () =>
       save(hex.value),
     );
     renderColorPicker(body.createDiv(), {
       current,
       recent: recent(),
-      extra: presets.palettes[tool],
+      extra: presets.palettes[tool].map((entry) => entry.color),
       customOpen: true,
       onPick: (color) => {
         if (color) save(color, false);
@@ -82,10 +90,10 @@ export function renderPresetColors(
       text: "Hold a handle to drag on touch. Drag with a mouse, or use ↑ / ↓ on a focused handle.",
     });
     const list = body.createDiv({ cls: "goodobsidian-preset-list" });
-    presets.palettes[tool].forEach((color, index) => {
+    presets.palettes[tool].forEach(({ id, color }, index) => {
       const row = list.createDiv({
         cls: "goodobsidian-preset-row",
-        attr: { "data-preset-index": String(index) },
+        attr: { "data-preset-index": String(index), "data-preset-id": id },
       });
       const handle = button(row, `Move ${color}`, () => {});
       handle.setText("↕");
@@ -104,14 +112,14 @@ export function renderPresetColors(
           dragging,
         ),
       );
-      const swatch = button(row, `Select ${color}`, () => pick(color));
+      const swatch = button(row, `Select ${color}`, () => pick(id));
       swatch.setText(color);
       swatch.setCssProps({ "--preset-color": color });
       swatch.addClass("goodobsidian-preset-color");
-      swatch.setAttribute("aria-pressed", String(color === presets.selectedColors[tool]));
-      button(row, `Edit ${color}`, () => editor(index)).setText("Edit");
+      swatch.setAttribute("aria-pressed", String(id === presets.selectedIds[tool]));
+      button(row, `Edit ${color}`, () => editor(id)).setText("Edit");
       button(row, `Remove ${color}`, () => {
-        presets.palettes[tool].splice(index, 1);
+        removeColor(presets, tool, id);
         changed();
         show();
       }).setText("×");
@@ -123,7 +131,7 @@ export function renderPresetColors(
   const reset = (): void => {
     clear();
     body.createDiv({
-      text: `Replace all ${tool} color presets with the original defaults? Widths and the selected ink color will be kept.`,
+      text: `Replace all ${tool} color presets with the original defaults? Widths will be kept. The selection follows a matching default color, or the first default.`,
     });
     button(body, "Cancel", show);
     button(body, "Restore default colors", () => {
@@ -134,7 +142,7 @@ export function renderPresetColors(
   };
   if (start === "add") editor();
   else if (start === "restore") reset();
-  else if (typeof start === "number") editor(start);
+  else if (typeof start === "object") editor(start.id);
   else show();
   return clear;
 }

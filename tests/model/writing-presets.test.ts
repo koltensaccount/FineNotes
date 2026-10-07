@@ -9,6 +9,11 @@ import {
   restoreColors,
   saveColor,
   saveWidth,
+  selectedColor,
+  selectPreset,
+  selectedPreset,
+  removeColor,
+  selectColor,
 } from "../../src/model/writing-presets";
 const fresh = () => migrateWritingPresets({ ...DEFAULT_SETTINGS });
 describe("writing width presets", () => {
@@ -56,108 +61,136 @@ describe("writing width presets", () => {
     expect(migrateWritingPresets(saved)).toEqual(p);
   });
 });
-describe("writing color presets", () => {
-  it("allows editing and deleting former defaults independently", () => {
+describe("stable mutable color presets", () => {
+  const colors = (p: ReturnType<typeof fresh>, tool: "pen" | "highlighter" = "pen") =>
+    p.palettes[tool].map((entry) => entry.color);
+  it.each([0, 2, 5])("edits position %s by identity, including duplicate color values", (index) => {
     const p = fresh();
-    const highlighter = [...p.palettes.highlighter];
-    expect(saveColor(p, "pen", "#abc", 0)).toBe(true);
-    expect(p.palettes.pen[0]).toBe("#aabbcc");
-    expect(p.selectedColors.pen).toBe("#aabbcc");
-    p.palettes.pen.splice(1, 1);
-    expect(p.palettes.pen).not.toContain(PALETTE[1]);
-    expect(p.palettes.highlighter).toEqual(highlighter);
-  });
-  it("adds colors, rejects duplicates, and preserves user-controlled order on reload", () => {
-    const p = fresh();
-    expect(saveColor(p, "pen", "#abc")).toBe(true);
-    expect(saveColor(p, "pen", "#AABBCC")).toBe(false);
-    const last = p.palettes.pen.length - 1;
-    moveColor(p, "pen", last, 0);
-    expect(p.palettes.pen[0]).toBe("#aabbcc");
+    const preset = p.palettes.pen[index];
+    const id = preset.id;
+    selectPreset(p, "pen", id);
+    expect(saveColor(p, "pen", "#0000ff", id)).toMatchObject({ id, color: "#0000ff" });
+    expect(selectedPreset(p, "pen")?.id).toBe(id);
+    expect(selectedColor(p, "pen")).toBe("#0000ff");
+    expect(p.palettes.pen[index].color).toBe("#0000ff");
     expect(
       migrateWritingPresets(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, writingPresets: p }))),
     ).toEqual(p);
   });
-  it("reset restores only the requested palette", () => {
+  it("editing red to an existing blue is allowed without merging their identities", () => {
     const p = fresh();
-    saveColor(p, "pen", "#abc");
-    saveColor(p, "highlighter", "#def");
-    const before = structuredClone(p);
-    restoreColors(p, "pen");
-    expect(p.palettes.pen).toEqual(PALETTE);
-    expect(p.palettes.highlighter).toEqual(before.palettes.highlighter);
-    expect(p.widths).toEqual(before.widths);
-    expect(p.selectedColors).toEqual(before.selectedColors);
+    const red = p.palettes.pen[2],
+      blue = p.palettes.pen[3];
+    selectPreset(p, "pen", red.id);
+    saveColor(p, "pen", blue.color, red.id);
+    expect(red.color).toBe(blue.color);
+    expect(red.id).not.toBe(blue.id);
+    expect(p.selectedIds.pen).toBe(red.id);
   });
-  it("migration retains custom colors, selected ink, widths and opacity and is idempotent", () => {
-    const old = {
-      ...DEFAULT_SETTINGS,
-      customColors: ["#abc", "#ABC", "#00ccaa"],
-      defaultColor: "#123456",
-      defaultSize: 9.75,
-      highlighterAlpha: 0.7,
-    };
-    const p = migrateWritingPresets(old);
-    expect(p.palettes.pen).toEqual([...PALETTE, "#aabbcc", "#00ccaa"]);
-    expect(p.palettes.highlighter).toEqual(p.palettes.pen);
-    expect(p.palettes.highlighter).not.toBe(p.palettes.pen);
-    expect(p.selectedColors).toEqual({ pen: "#123456", highlighter: "#123456" });
-    expect(p.selectedWidth).toBe(9.75);
-    expect(migrateWritingPresets({ ...old, writingPresets: p })).toEqual(p);
-    expect(old.highlighterAlpha).toBe(0.7);
-  });
-  it("does not resurrect deleted default colors or empty palettes", () => {
+  it("reorder/delete another row never changes the selected preset", () => {
     const p = fresh();
-    p.palettes.pen = [];
+    const selected = p.palettes.pen[2];
+    selectPreset(p, "pen", selected.id);
+    moveColor(p, "pen", 2, 0);
+    removeColor(p, "pen", p.palettes.pen[3].id);
+    expect(p.selectedIds.pen).toBe(selected.id);
+    expect(selectedColor(p, "pen")).toBe(selected.color);
+  });
+  it("deleting the selected row chooses the next row, then previous at the end, then black when empty", () => {
+    const p = fresh();
+    const next = p.palettes.pen[3].id;
+    selectPreset(p, "pen", p.palettes.pen[2].id);
+    removeColor(p, "pen", p.selectedIds.pen!);
+    expect(p.selectedIds.pen).toBe(next);
+    selectPreset(p, "pen", p.palettes.pen.at(-1)!.id);
+    const previous = p.palettes.pen.at(-2)!.id;
+    removeColor(p, "pen", p.selectedIds.pen!);
+    expect(p.selectedIds.pen).toBe(previous);
+    for (const entry of [...p.palettes.pen]) removeColor(p, "pen", entry.id);
+    expect(p.selectedIds.pen).toBeNull();
+    expect(selectedColor(p, "pen")).toBe(PALETTE[0]);
     expect(migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: p }).palettes.pen).toEqual(
       [],
     );
   });
-  it("legacy bulk color setting updates both palettes without reviving defaults", () => {
+  it("adding a color preserves selection until explicitly picked; IDs are not recycled", () => {
+    const p = fresh(),
+      id = p.selectedIds.pen;
+    const added = saveColor(p, "pen", "#abc")!;
+    expect(p.selectedIds.pen).toBe(id);
+    removeColor(p, "pen", added.id);
+    expect(saveColor(p, "pen", "#abc")!.id).not.toBe(added.id);
+  });
+  it("stale editors never append or target the final row", () => {
+    const p = fresh();
+    const first = p.palettes.pen[0];
+    removeColor(p, "pen", first.id);
+    const before = structuredClone(p);
+    expect(saveColor(p, "pen", "#abc", first.id)).toBeNull();
+    expect(p).toEqual(before);
+  });
+  it("defaults and added presets edit/remove identically and tools remain independent", () => {
+    const p = fresh(),
+      before = structuredClone(p.palettes.highlighter);
+    const added = saveColor(p, "pen", "#abc")!;
+    selectPreset(p, "pen", added.id);
+    saveColor(p, "pen", "#def", added.id);
+    expect(selectedColor(p, "pen")).toBe("#ddeeff");
+    removeColor(p, "pen", added.id);
+    expect(p.palettes.highlighter).toEqual(before);
+  });
+  it("restore recreates true defaults and a deterministic matching/first selection", () => {
+    const p = fresh();
+    const highlighter = structuredClone(p.palettes.highlighter);
+    const oldIds = p.palettes.pen.map((entry) => entry.id);
+    selectColor(p, "pen", "#abcdef");
+    restoreColors(p, "pen");
+    expect(colors(p)).toEqual(PALETTE);
+    expect(selectedColor(p, "pen")).toBe(PALETTE[0]);
+    expect(p.palettes.pen.every((entry) => !oldIds.includes(entry.id))).toBe(true);
+    expect(p.palettes.highlighter).toEqual(highlighter);
+  });
+  it("migrates v1 palette order, selected custom ink and duplicates safely and idempotently", () => {
+    const old = {
+      version: 1,
+      widths: [5, 2],
+      selectedWidth: 9.75,
+      palettes: { pen: ["#f00", "#00f"], highlighter: ["#abc"] },
+      selectedColors: { pen: "#0000ff", highlighter: "#def" },
+    };
+    const p = migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: old });
+    expect(p.version).toBe(2);
+    expect(colors(p)).toEqual(["#ff0000", "#0000ff"]);
+    expect(selectedColor(p, "pen")).toBe("#0000ff");
+    expect(selectedColor(p, "highlighter")).toBe("#ddeeff");
+    expect(p.widths).toEqual([2, 5]);
+    expect(p.selectedWidth).toBe(9.75);
+    expect(migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: p })).toEqual(p);
+  });
+  it("migrates pre-preset settings without changing active ink or sharing identities", () => {
+    const p = migrateWritingPresets({
+      ...DEFAULT_SETTINGS,
+      customColors: ["#abc"],
+      defaultColor: "#123456",
+    });
+    expect(selectedColor(p, "pen")).toBe("#123456");
+    expect(colors(p)).toEqual([...PALETTE, "#aabbcc", "#123456"]);
+    expect(p.selectedIds.pen).not.toBe(p.selectedIds.highlighter);
+  });
+  it("settings bulk imports keep stable surviving IDs and settings colors select real presets", () => {
     const settings = {
       ...DEFAULT_SETTINGS,
       customColors: ["#abc"],
       writingPresets: migrateWritingPresets({ ...DEFAULT_SETTINGS, customColors: ["#abc"] }),
     };
-    settings.writingPresets.palettes.pen.splice(0, 1);
+    const id = settings.writingPresets.palettes.pen[0].id;
     storeShownValue(settings, "customColors", "#def");
-    expect(settings.writingPresets.palettes.pen).not.toContain(PALETTE[0]);
-    expect(settings.writingPresets.palettes.pen).not.toContain("#aabbcc");
-    expect(settings.writingPresets.palettes.highlighter).toContain("#ddeeff");
-  });
-});
-
-describe("default tool and empty preset edges", () => {
-  it("default ink color follows the opening tool without changing the other tool", () => {
-    const settings = { ...DEFAULT_SETTINGS, writingPresets: fresh() };
+    expect(settings.writingPresets.palettes.pen[0].id).toBe(id);
+    expect(colors(settings.writingPresets)).not.toContain("#aabbcc");
+    expect(colors(settings.writingPresets)).toContain("#ddeeff");
     storeShownValue(settings, "defaultTool", "highlighter");
     storeShownValue(settings, "defaultColor", "#abcdef");
-    expect(settings.writingPresets.selectedColors.highlighter).toBe("#abcdef");
-    expect(settings.writingPresets.selectedColors.pen).toBe(DEFAULT_SETTINGS.defaultColor);
     expect(shownValue(settings, "defaultColor")).toBe("#abcdef");
-    storeShownValue(settings, "defaultTool", "pen");
-    expect(shownValue(settings, "defaultColor")).toBe(DEFAULT_SETTINGS.defaultColor);
-  });
-  it.each(["pen", "highlighter"] as const)(
-    "empty %s palette keeps ink and accepts a first color or reset",
-    (tool) => {
-      const p = fresh();
-      const selected = p.selectedColors[tool];
-      p.palettes[tool] = [];
-      expect(p.selectedColors[tool]).toBe(selected);
-      expect(saveColor(p, tool, "#abc")).toBe(true);
-      expect(p.palettes[tool]).toEqual(["#aabbcc"]);
-      p.palettes[tool] = [];
-      restoreColors(p, tool);
-      expect(p.palettes[tool]).toEqual(PALETTE);
-    },
-  );
-  it("the first width added after empty/removing active width is usable", () => {
-    const p = fresh();
-    p.widths = [];
-    p.selectedWidth = 3;
-    saveWidth(p, 2.5);
-    expect(p.widths).toEqual([2.5]);
-    expect(p.selectedWidth).toBe(3);
+    expect(selectedColor(settings.writingPresets, "pen")).toBe(DEFAULT_SETTINGS.defaultColor);
   });
 });

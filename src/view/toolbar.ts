@@ -4,6 +4,10 @@ import {
   type WritingTool,
   saveWidth,
   removeWidth,
+  removeColor,
+  selectedColor,
+  selectColor,
+  selectPreset,
 } from "../model/writing-presets";
 import { renderPresetColors } from "./preset-colors";
 import { lineStyleOf } from "../ink/line-style";
@@ -446,7 +450,10 @@ export class Toolbar {
     return this.state.tool === "highlighter" ? "highlighter" : "pen";
   }
   private get palette(): string[] {
-    return this.options.writingPresets?.palettes[this.writingTool] ?? this.initialPalette;
+    return (
+      this.options.writingPresets?.palettes[this.writingTool].map((preset) => preset.color) ??
+      this.initialPalette
+    );
   }
   private get widths(): readonly number[] {
     return this.options.writingPresets?.widths ?? this.initialWidths;
@@ -454,7 +461,8 @@ export class Toolbar {
   private presetsChanged(): void {
     const presets = this.options.writingPresets;
     if (!presets) return;
-    this.state.color = presets.selectedColors[this.writingTool];
+    this.state.color = selectedColor(presets, this.writingTool);
+    this.callbacks.onColorChange(this.state.color);
     this.options.onPresetsChange?.(presets);
     this.buildOptions();
     this.syncActive();
@@ -767,7 +775,7 @@ export class Toolbar {
 
   private buildPenOptions(): void {
     if (this.paletteTool !== this.writingTool && this.options.writingPresets) {
-      this.state.color = this.options.writingPresets.selectedColors[this.writingTool];
+      this.state.color = selectedColor(this.options.writingPresets, this.writingTool);
     }
     this.paletteTool = this.writingTool;
     // One live pen button, not four permanent swatches. The three pen styles
@@ -821,33 +829,7 @@ export class Toolbar {
 
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
 
-    const colors = this.optionsEl.createDiv({ cls: "goodobsidian-quick-colors" });
-    const strip = colors.createDiv({
-      cls: "goodobsidian-color-strip",
-      attr: { "aria-label": "Writing colors" },
-    });
-    this.colorStrip = strip;
-    for (const [index, color] of this.quickColors().entries()) {
-      const swatch = this.swatchButton(strip, color);
-      swatch.addClass("clickable-icon");
-      swatch.setAttribute("title", `${color} — hold or right-click to edit`);
-      this.optionDisposers.push(
-        bindColorStripInput(
-          swatch,
-          strip,
-          () => this.setPenColor(color),
-          () => this.colorContext(swatch, index),
-        ),
-      );
-      this.colorSwatches.set(color, swatch);
-    }
-    strip.scrollLeft = this.colorScroll[this.writingTool];
-    const more = colors.createEl("button", {
-      cls: "goodobsidian-color-more clickable-icon",
-      attr: { "aria-label": "Add color", title: "Add color" },
-    });
-    iconOrText(more, "plus", "+");
-    more.addEventListener("click", () => this.presetPopover(more, "add"));
+    this.buildColorStrip();
 
     // Auto-shape: a stroke that is plainly a shape snaps to it on lift.
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
@@ -868,7 +850,39 @@ export class Toolbar {
     });
   }
 
-  private colorContext(anchor: HTMLElement, index: number): void {
+  private buildColorStrip(): void {
+    const colors = this.optionsEl.createDiv({ cls: "goodobsidian-quick-colors" });
+    const strip = colors.createDiv({
+      cls: "goodobsidian-color-strip",
+      attr: { "aria-label": "Writing colors" },
+    });
+    this.colorStrip = strip;
+    for (const { id, color } of this.options.writingPresets?.palettes[this.writingTool] ??
+      this.quickColors().map((color) => ({ id: color, color }))) {
+      const swatch = this.swatchButton(strip, color);
+      swatch.addClass("clickable-icon");
+      swatch.setAttribute("title", `${color} — hold or right-click to edit`);
+      this.optionDisposers.push(
+        bindColorStripInput(
+          swatch,
+          strip,
+          () => (this.options.writingPresets ? this.setPenPreset(id) : this.setPenColor(color)),
+          () => this.colorContext(swatch, id),
+        ),
+      );
+      swatch.setAttribute("data-preset-id", id);
+      this.colorSwatches.set(id, swatch);
+    }
+    strip.scrollLeft = this.colorScroll[this.writingTool];
+    const more = colors.createEl("button", {
+      cls: "goodobsidian-color-more clickable-icon",
+      attr: { "aria-label": "Add color", title: "Add color" },
+    });
+    iconOrText(more, "plus", "+");
+    more.addEventListener("click", () => this.presetPopover(more, "add"));
+  }
+
+  private colorContext(anchor: HTMLElement, id: string): void {
     const presets = this.options.writingPresets;
     if (!presets) {
       this.toggleColorPopover("pen-color", anchor, this.state.color, (color) =>
@@ -878,11 +892,11 @@ export class Toolbar {
     }
     const body = this.openPopover("color-actions", anchor);
     for (const [label, action] of [
-      ["Edit color", () => this.presetPopover(anchor, index)],
+      ["Edit color", () => this.presetPopover(anchor, { id })],
       [
         "Remove color",
         () => {
-          presets.palettes[this.writingTool].splice(index, 1);
+          removeColor(presets, this.writingTool, id);
           this.closePopover();
           this.presetsChanged();
         },
@@ -899,7 +913,10 @@ export class Toolbar {
     this.keepPopoverInside(anchor);
   }
 
-  private presetPopover(anchor: HTMLElement, start: "list" | "add" | "restore" | number): void {
+  private presetPopover(
+    anchor: HTMLElement,
+    start: "list" | "add" | "restore" | { id: string },
+  ): void {
     const presets = this.options.writingPresets;
     if (!presets) {
       this.toggleColorPopover("pen-color", anchor, this.state.color, (color) =>
@@ -914,9 +931,9 @@ export class Toolbar {
       presets,
       this.writingTool,
       () => this.presetsChanged(),
-      (color) => {
+      (id) => {
         this.closePopover();
-        this.setPenColor(color);
+        this.setPenPreset(id);
       },
       (active) => {
         this.presetDragging = active;
@@ -926,19 +943,26 @@ export class Toolbar {
       start,
       start === "list" || start === "restore"
         ? undefined
-        : (color) => {
+        : (id) => {
             this.closePopover();
-            if (start === "add") this.setPenColor(color);
-            this.colorSwatches.get(color)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+            if (start === "add") this.setPenPreset(id);
+            this.colorSwatches.get(id)?.scrollIntoView({ block: "nearest", inline: "nearest" });
           },
     );
     this.keepPopoverInside(anchor);
   }
 
+  private setPenPreset(id: string): void {
+    const presets = this.options.writingPresets;
+    if (!presets || !selectPreset(presets, this.writingTool, id)) return;
+    this.presetsChanged();
+  }
+
   private setPenColor(color: string): void {
     this.state.color = color;
     if (this.options.writingPresets) {
-      this.options.writingPresets.selectedColors[this.writingTool] = color;
+      selectColor(this.options.writingPresets, this.writingTool, color);
+      this.state.color = selectedColor(this.options.writingPresets, this.writingTool);
       this.options.onPresetsChange?.(this.options.writingPresets);
     }
     this.callbacks.onColorChange(color);
@@ -970,9 +994,9 @@ export class Toolbar {
         this.options.writingPresets,
         this.writingTool,
         () => this.presetsChanged(),
-        (color) => {
+        (id) => {
           this.closePopover();
-          pick(color);
+          this.setPenPreset(id);
         },
         (active) => {
           this.presetDragging = active;
@@ -1648,10 +1672,10 @@ export class Toolbar {
   private choosePenType(spec: PenTypeSpec): void {
     this.state.penType = spec.id;
     if (this.options.writingPresets)
-      this.state.color =
-        this.options.writingPresets.selectedColors[
-          spec.tool === "highlighter" ? "highlighter" : "pen"
-        ];
+      this.state.color = selectedColor(
+        this.options.writingPresets,
+        spec.tool === "highlighter" ? "highlighter" : "pen",
+      );
     if (this.state.tool !== spec.tool) {
       this.state.tool = spec.tool;
       this.callbacks.onToolChange(spec.tool);
@@ -2244,7 +2268,13 @@ export class Toolbar {
     const { state } = this;
     // Highlighter is a pen type, so the pen button stands for both.
     markChosen(this.toolButtons, state.tool === "highlighter" ? "pen" : state.tool, true);
-    markChosen(this.colorSwatches, state.color, true);
+    if (this.options.writingPresets) {
+      for (const [id, swatch] of this.colorSwatches) {
+        const active = id === this.options.writingPresets.selectedIds[this.writingTool];
+        swatch.toggleClass("is-active", active);
+        swatch.setAttribute("aria-pressed", String(active));
+      }
+    } else markChosen(this.colorSwatches, state.color, true);
     markChosen(this.widthButtons, state.size);
     markChosen(this.eraserSizeButtons, eraserSizeFor(state));
     markChosen(this.penTypeButtons, this.activePenType().id);

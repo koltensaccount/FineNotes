@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", () => import("./fake-obsidian"));
 const { Toolbar, PEN_TYPES } = await import("../../src/view/toolbar");
-import { migrateWritingPresets } from "../../src/model/writing-presets";
+import { migrateWritingPresets, selectedColor, selectColor } from "../../src/model/writing-presets";
 import { DEFAULT_SETTINGS } from "../../src/settings-data";
 function setup() {
   const presets = migrateWritingPresets(DEFAULT_SETTINGS);
   const save = vi.fn();
-  const state = { tool: "pen", color: presets.selectedColors.pen, size: 3 };
+  const state = { tool: "pen", color: selectedColor(presets, "pen"), size: 3 };
   const toolbar = Object.assign(Object.create(Toolbar.prototype) as object, {
     state,
     options: { writingPresets: presets, onPresetsChange: save },
@@ -43,14 +43,17 @@ describe("toolbar preset integration", () => {
     s.toolbar.setPenColor("#abcdef");
     s.toolbar.choosePenType(PEN_TYPES[0]);
     expect(s.state.color).toBe("#123456");
-    expect(s.presets.selectedColors.highlighter).toBe("#abcdef");
+    expect(selectedColor(s.presets, "highlighter")).toBe("#abcdef");
     expect(s.presets.selectedWidth).toBe(5);
     expect(s.save).toHaveBeenCalledTimes(3);
   });
   it("shows user order including white and never revives a removed color", () => {
     const s = setup();
-    s.presets.palettes.pen = ["#ffffff", "#abcdef", "#123456"];
-    expect(s.toolbar.quickColors()).toEqual(s.presets.palettes.pen);
+    s.presets.palettes.pen = ["#ffffff", "#abcdef", "#123456"].map((color, i) => ({
+      id: `pen-${i + 50}`,
+      color,
+    }));
+    expect(s.toolbar.quickColors()).toEqual(s.presets.palettes.pen.map((entry) => entry.color));
     s.presets.palettes.pen = [];
     expect(s.toolbar.quickColors()).toEqual([]);
   });
@@ -61,7 +64,7 @@ describe("toolbar preset integration", () => {
   });
   it("an edited selected color follows its slot and reports persistence", () => {
     const s = setup();
-    s.presets.selectedColors.pen = "#abcdef";
+    selectColor(s.presets, "pen", "#abcdef");
     s.toolbar.presetsChanged();
     expect(s.state.color).toBe("#abcdef");
     expect(s.save).toHaveBeenCalledWith(s.presets);
@@ -70,12 +73,12 @@ describe("toolbar preset integration", () => {
 
 it.each([1, 5, 6, 20])("the quick strip includes every one of %s colors in user order", (count) => {
   const s = setup();
-  s.presets.palettes.pen = Array.from(
-    { length: count },
-    (_, i) => "#" + i.toString(16).padStart(6, "0"),
-  );
-  expect(s.toolbar.quickColors()).toEqual(s.presets.palettes.pen);
-  s.state.color = s.presets.palettes.pen[count - 1];
+  s.presets.palettes.pen = Array.from({ length: count }, (_, i) => ({
+    id: `pen-${i + 50}`,
+    color: "#" + i.toString(16).padStart(6, "0"),
+  }));
+  expect(s.toolbar.quickColors()).toEqual(s.presets.palettes.pen.map((entry) => entry.color));
+  s.state.color = s.presets.palettes.pen[count - 1].color;
   expect(s.toolbar.quickColors()).toHaveLength(count);
-  expect(s.state.color).toBe(s.presets.palettes.pen[count - 1]);
+  expect(s.state.color).toBe(s.presets.palettes.pen[count - 1].color);
 });
