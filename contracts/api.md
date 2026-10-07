@@ -5,7 +5,7 @@
      An agent that finds this contract wrong does NOT edit it — it finishes
      what it can and requests the change in its final report. -->
 
-Version: 9
+Version: 10
 
 ## Scope of this contract
 
@@ -906,3 +906,21 @@ length using base nib width, not input segments or instantaneous pressure.
 Dotted ink is filled round circles. The Shape tool remains Solid; a Pen stroke
 that snaps keeps its explicitly chosen Pen style. Old-client appearance falls
 back to Solid; do not edit styled notes with older FineNotes builds.
+
+## Optional companion PDF association (frontmatter)
+
+A `.notebook.md` may carry `finenotes-companion-id`, a lowercase 16-hex-digit
+random association identity, only when the companion feature is configured.
+This is a FineNotes-owned optional property written through Obsidian's
+`FileManager.processFrontMatter`. It is not a page/stroke/document ID.
+Existing notes without it are unchanged and require no payload migration.
+The serializer preserves it alongside all other frontmatter and user prose.
+The ink schema remains unchanged. Duplicating a notebook with this property
+requires a new identity for the copy; ambiguous ownership is refused.
+
+Versioned plugin data holds enablement, last-known notebook and PDF paths,
+filename mode, dirty/export fingerprint, errors and replacement recovery
+journal. It never stores notebook ink. Generated filenames retain a stable
+`[FN-<uppercase-id>]` suffix and PDFs embed the same identity in Subject.
+Paths follow vault rename events; a missing PDF path triggers a suffix-based
+recovery search with embedded identity verification, not a startup PDF scan.

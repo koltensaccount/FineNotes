@@ -7,6 +7,7 @@ import {
   type WritingPresets,
 } from "./model/writing-presets";
 import type { LineStyle } from "./model/document";
+import type { CompanionStore } from "./model/companion-pdf";
 /**
  * The plugin's stored settings (`data.json`) and the pure rules around them.
  * No Obsidian and no DOM, so all of it is tested; `settings.ts` draws the tab.
@@ -42,6 +43,8 @@ export interface GoodObsidianSettings {
   /** Versioned user-managed toolbar preferences, upgraded explicitly on load. */
   writingPresets?: WritingPresets;
   penLineStyle?: LineStyle;
+  /** Optional versioned companion association registry; absent on existing installs. */
+  companionPdfs?: CompanionStore;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;

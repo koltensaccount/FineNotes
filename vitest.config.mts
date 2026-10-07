@@ -79,6 +79,8 @@ export default defineConfig({
         "src/audio/recording.ts",
         "src/export/pdf-writer.ts",
         "src/export/pdf-composer.ts",
+        "src/export/companion-metadata.ts",
+        "src/view/companion-pdf.ts",
         "src/export/annotation-layers.ts",
         "src/export/page-range.ts",
         "src/search/notebook-search.ts",

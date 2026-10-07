@@ -1,4 +1,5 @@
 import { type WritingPresets, migrateWritingPresets } from "./model/writing-presets";
+import { CompanionPdfManager } from "./view/companion-pdf";
 import { FileExplorerNotebookButton } from "./view/file-explorer-notebook-button";
 import { DEFAULT_SHAPE_COLOR, parseHexColor, recentColorsOf } from "./model/colors";
 import { type PenGestures, penGesturesOf } from "./ink/pen-gestures";
@@ -109,6 +110,10 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   override settings!: GoodObsidianSettings;
+  readonly companionPdfs = new CompanionPdfManager(this.app, async (store) => {
+    this.settings.companionPdfs = store;
+    await this.saveSettings();
+  });
   /** Transcription engines by id. Manual always; the cloud one is added on load. */
   readonly providers = createProviderRegistry();
   /** Where API keys live: Obsidian's keychain when it has one (see key-store.ts). */
@@ -156,6 +161,8 @@ export default class GoodObsidianPlugin extends Plugin {
 
     await this.loadSettings();
     await this.setUpKeyStore();
+    this.companionPdfs.load(this.settings.companionPdfs);
+    await this.companionPdfs.recoverAll();
 
     this.registerView(VIEW_TYPE_INK, (leaf) => new InkView(leaf, this));
     // The image menu's "Generate with AI" row: the same modal as the AI menu,
@@ -214,7 +221,32 @@ export default class GoodObsidianPlugin extends Plugin {
     );
     this.routeInkNotes();
     this.registerEvent(
-      this.app.vault.on("rename", (file, oldPath) => this.fileMoves.renamed(file, oldPath)),
+      this.app.vault.on("rename", (file, oldPath) => {
+        if (!this.companionPdfs.isInternal(oldPath) && !this.companionPdfs.isInternal(file.path))
+          this.fileMoves.renamed(file, oldPath);
+        void this.companionPdfs
+          .renamed(file, oldPath)
+          .catch(
+            (error: unknown) =>
+              new Notice(
+                `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+          );
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        void this.companionPdfs
+          .deleted(file.path)
+          .catch(() => new Notice("FineNotes: could not save companion PDF status."));
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        this.companionPdfs.modified(file.path);
+        if (this.companionPdfs.isInternal(file.path)) return;
+        for (const view of this.openNotebooks()) view.companionResourceChanged(file.path);
+      }),
     );
     this.register(() => this.fileMoves.destroy());
 
@@ -282,6 +314,12 @@ export default class GoodObsidianPlugin extends Plugin {
       view.copyPageLink(),
     );
     this.notebookCommand("export-pdf", "Export as PDF…", (view) => view.exportPdf());
+    this.notebookCommand(
+      "update-companion-pdf",
+      "Update companion PDF now",
+      (view) => view.updateCompanionPdf(true),
+      (view) => view.hasCompanionPdf,
+    );
 
     this.addCommand({
       id: "toggle-canvas-markdown-view",

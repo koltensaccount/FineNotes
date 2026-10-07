@@ -25,6 +25,7 @@ export interface PdfImagePage {
 }
 
 export interface PdfMetadata {
+  subject?: string;
   title?: string;
   /** Written as the PDF's CreationDate. */
   created?: Date;
@@ -96,6 +97,7 @@ export function buildImagePdf(pages: readonly PdfImagePage[], meta: PdfMetadata 
 
   begin(3);
   const info = [`/Producer ${pdfString(PRODUCER)}`];
+  if (meta.subject) info.push(`/Subject ${pdfString(meta.subject)}`);
   if (meta.title) info.push(`/Title ${pdfString(meta.title)}`);
   if (meta.created) info.push(`/CreationDate ${pdfString(pdfDate(meta.created))}`);
   out.text(`<< ${info.join(" ")} >>\n`);

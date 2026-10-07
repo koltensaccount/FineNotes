@@ -20,7 +20,7 @@
  * dialog.
  */
 
-import { type App, Modal, Setting } from "obsidian";
+import { type App, Modal, Notice, Setting } from "obsidian";
 import { cleanFolder, suggestFolders } from "../model/attachment-folders";
 import type { AttachmentFolders, AttachmentKind, ScrollDirection } from "../model/document";
 import { FolderSuggestModal } from "./folder-suggest";
@@ -29,6 +29,16 @@ import { DialogKeyboard } from "./dialog-keyboard";
 const SUGGESTIONS = 5;
 
 export interface NoteSettingsHost {
+  companion?: {
+    state: () => { enabled: boolean; followName: boolean; pdfPath: string; status: string };
+    configure: (patch: {
+      enabled?: boolean;
+      followName?: boolean;
+      pdfPath?: string;
+    }) => Promise<void>;
+    update: () => Promise<void>;
+    choose: (changed: () => void) => void;
+  };
   /** A single page rather than a notebook: only the wording changes. */
   single: boolean;
   /** The note's folders as stored now. */
@@ -74,6 +84,7 @@ const ROWS: ReadonlyArray<{
 export class NoteSettingsModal extends Modal {
   /** Keeps the row being typed in, and its folder list, above the keyboard. */
   private readonly keyboard: DialogKeyboard;
+  private showing = false;
 
   constructor(
     app: App,
@@ -84,12 +95,14 @@ export class NoteSettingsModal extends Modal {
   }
 
   override onOpen(): void {
+    this.showing = true;
     this.modalEl.addClass("goodobsidian-note-settings", "goodobsidian-dialog");
     this.titleEl.setText(this.host.single ? "Page settings" : "Notebook settings");
     this.render();
   }
 
   override onClose(): void {
+    this.showing = false;
     this.keyboard.end();
     this.contentEl.empty();
   }
@@ -112,6 +125,78 @@ export class NoteSettingsModal extends Modal {
     });
     const folders = this.host.folders();
     for (const row of ROWS) this.renderRow(contentEl, row, folders[row.kind]);
+    if (this.host.companion) this.renderCompanion(contentEl);
+  }
+
+  private renderCompanion(parent: HTMLElement): void {
+    const host = this.host.companion!;
+    const state = host.state();
+    const run = async (action: () => Promise<void>): Promise<void> => {
+      try {
+        await action();
+      } catch (error) {
+        new Notice(
+          `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (this.showing) this.render();
+    };
+    new Setting(parent).setName("Companion PDF").setHeading();
+    new Setting(parent)
+      .setName("Maintain an up-to-date PDF copy")
+      .setDesc(
+        "Update when this notebook closes or Obsidian is backgrounded. Manual Export as PDF stays separate.",
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(state.enabled)
+          .onChange((enabled) => void run(() => host.configure({ enabled }))),
+      );
+
+    new Setting(parent)
+      .setName("PDF path / custom filename")
+      .setDesc(
+        "Vault-relative PDF path. New filenames keep a stable FN suffix for recovery. Existing unrelated PDFs cannot be selected.",
+      )
+      .addText((text) => {
+        text.setValue(state.pdfPath).setPlaceholder("Folder/Notebook [FN-id].pdf");
+        text.inputEl.addClass("goodobsidian-note-settings-path");
+        text.inputEl.setAttribute("aria-label", "Companion PDF path");
+        text.inputEl.addEventListener(
+          "change",
+          () => void run(() => host.configure({ pdfPath: text.getValue(), followName: false })),
+        );
+        this.keyboard.watch(
+          text.inputEl,
+          text.inputEl.closest<HTMLElement>(".setting-item") ?? text.inputEl,
+        );
+      })
+      .addExtraButton((button) =>
+        button
+          .setIcon("folder")
+          .setTooltip("Choose / change PDF folder")
+          .onClick(() =>
+            host.choose(() => {
+              if (this.showing) this.render();
+            }),
+          ),
+      );
+    new Setting(parent).setName("Filename").addDropdown((dropdown) =>
+      dropdown
+        .addOption("follow", "Follow notebook name")
+        .addOption("custom", "Custom name")
+        .setValue(state.followName ? "follow" : "custom")
+        .onChange((value) => void run(() => host.configure({ followName: value === "follow" }))),
+    );
+    new Setting(parent)
+      .setName("Update companion PDF now")
+      .setDesc(state.status)
+      .addButton((button) =>
+        button
+          .setButtonText("Update PDF now")
+          .setDisabled(!state.enabled)
+          .onClick(() => void run(host.update)),
+      );
   }
 
   private renderScroll(parent: HTMLElement): void {
