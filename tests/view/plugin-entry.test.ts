@@ -737,7 +737,7 @@ describe("loading settings", () => {
     await load(null);
     expect(plugin.settings).toEqual({
       ...DEFAULT_SETTINGS,
-      writingPresets: migrateWritingPresets(DEFAULT_SETTINGS),
+      writingPresets: migrateWritingPresets(DEFAULT_SETTINGS, true),
     });
     expect(plugin.settings).not.toBe(DEFAULT_SETTINGS);
     plugin.settings.apiKeys.openai = "x";

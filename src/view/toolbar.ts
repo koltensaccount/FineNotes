@@ -8,6 +8,10 @@ import {
   selectedColor,
   selectColor,
   selectPreset,
+  widthsFor,
+  selectedWidthFor,
+  selectWidth,
+  restoreWidths,
 } from "../model/writing-presets";
 import { renderPresetColors } from "./preset-colors";
 import { lineStyleOf } from "../ink/line-style";
@@ -456,12 +460,15 @@ export class Toolbar {
     );
   }
   private get widths(): readonly number[] {
-    return this.options.writingPresets?.widths ?? this.initialWidths;
+    return this.options.writingPresets
+      ? widthsFor(this.options.writingPresets, this.writingTool)
+      : this.initialWidths;
   }
   private presetsChanged(): void {
     const presets = this.options.writingPresets;
     if (!presets) return;
     this.state.color = selectedColor(presets, this.writingTool);
+    this.state.size = selectedWidthFor(presets, this.writingTool);
     this.callbacks.onColorChange(this.state.color);
     this.options.onPresetsChange?.(presets);
     this.buildOptions();
@@ -1671,11 +1678,11 @@ export class Toolbar {
 
   private choosePenType(spec: PenTypeSpec): void {
     this.state.penType = spec.id;
-    if (this.options.writingPresets)
-      this.state.color = selectedColor(
-        this.options.writingPresets,
-        spec.tool === "highlighter" ? "highlighter" : "pen",
-      );
+    if (this.options.writingPresets) {
+      const tool = spec.tool === "highlighter" ? "highlighter" : "pen";
+      this.state.color = selectedColor(this.options.writingPresets, tool);
+      this.state.size = selectedWidthFor(this.options.writingPresets, tool);
+    }
     if (this.state.tool !== spec.tool) {
       this.state.tool = spec.tool;
       this.callbacks.onToolChange(spec.tool);
@@ -1790,7 +1797,7 @@ export class Toolbar {
       const render = (): void => {
         manager.empty();
         presets.clear();
-        for (const width of preferences.widths) {
+        for (const width of widthsFor(preferences, this.writingTool)) {
           const item = manager.createDiv({ cls: "goodobsidian-preset-row" });
           const select = item.createEl("button", {
             cls: "clickable-icon",
@@ -1808,8 +1815,8 @@ export class Toolbar {
             attr: { "aria-label": `Replace ${formatMm(width)} with current width` },
           });
           replace.addEventListener("click", () => {
-            saveWidth(preferences, this.state.size, width);
-            this.setWidth(preferences.selectedWidth);
+            saveWidth(preferences, this.state.size, width, this.writingTool);
+            this.setWidth(selectedWidthFor(preferences, this.writingTool));
             this.presetsChanged();
             render();
             show();
@@ -1820,7 +1827,7 @@ export class Toolbar {
             attr: { "aria-label": `Remove ${formatMm(width)}` },
           });
           remove.addEventListener("click", () => {
-            removeWidth(preferences, width);
+            removeWidth(preferences, width, this.writingTool);
             this.presetsChanged();
             render();
           });
@@ -1831,9 +1838,20 @@ export class Toolbar {
         text: "Save current width as preset",
       });
       add.addEventListener("click", () => {
-        saveWidth(preferences, this.state.size);
+        saveWidth(preferences, this.state.size, undefined, this.writingTool);
         this.presetsChanged();
         render();
+      });
+      const defaults = body.createEl("button", {
+        cls: "clickable-icon",
+        text: "Restore width presets",
+      });
+      defaults.addEventListener("click", () => {
+        restoreWidths(preferences, this.writingTool);
+        this.setWidth(selectedWidthFor(preferences, this.writingTool));
+        this.presetsChanged();
+        render();
+        show();
       });
       // The managed list replaces the static chips; slider selection stays live.
       row.empty();
@@ -1855,7 +1873,7 @@ export class Toolbar {
   private setWidth(width: number): void {
     this.state.size = width;
     if (this.options.writingPresets) {
-      this.options.writingPresets.selectedWidth = width;
+      selectWidth(this.options.writingPresets, this.writingTool, width);
       this.options.onPresetsChange?.(this.options.writingPresets);
     }
     this.callbacks.onSizeChange(width);

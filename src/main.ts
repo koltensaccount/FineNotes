@@ -397,7 +397,10 @@ export default class GoodObsidianPlugin extends Plugin {
     const saved = own ?? (await this.settingsFromPreviousId());
     this.firstInstall = saved === null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
-    this.settings.writingPresets = migrateWritingPresets(this.settings);
+    this.settings.writingPresets = migrateWritingPresets(
+      this.settings,
+      saved === null || Object.keys(saved).length === 0,
+    );
     // A record of its own: the key store mutates it, and the default's must
     // stay empty.
     const keys = saved?.apiKeys;

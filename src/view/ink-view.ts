@@ -1,4 +1,4 @@
-import { migrateWritingPresets, selectedColor } from "../model/writing-presets";
+import { migrateWritingPresets, selectedColor, selectedWidthFor } from "../model/writing-presets";
 import { lineStyleOf } from "../ink/line-style";
 import { type ClipboardTarget } from "./clipboard-read";
 import { NativePasteModal } from "./native-paste";
@@ -185,7 +185,9 @@ function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
     color: s.writingPresets
       ? selectedColor(s.writingPresets, s.defaultTool === "highlighter" ? "highlighter" : "pen")
       : s.defaultColor,
-    size: s.writingPresets?.selectedWidth ?? s.defaultSize,
+    size: s.writingPresets
+      ? selectedWidthFor(s.writingPresets, s.defaultTool === "highlighter" ? "highlighter" : "pen")
+      : s.defaultSize,
     // A notebook opens with the Fountain pen, a pressure pen.
     pressureEnabled: s.pressureWidth,
     shapeSnapEnabled: s.drawAndHold,

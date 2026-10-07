@@ -1,6 +1,7 @@
 import {
   colorList,
   selectedColor,
+  selectWidth,
   selectColor,
   removeColor,
   saveColor,
@@ -292,7 +293,11 @@ export function storeShownValue(settings: GoodObsidianSettings, key: string, sho
   const convert = conversion(key);
   (settings as unknown as Record<string, unknown>)[key] = convert ? convert.store(shown) : shown;
   if (settings.writingPresets && key === "defaultSize")
-    settings.writingPresets.selectedWidth = settings.defaultSize;
+    selectWidth(
+      settings.writingPresets,
+      settings.defaultTool === "highlighter" ? "highlighter" : "pen",
+      settings.defaultSize,
+    );
   if (settings.writingPresets && key === "defaultColor")
     selectColor(
       settings.writingPresets,
