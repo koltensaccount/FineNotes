@@ -8,11 +8,16 @@ export interface ThicknessEditorOptions {
   current: () => StrokePreviewOptions;
   presets: () => readonly number[];
   stops: readonly number[];
+  slotIds?: () => readonly string[];
+  selectedSlot?: () => string | null;
+  editing?: () => string | undefined;
+  edit?: (id: string) => void;
+  selectSlot?: (id: string) => void;
   select: (width: number) => void;
   reset: () => void;
   manage?: {
-    save: (width: number, replacing?: number) => void;
-    remove: (width: number) => void;
+    save: (width: number, replacing?: number | string) => void;
+    remove: (width: number | string) => void;
     restore: () => void;
   };
 }
@@ -54,7 +59,7 @@ export function renderThicknessEditor(
   });
   if (options.manage) {
     button(footer, "Save current width", () => {
-      options.manage!.save(options.current().width);
+      options.manage!.save(options.current().width, options.editing?.());
       refresh();
     });
     button(footer, "Restore width presets", () => {
@@ -65,32 +70,40 @@ export function renderThicknessEditor(
   const refresh = (): void => {
     const current = options.current(),
       label = previewThicknessLabel(current.type, current.width);
+    head
+      .querySelector?.(".goodobsidian-popover-label")
+      ?.setText(options.editing?.() ? "Edit width slot" : "Stroke thickness");
     readout.setText(label);
     range.value = String(nearestStop(options.stops, current.width));
     range.setAttribute("aria-valuetext", `${label} thickness`);
     preview.setCssStyles({ background: current.paper ?? "#ffffff" });
     preview.replaceChildren(createStrokePreview(current, body.ownerDocument));
     list.empty();
-    for (const width of options.presets()) {
+    for (const [index, width] of options.presets().entries()) {
+      const id = options.slotIds?.()[index];
+      const active =
+        id && options.selectedSlot ? options.selectedSlot() === id : width === current.width;
       const row = list.createDiv({ cls: "goodobsidian-thickness-row" });
       const name = previewThicknessLabel(current.type, width);
       const pick = button(row, `${name} thickness`, () => {
-        options.select(width);
+        if (active && id && options.edit) options.edit(id);
+        else if (id && options.selectSlot) options.selectSlot(id);
+        else options.select(width);
         refresh();
       });
       pick.empty();
       pick.addClass("goodobsidian-thickness-choice");
       pick.append(createStrokePreview({ ...current, width, compact: true }, body.ownerDocument));
       pick.createSpan({ text: name });
-      pick.toggleClass("is-active", width === current.width);
-      pick.setAttribute("aria-pressed", String(width === current.width));
+      pick.toggleClass("is-active", !!active);
+      pick.setAttribute("aria-pressed", String(!!active));
       if (options.manage) {
         button(row, "Replace this width", () => {
-          options.manage!.save(options.current().width, width);
+          options.manage!.save(options.current().width, id ?? width);
           refresh();
         }).setText("Replace");
         button(row, `Remove ${name} width`, () => {
-          options.manage!.remove(width);
+          options.manage!.remove(id ?? width);
           refresh();
         }).setText("×");
       }

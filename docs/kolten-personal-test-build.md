@@ -17,13 +17,13 @@ The integration full suite uses four workers to avoid artificial contention in t
 
 ## Install the exact beta
 
-Prerelease: [FineNotes 1.5.1-beta.4 — Kolten Personal Test](https://github.com/koltensaccount/FineNotes/releases/tag/1.5.1-beta.4). The release notes identify the final integration source commit.
+Prerelease: [FineNotes 1.5.1-beta.5 — Kolten Personal Test](https://github.com/koltensaccount/FineNotes/releases/tag/1.5.1-beta.5). The release notes identify the final integration source commit.
 
 1. Install/enable BRAT in Obsidian Community plugins.
 2. Run **BRAT: Add a beta plugin with frozen version based on a release tag**.
-3. Enter `koltensaccount/FineNotes` and `1.5.1-beta.4`.
-4. If an older beta is already tracked, change its frozen version to beta.4; if the BRAT UI cannot edit it, remove only its tracking entry and add it again. Keep FineNotes settings/files.
-5. Enable FineNotes, reload Obsidian, and verify `1.5.1-beta.4` on both Mac and iPad. If plugin files sync through the vault, let sync finish before reloading/checking the second device.
+3. Enter `koltensaccount/FineNotes` and `1.5.1-beta.5`.
+4. If an older beta is already tracked, change its frozen version to beta.5; if the BRAT UI cannot edit it, remove only its tracking entry and add it again. Keep FineNotes settings/files.
+5. Enable FineNotes, reload Obsidian, and verify `1.5.1-beta.5` on both Mac and iPad. If plugin files sync through the vault, let sync finish before reloading/checking the second device.
 
 Assets are `main.js`, `manifest.json`, `styles.css`. Only the packaged manifest gets the beta version. All source branches retain version 1.5.0 and contain no release-only version commit. Earlier betas are preserved. This uses the normal `finenotes` plugin ID: install one enabled FineNotes version. [BRAT guide](https://tfthacker.com/brat-quick-guide).
 
@@ -32,7 +32,7 @@ Assets are `main.js`, `manifest.json`, `styles.css`. Only the packaged manifest 
 Run on Mac first, then repeat on iPad in portrait, landscape and Split View. Physical iPad verification is pending.
 
 - Select the original red Pen preset, edit it to the existing blue, and check that its visible disc, selected identity, editor value and new ink are blue. Close/reopen the editor, reorder it, delete another preset, add colors and restart; selection must stay on that identity. Repeat first/middle/last/default/custom edits. Delete the selected preset and check next/previous fallback; delete all and check black fallback. Restore true defaults. Repeat for independent Highlighter colors.
-- Add more than five colors. Swipe the strip without selection changes; keep + reachable and normal touch targets at narrow widths. Use hold/right-click Edit/Remove and deliberate Reorder. Widths still normalize/deduplicate/sort numerically with retained selection.
+- Add more than five colors. Swipe the strip without selection changes; keep + reachable and normal touch targets at narrow widths. Use hold/right-click Edit/Remove and deliberate Reorder. Width slots preserve user order and identity; duplicates remain independent. Tap a selected color or width again to edit it.
 - Draw blue Dashed/Dotted Pen strokes with long curves, different widths and pressure. Compare wet/final/reopened ink, thumbnails, selection operations, Undo/Redo, partial erasure and PDF-backed export. Highlighter/Shape-tool ink remain Solid. Inspect pattern phase and newly erased ends visually.
 - On paper, two-finger tap-tap must undo exactly one step; three-finger tap-tap must redo exactly one. Repeat. One/four fingers, pan/pinch, excessive movement, slow/long taps and canceled pointers must do nothing. Try inside the color strip, picker and toolbar/menu controls: no history action. Pencil writing/hold gestures and a resting palm must remain unaffected. Reopen/switch notes and repeat.
 - Copy a screenshot in another app. Finger-hold or right-click paper, Paste, and check placement, immediate selection, resize/crop and attachment storage. Repeat keyboard Paste and PNG/JPEG/WebP when exposed. Check internal selection Paste and one insertion per Paste. Deny clipboard access and try the native Paste field; switch/close during pending reads and verify no late insertion in another note.
@@ -43,7 +43,7 @@ Run on Mac first, then repeat on iPad in portrait, landscape and Split View. Phy
 
 ## State and limits
 
-Presets use version-3 `data.json` records `{id,color}` and per-tool selected IDs; version-1 strings/color selections migrate safely. No separate stale display color is stored. The selected preset follows edits/reorder, and duplicate colors retain distinct identities.
+Presets use version-4 `data.json` records `{id,color}` and per-tool selected IDs; version-1 strings/color selections migrate safely. No separate stale display color is stored. The selected preset follows edits/reorder, and duplicate colors retain distinct identities.
 
 Companion identity is the optional owned `finenotes-companion-id` notebook frontmatter key (64 random bits/16 hex digits), also embedded in PDF Subject and its default filename suffix. Registry paths, enablement, filename mode, dirty fingerprint, errors and replacement journal live in `data.json` under `companionPdfs`. Rename events follow moves; recovery searches filenames only when the remembered target is unavailable and verifies embedded ownership. A confirmed live deletion is recreated on close; an ambiguous offline rename that removed its suffix requires choosing the moved target or explicitly updating the recorded path. Full bytes are generated/validated before journaled staging/backup promotion; failure preserves the last good copy.
 
@@ -60,3 +60,9 @@ Fresh or explicitly restored Highlighter palettes use yellow `#f2d45c`, green `#
 Seven real Chrome screenshots were inspected using the actual integrated Toolbar, SVG components and stylesheet in a local Obsidian host adapter: chooser, Ball, Brush, Highlighter, 360 px narrow viewport, 820 px portrait-sized viewport and 1024 px landscape-sized viewport. These are browser component previews, not screenshots of the physical iPad or Obsidian app. Other host icons are placeholders. Captures remain local. All 20 Highlighter color/paper combinations matched actual renderer pixels against the preview blend calculation (white, cream, yellow and dark paper).
 
 Physical follow-up: on Mac and iPad, switch all four writing types, move the thickness slider, save/replace/remove widths, verify independent Pen/Highlighter choices after restart and test Restore deliberately. Check the color strip and reachable +, preset scrolling, keyboard focus and touch controls in portrait, landscape and narrow Split View. Compare solid/dashed/dotted ink and Highlighter on light/dark paper; repeat clipboard, gesture and companion-PDF checks above. Physical iPad testing remains pending.
+
+## Beta.5 physical-use fixes
+
+Tap unselected colors/widths to select, then tap the selected slot again to edit (no double-tap timing). Width IDs preserve order/duplicates; more than three widths scroll horizontally beside reachable +. Migration preserves stored order. Subtle theme-adaptive swatch boundaries remain separate from selection rings; actual ink colors never invert and stroke previews use page-colored surfaces.
+
+Paste press UI dismisses on outside pointerdown without consuming the underlying action. Pencil lasso never starts Paste hold, touch callbacks preserve Pencil circle holds, and Circle-to-Lasso takes priority over shape hold. See [focused conflict audit](ipad-input-conflict-audit.md): 0 BLOCKER, 7 HIGH, 1 MEDIUM, 0 LOW; all identified findings fixed. Existing personal features retained. Physical iPad success is not yet confirmed.

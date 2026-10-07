@@ -9,6 +9,8 @@ import {
   selectColor,
   selectPreset,
   widthsFor,
+  widthSlotsFor,
+  selectWidthSlot,
   selectedWidthFor,
   selectWidth,
   restoreWidths,
@@ -394,7 +396,6 @@ const EDGE_INSET = 8;
 const BAR_GAP = 8;
 
 /** How many stroke widths tier 2 shows before the "more" chevron. */
-const QUICK_WIDTHS = 3;
 
 /** The pill changing width and place for a new tool: GoodNotes' 0.3 s `ease`. */
 const PILL_MORPH_MS = 300;
@@ -457,6 +458,7 @@ export class Toolbar {
   private presetDispose: (() => void) | null = null;
   private presetDragging = false;
   private paletteTool: WritingTool | null = null;
+  private widthInputDisposers: Array<() => void> = [];
   private optionDisposers: Array<() => void> = [];
   private colorStrip: HTMLElement | null = null;
   private colorScroll = { pen: 0, highlighter: 0 };
@@ -744,6 +746,8 @@ export class Toolbar {
     this.colorStrip = null;
     for (const dispose of this.optionDisposers) dispose();
     this.optionDisposers = [];
+    for (const dispose of this.widthInputDisposers) dispose();
+    this.widthInputDisposers = [];
     this.optionsEl.toggleClass(
       "is-writing",
       this.state.tool === "pen" || this.state.tool === "highlighter",
@@ -818,7 +822,15 @@ export class Toolbar {
 
     this.quickWidthEl = this.optionsEl.createDiv({ cls: "goodobsidian-quick-widths" });
     this.refreshQuickWidths();
-    this.chevron("More widths", (button) => this.toggleWidthList(button));
+    const widthsMore = this.chevron(
+      this.options.writingPresets ? "Add width" : "More widths",
+      (button) => this.toggleWidthList(button),
+    );
+    widthsMore.addClass("goodobsidian-width-more");
+    if (this.options.writingPresets) {
+      widthsMore.empty();
+      iconOrText(widthsMore, "plus", "+");
+    }
     if (this.state.tool === "pen") {
       const style = lineStyleOf(this.state.lineStyle);
       const button = this.optionsEl.createEl("button", {
@@ -834,6 +846,12 @@ export class Toolbar {
             text: value[0].toUpperCase() + value.slice(1),
             attr: { "aria-pressed": String(value === style) },
           });
+          option.prepend(
+            createStrokePreview(
+              { ...this.previewOptions(), lineStyle: value, compact: true },
+              this.host.ownerDocument,
+            ),
+          );
           option.toggleClass("is-active", value === style);
           option.addEventListener("click", () => {
             this.state.lineStyle = value;
@@ -880,12 +898,12 @@ export class Toolbar {
       this.quickColors().map((color) => ({ id: color, color }))) {
       const swatch = this.swatchButton(strip, color);
       swatch.addClass("clickable-icon");
-      swatch.setAttribute("title", `${color} — hold or right-click to edit`);
+      swatch.setAttribute("title", `${color} — tap selected color to edit`);
       this.optionDisposers.push(
         bindColorStripInput(
           swatch,
           strip,
-          () => (this.options.writingPresets ? this.setPenPreset(id) : this.setPenColor(color)),
+          () => this.activateColorPreset(swatch, id, color),
           () => this.colorContext(swatch, id),
         ),
       );
@@ -899,6 +917,14 @@ export class Toolbar {
     });
     iconOrText(more, "plus", "+");
     more.addEventListener("click", () => this.presetPopover(more, "add"));
+  }
+
+  private activateColorPreset(anchor: HTMLElement, id: string, color: string): void {
+    const presets = this.options.writingPresets;
+    if (presets ? presets.selectedIds[this.writingTool] === id : this.state.color === color)
+      this.presetPopover(anchor, { id });
+    else if (presets) this.setPenPreset(id);
+    else this.setPenColor(color);
   }
 
   private colorContext(anchor: HTMLElement, id: string): void {
@@ -1068,10 +1094,7 @@ export class Toolbar {
     // The colour only: the `background` shorthand would reset the stylesheet's
     // `background-clip`, which keeps the disc smaller than its target.
     swatch.setCssStyles({
-      backgroundColor:
-        this.state.tool === "highlighter"
-          ? highlighterSwatch(color, this.options.highlighterAlpha, this.options.previewPaper?.())
-          : color,
+      backgroundColor: color,
     });
     // The chosen swatch wears a ▾ in whichever of dark or white reads on it.
     swatch.setCssProps({
@@ -1720,13 +1743,7 @@ export class Toolbar {
 
   /** Three widths around the active one, per the reference screenshot. */
   private quickWidths(): number[] {
-    const quick = this.widths.slice(0, QUICK_WIDTHS);
-    // The live width takes the last slot, a preset or one set on the slider.
-    const size = this.state.size;
-    if (quick.length > 0 && !quick.includes(size) && Number.isFinite(size) && size > 0) {
-      quick[quick.length - 1] = size;
-    }
-    return quick.sort((a, b) => a - b);
+    return [...this.widths];
   }
 
   /** Black, red and blue are the uncluttered default; preserve a live custom ink. */
@@ -1767,13 +1784,25 @@ export class Toolbar {
   }
   private refreshQuickWidths(): void {
     if (!this.quickWidthEl) return;
+    for (const dispose of this.widthInputDisposers) dispose();
+    this.widthInputDisposers = [];
+    const scroll = this.quickWidthEl.scrollLeft;
     this.quickWidthEl.empty();
     this.widthButtons.clear();
-    for (const width of this.quickWidths()) {
+    const presets = this.options.writingPresets;
+    const slots = presets
+      ? widthSlotsFor(presets, this.writingTool)
+      : this.quickWidths().map((width, i) => ({ id: String(i), width }));
+    this.quickWidthEl.setAttribute("aria-label", "Writing widths");
+    for (const { id, width } of slots) {
       const label = previewThicknessLabel(this.previewOptions().type, width);
       const button = this.quickWidthEl.createEl("button", {
         cls: "goodobsidian-width clickable-icon",
-        attr: { "aria-label": `${label} thickness`, title: label },
+        attr: {
+          "aria-label": `${label} thickness`,
+          title: `${label} — tap selected width to edit`,
+          "data-width-id": id,
+        },
       });
       button.append(
         createStrokePreview(
@@ -1781,16 +1810,43 @@ export class Toolbar {
           this.host.ownerDocument,
         ),
       );
-      button.addEventListener("click", () => {
-        this.setWidth(width);
-        this.refreshQuickWidths();
-        this.syncActive();
-      });
+      const active = presets
+        ? presets.selectedWidthIds[this.writingTool] === id
+        : this.state.size === width;
+      button.toggleClass("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+      this.widthInputDisposers.push(
+        bindColorStripInput(
+          button,
+          this.quickWidthEl,
+          () => {
+            const selected = presets
+              ? presets.selectedWidthIds[this.writingTool] === id
+              : this.state.size === width;
+            if (selected) this.toggleWidthList(button, id);
+            else {
+              if (presets) selectWidthSlot(presets, this.writingTool, id);
+              this.setWidth(width);
+              this.refreshQuickWidths();
+              this.syncActive();
+            }
+          },
+          () => {
+            if (presets) {
+              selectWidthSlot(presets, this.writingTool, id);
+              this.setWidth(width);
+            }
+            this.toggleWidthList(button, id);
+          },
+        ),
+      );
       this.widthButtons.set(width, button);
     }
+    this.quickWidthEl.scrollLeft = scroll;
   }
-  private toggleWidthList(anchor: HTMLElement): void {
-    if (this.popoverKind === "widths") {
+
+  private toggleWidthList(anchor: HTMLElement, editingId?: string): void {
+    if (this.popoverKind === "widths" && editingId === undefined) {
       this.closePopover();
       return;
     }
@@ -1806,6 +1862,18 @@ export class Toolbar {
     this.widthEditorRefresh = renderThicknessEditor(body, {
       current: () => this.previewOptions(),
       presets: () => this.widths,
+      editing: () => editingId,
+      slotIds: () => (preferences ? widthSlotsFor(preferences, tool).map((slot) => slot.id) : []),
+      selectedSlot: () => preferences?.selectedWidthIds[tool] ?? null,
+      edit: (id) => {
+        editingId = id;
+      },
+      selectSlot: (id) => {
+        if (!preferences) return;
+        selectWidthSlot(preferences, tool, id);
+        this.setWidth(selectedWidthFor(preferences, tool));
+        update();
+      },
       stops: widthStops(SIZES, tool !== "highlighter"),
       select: (width) => {
         this.setWidth(width);
@@ -1818,17 +1886,21 @@ export class Toolbar {
       manage: preferences
         ? {
             save: (width, replacing) => {
-              saveWidth(preferences, width, replacing, tool);
+              saveWidth(preferences, width, replacing ?? editingId, tool);
+              if (typeof (replacing ?? editingId) === "string")
+                selectWidthSlot(preferences, tool, (replacing ?? editingId) as string);
               this.setWidth(selectedWidthFor(preferences, tool));
               update();
             },
             remove: (width) => {
               removeWidth(preferences, width, tool);
+              if (width === editingId) editingId = undefined;
               this.options.onPresetsChange?.(preferences);
               update();
             },
             restore: () => {
               restoreWidths(preferences, tool);
+              editingId = undefined;
               this.setWidth(selectedWidthFor(preferences, tool));
               update();
             },
@@ -2308,7 +2380,7 @@ export class Toolbar {
         swatch.setAttribute("aria-pressed", String(active));
       }
     } else markChosen(this.colorSwatches, state.color, true);
-    markChosen(this.widthButtons, state.size);
+    if (!this.options.writingPresets) markChosen(this.widthButtons, state.size);
     markChosen(this.eraserSizeButtons, eraserSizeFor(state));
     markChosen(this.penTypeButtons, this.activePenType().id);
     markChosen(this.shapeButtons, shapeModeFor(state), true);
@@ -2333,6 +2405,8 @@ export class Toolbar {
   destroy(): void {
     for (const dispose of this.optionDisposers) dispose();
     this.optionDisposers = [];
+    for (const dispose of this.widthInputDisposers) dispose();
+    this.widthInputDisposers = [];
     this.closePopover();
     this.stopPillMorph();
     const disposers = this.disposers.splice(0);

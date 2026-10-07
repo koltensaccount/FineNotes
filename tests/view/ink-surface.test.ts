@@ -1233,3 +1233,42 @@ describe("undoPalm", () => {
     expect(none.calls).toEqual([]);
   });
 });
+
+describe("Pencil Circle-to-Lasso hold ownership", () => {
+  it("loop/lift/hold withdraws the loop and selects enclosed ink without Paste", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", { setTimeout, clearTimeout });
+    const inside = line("s1", 30, 60, 50);
+    const w = ink(documentOf(page("p1", [inside])));
+    const loop: Stroke = {
+      ...line("s2", 10, 90, 10),
+      pts: [10, 10, 0.5, 90, 10, 0.5, 90, 90, 0.5, 10, 90, 0.5, 10, 10, 0.5],
+    };
+    const selected = vi.fn();
+    const paste = vi.fn();
+    Object.assign(w.surface, {
+      toolState: { tool: "pen", penGestures: { circleLasso: true } },
+      atFitZoom: (v: number) => v,
+
+      circlePress: null,
+      circleLoop: null,
+      pressTimer: 0,
+      holdTimer: 0,
+      endWetStroke: vi.fn(),
+      renderDry: vi.fn(),
+      select: selected,
+      liveSelection: () => null,
+      openPressMenu: paste,
+    });
+    Object.defineProperty(w.surface, "unitScale", { value: 1 });
+    const command = run(w.surface, "commitStroke", boxOf(w.doc, 0), w.doc.pages[0], loop);
+    run(w.surface, "noteCircleLoop", w.doc.pages[0], loop, command);
+    expect(w.surface.circleLoop).not.toBeNull();
+    run(w.surface, "watchCircleHold", boxOf(w.doc, 0), { x: 10, y: 10 });
+    vi.advanceTimersByTime(1000);
+    expect(selected).toHaveBeenCalledWith("p1", { strokes: [inside], images: [], textBoxes: [] });
+    expect(ids(w.doc.pages[0])).toEqual(["s1"]);
+    expect(paste).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+});

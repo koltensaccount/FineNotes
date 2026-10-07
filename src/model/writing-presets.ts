@@ -9,7 +9,10 @@ export interface ColorPreset {
   color: string;
 }
 export interface WritingPresets {
-  version: 3;
+  version: 4;
+  nextWidthId: number;
+  widthIds: Record<WritingTool, string[]>;
+  selectedWidthIds: Record<WritingTool, string | null>;
   nextColorId: number;
   widths: number[];
   selectedWidth: number;
@@ -45,8 +48,8 @@ const STOPS = widthStops(SIZES, true);
 export function normalizeWidth(width: number): number {
   return STOPS[nearestStop(STOPS, Number.isFinite(width) ? width : SIZES[1])];
 }
-export function sortedWidths(widths: readonly number[]): number[] {
-  return [...new Set(widths.map(normalizeWidth))].sort((a, b) => a - b);
+export function orderedWidths(widths: readonly number[]): number[] {
+  return widths.filter(Number.isFinite);
 }
 export function widthsFor(presets: WritingPresets, tool: WritingTool): number[] {
   return tool === "highlighter" ? presets.highlighterWidths : presets.widths;
@@ -54,39 +57,74 @@ export function widthsFor(presets: WritingPresets, tool: WritingTool): number[] 
 export function selectedWidthFor(presets: WritingPresets, tool: WritingTool): number {
   return tool === "highlighter" ? presets.selectedHighlighterWidth : presets.selectedWidth;
 }
+/** Numeric lists remain compatible with settings; paired IDs own each user slot. */
+export function widthSlotsFor(
+  presets: WritingPresets,
+  tool: WritingTool,
+): { id: string; width: number }[] {
+  const values = widthsFor(presets, tool);
+  const ids = presets.widthIds[tool];
+  while (ids.length < values.length) ids.push(`width-${presets.nextWidthId++}`);
+  ids.length = values.length;
+  return values.map((width, i) => ({ id: ids[i], width }));
+}
 export function selectWidth(presets: WritingPresets, tool: WritingTool, width: number): void {
+  const slots = widthSlotsFor(presets, tool);
+  const selected =
+    slots.find((slot) => slot.id === presets.selectedWidthIds[tool] && slot.width === width) ??
+    slots.find((slot) => slot.width === width);
+  presets.selectedWidthIds[tool] = selected?.id ?? null;
   if (tool === "highlighter") presets.selectedHighlighterWidth = width;
   else presets.selectedWidth = width;
+}
+export function selectWidthSlot(presets: WritingPresets, tool: WritingTool, id: string): void {
+  const slot = widthSlotsFor(presets, tool).find((slot) => slot.id === id);
+  if (!slot) return;
+  selectWidth(presets, tool, slot.width);
+  presets.selectedWidthIds[tool] = id;
 }
 export function saveWidth(
   presets: WritingPresets,
   width: number,
-  replacing?: number,
+  replacing?: number | string,
   tool: WritingTool = "pen",
 ): void {
-  const normalized = normalizeWidth(width),
-    values = sortedWidths([...widthsFor(presets, tool).filter((v) => v !== replacing), normalized]);
-  if (tool === "highlighter") presets.highlighterWidths = values;
-  else presets.widths = values;
-  if (selectedWidthFor(presets, tool) === replacing) selectWidth(presets, tool, normalized);
+  const slots = widthSlotsFor(presets, tool);
+  const index = slots.findIndex((slot) =>
+    typeof replacing === "string" ? slot.id === replacing : slot.width === replacing,
+  );
+  if (replacing !== undefined && index < 0) return;
+  const normalized = normalizeWidth(width);
+  const values = widthsFor(presets, tool);
+  if (index >= 0) {
+    values[index] = normalized;
+    if (presets.selectedWidthIds[tool] === slots[index].id) {
+      selectWidthSlot(presets, tool, slots[index].id);
+    }
+  } else {
+    values.push(normalized);
+    presets.widthIds[tool].push(`width-${presets.nextWidthId++}`);
+  }
 }
 export function removeWidth(
   presets: WritingPresets,
-  width: number,
+  width: number | string,
   tool: WritingTool = "pen",
 ): void {
-  const values = widthsFor(presets, tool).filter((v) => v !== width);
-  if (tool === "highlighter") presets.highlighterWidths = values;
-  else presets.widths = values;
+  const slots = widthSlotsFor(presets, tool);
+  const index = slots.findIndex((slot) =>
+    typeof width === "string" ? slot.id === width : slot.width === width,
+  );
+  if (index < 0) return;
+  widthsFor(presets, tool).splice(index, 1);
+  presets.widthIds[tool].splice(index, 1);
+  if (presets.selectedWidthIds[tool] === slots[index].id) presets.selectedWidthIds[tool] = null;
 }
 export function restoreWidths(presets: WritingPresets, tool: WritingTool): void {
-  if (tool === "highlighter") {
-    presets.highlighterWidths = [...HIGHLIGHTER_SIZES];
-    presets.selectedHighlighterWidth = HIGHLIGHTER_SIZES[1];
-  } else {
-    presets.widths = [...SIZES];
-    presets.selectedWidth = SIZES[1];
-  }
+  if (tool === "highlighter") presets.highlighterWidths = [...HIGHLIGHTER_SIZES];
+  else presets.widths = [...SIZES];
+  presets.widthIds[tool] = [];
+  selectWidth(presets, tool, tool === "highlighter" ? HIGHLIGHTER_SIZES[1] : SIZES[1]);
 }
 export function colorList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -168,24 +206,30 @@ export function migrateWritingPresets(
     ...(Array.isArray(settings.customColors) ? settings.customColors : []),
   ]);
   const result: WritingPresets = {
-    version: 3,
+    version: 4,
+    nextWidthId:
+      Number.isSafeInteger(saved.nextWidthId) && (saved.nextWidthId as number) > 0
+        ? (saved.nextWidthId as number)
+        : 1,
+    widthIds: { pen: [], highlighter: [] },
+    selectedWidthIds: { pen: null, highlighter: null },
     nextColorId:
       Number.isSafeInteger(saved.nextColorId) && (saved.nextColorId as number) > 0
         ? (saved.nextColorId as number)
         : 1,
     widths: Array.isArray(saved.widths)
-      ? sortedWidths(saved.widths.filter((v): v is number => typeof v === "number"))
+      ? orderedWidths(saved.widths.filter((v): v is number => typeof v === "number"))
       : [...SIZES],
     selectedWidth:
       typeof saved.selectedWidth === "number" && Number.isFinite(saved.selectedWidth)
         ? saved.selectedWidth
         : settings.defaultSize,
     highlighterWidths: Array.isArray(saved.highlighterWidths)
-      ? sortedWidths(saved.highlighterWidths.filter((v): v is number => typeof v === "number"))
+      ? orderedWidths(saved.highlighterWidths.filter((v): v is number => typeof v === "number"))
       : initializeDefaults
         ? [...HIGHLIGHTER_SIZES]
         : Array.isArray(saved.widths)
-          ? sortedWidths(saved.widths.filter((v): v is number => typeof v === "number"))
+          ? orderedWidths(saved.widths.filter((v): v is number => typeof v === "number"))
           : [...SIZES],
     selectedHighlighterWidth:
       typeof saved.selectedHighlighterWidth === "number" &&
@@ -223,7 +267,7 @@ export function migrateWritingPresets(
       used.add(id);
       result.palettes[tool].push({ id, color });
     }
-    if (saved.version === 2 || saved.version === 3) {
+    if (saved.version === 2 || saved.version === 3 || saved.version === 4) {
       result.selectedIds[tool] =
         result.palettes[tool].find((preset) => preset.id === ids[tool])?.id ??
         result.palettes[tool][0]?.id ??
@@ -244,6 +288,26 @@ export function migrateWritingPresets(
         result.palettes[tool][0]?.id ??
         null;
     }
+  }
+  const usedWidths = new Set<string>();
+  const storedIds = record(saved.widthIds),
+    selectedIds = record(saved.selectedWidthIds);
+  for (const tool of ["pen", "highlighter"] as const) {
+    const ids = Array.isArray(storedIds[tool]) ? storedIds[tool] : [];
+    result.widthIds[tool] = widthsFor(result, tool).map((_, i) => {
+      let id =
+        typeof ids[i] === "string" && ids[i] && !usedWidths.has(ids[i])
+          ? ids[i]
+          : `width-${result.nextWidthId++}`;
+      const number = /^width-(\d+)$/.exec(id);
+      if (number) result.nextWidthId = Math.max(result.nextWidthId, Number(number[1]) + 1);
+      while (usedWidths.has(id)) id = `width-${result.nextWidthId++}`;
+      usedWidths.add(id);
+      return id;
+    });
+    result.selectedWidthIds[tool] =
+      typeof selectedIds[tool] === "string" ? selectedIds[tool] : null;
+    selectWidth(result, tool, selectedWidthFor(result, tool));
   }
   return result;
 }

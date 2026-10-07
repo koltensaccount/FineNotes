@@ -49,7 +49,7 @@ describe("tool-specific fresh/restored writing defaults", () => {
       selectedIds: { pen: "pen-1", highlighter: "highlighter-2" },
     };
     const p = migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: old });
-    expect(p.widths).toEqual([2.5, 3, 5]);
+    expect(p.widths).toEqual([5, 2.5, 3]);
     expect(p.highlighterWidths).toEqual(p.widths);
     expect(p.highlighterWidths).not.toBe(p.widths);
     expect(p.selectedWidth).toBe(9.75);
@@ -57,7 +57,7 @@ describe("tool-specific fresh/restored writing defaults", () => {
     expect(p.selectedIds).toEqual(old.selectedIds);
     expect(p.palettes).toEqual(old.palettes);
   });
-  it("v1 empty/custom widths survive tool separation and sorted normalization", () => {
+  it("v1 empty/custom widths survive tool separation and user order", () => {
     const p = migrateWritingPresets({
       ...DEFAULT_SETTINGS,
       writingPresets: {
@@ -82,11 +82,11 @@ describe("tool-specific fresh/restored writing defaults", () => {
     const loaded = migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: p }, true);
     expect(loaded).toEqual(p);
   });
-  it("each tool edits/sorts/deduplicates independently and selected widths follow replacement", () => {
+  it("each tool edits slots independently and selected widths follow replacement", () => {
     const p = migrateWritingPresets(DEFAULT_SETTINGS, true);
     const pen = structuredClone(p.widths);
     saveWidth(p, 5.01, 8, "highlighter");
-    expect(widthsFor(p, "highlighter")).toEqual([5, 12]);
+    expect(widthsFor(p, "highlighter")).toEqual([5, 5, 12]);
     expect(selectedWidthFor(p, "highlighter")).toBe(5);
     expect(p.widths).toEqual(pen);
     expect(p.selectedWidth).toBe(3);

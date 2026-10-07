@@ -133,7 +133,7 @@ describe("reusable writing previews", () => {
     ) as unknown as El;
     expect(svg.attrs["data-preview-style"]).toBe("solid");
     expect(svg.attrs["data-highlighter-alpha"]).toBe("0.4");
-    expect(svg.children[0].attrs.stroke).toBe(highlighterSwatch(HIGHLIGHTER_COLORS[0], 0.4));
+    expect(svg.children.at(-1)!.attrs.stroke).toBe(highlighterSwatch(HIGHLIGHTER_COLORS[0], 0.4));
     expect(svg.children[0].attrs["stroke-dasharray"]).toBeUndefined();
   });
   it.each(["#ffffff", "#fbf8ed", "#fdf6d8", "#1c1d21"])(
@@ -255,4 +255,55 @@ describe("writing popover bounds", () => {
     expect(fit.top - fit.maxHeight).toBeGreaterThanOrEqual(0);
     expect(fit.maxWidth).toBe(344);
   });
+});
+
+describe("actual ink contrast surfaces", () => {
+  it.each(["#000000", "#ffffff", "#111111", "#fefefe", "#ff0000", "#0000ff", "#ffff00"])(
+    "keeps %s unchanged on light/dark page surfaces across theme changes",
+    (color) => {
+      for (const paper of ["#ffffff", "#1c1d21"]) {
+        const options = { type: "ball" as const, width: 3, color, paper };
+        const svg = createStrokePreview(options, doc) as unknown as El;
+        expect(svg.children[0].attrs.fill).toBe(paper);
+        expect(svg.children[0].attrs.class).toBe("goodobsidian-preview-paper");
+        expect(svg.children[1].attrs.stroke).toBe(color);
+        expect(options.color).toBe(color);
+      }
+    },
+  );
+});
+
+it("selected width tap edits the exact stable slot; unselected tap selects and Save targets that slot", () => {
+  const body = new El();
+  let selected = "second",
+    editing: string | undefined;
+  const edit = vi.fn((id: string) => {
+    editing = id;
+  });
+  const selectSlot = vi.fn((id: string) => {
+    selected = id;
+  });
+  const save = vi.fn();
+  renderThicknessEditor(body as unknown as HTMLElement, {
+    current: () => ({ type: "ball", width: 3 }),
+    presets: () => [2, 3, 5, 8, 12, 3],
+    stops: [2, 3, 5],
+    slotIds: () => ["first", "second", "third", "fourth", "fifth", "sixth"],
+    selectedSlot: () => selected,
+    editing: () => editing,
+    edit,
+    selectSlot,
+    select: vi.fn(),
+    reset: vi.fn(),
+    manage: { save, remove: vi.fn(), restore: vi.fn() },
+  });
+  body.find("0.41 mm thickness").click();
+  expect(selectSlot).toHaveBeenCalledWith("first");
+  body.find("0.41 mm thickness").click();
+  expect(edit).toHaveBeenCalledWith("first");
+  body.find("Save current width").click();
+  expect(save).toHaveBeenCalledWith(3, "first");
+  expect(body.all().filter((el) => el.classes.has("goodobsidian-thickness-choice"))).toHaveLength(
+    6,
+  );
 });

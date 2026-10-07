@@ -133,6 +133,15 @@ export function createStrokePreview(options: StrokePreviewOptions, doc: Document
       String(options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA),
     );
   }
+  if (options.paper && color !== "currentColor") {
+    const paper = doc.createElementNS(NS, "rect");
+    paper.setAttribute("class", "goodobsidian-preview-paper");
+    paper.setAttribute("width", String(g.w));
+    paper.setAttribute("height", String(g.h));
+    paper.setAttribute("rx", "4");
+    paper.setAttribute("fill", options.paper);
+    svg.append(paper);
+  }
   svg.append(path);
   return svg;
 }

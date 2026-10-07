@@ -1,5 +1,5 @@
 import { lineStyleOf } from "../ink/line-style";
-import { bindContextInput } from "./context-input";
+import { bindContextInput, bindPressDismissal } from "./context-input";
 import {
   type ClipboardTarget,
   type ClipboardRead,
@@ -1380,13 +1380,23 @@ export class InkSurface {
     }
 
     this.disposers.push(
+      bindPressDismissal(
+        this.selectionUiEl,
+        () => this.pressMenu !== null,
+        () => this.dismissPressMenu(),
+      ),
+    );
+    this.disposers.push(
       bindContextInput(this.surfaceEl, {
         blocked: () =>
           this.handHeld ||
           this.scroller.isAnimating ||
           !!this.builder ||
           !!this.lasso ||
-          !!this.cropping,
+          !!this.cropping ||
+          !!this.imageDrag ||
+          !!this.groupDrag ||
+          !!this.circlePress,
         remember: (x, y) => {
           this.lastPastePoint = this.targetAt(x, y) ?? this.lastPastePoint;
         },
@@ -1696,6 +1706,7 @@ export class InkSurface {
       // Zoomed in, a row is held to the page being read (`ensurePaperSize`),
       // so a glide to another page stopped at this one's edge. Move the hold
       // to the new page and land on its top-left corner, at the same zoom.
+      this.dismissPressMenu();
       this.pageIndex = clamped;
       this.ensurePaperSize();
       const range = rowPageScrollRange(this.pageLayout, clamped, this.scale, this.cssW);
@@ -1751,6 +1762,7 @@ export class InkSurface {
   }
 
   setTool(tool: ActiveTool): void {
+    this.dismissPressMenu();
     // The toolbar shares `toolState` and has already written the new tool
     // into it, so the one being replaced is read from `toolSeen`.
     if (tool === "text" && this.toolSeen !== "text") this.toolBeforeText = this.toolSeen;
@@ -2174,6 +2186,7 @@ export class InkSurface {
     this.indicatorEl.setText(total > 0 ? `${index + 1} of ${total}` : "0 of 0");
     this.indicatorEl.toggleClass("is-hidden", total === 0);
     if (index !== this.pageIndex) {
+      this.dismissPressMenu();
       this.pageIndex = index;
       this.callbacks.onPageChange?.(index, total);
       this.reportStatus();
@@ -3220,7 +3233,7 @@ export class InkSurface {
       const tap = this.fingerTap;
       if (tap && Math.hypot(x - tap.x, y - tap.y) > TAP_SLOP_PX) {
         this.fingerTap = null;
-        this.stopPress();
+        if (!this.circlePress) this.stopPress();
       }
       this.scroller.dragMove(x, y, t);
       this.requestFrame();
@@ -3228,7 +3241,7 @@ export class InkSurface {
     onPanEnd: (t) => {
       const tap = this.fingerTap;
       this.fingerTap = null;
-      this.stopPress();
+      if (!this.circlePress) this.stopPress();
       // Read before the release springs it back: past the end far enough,
       // letting go adds a page.
       // A zoomed-in row is held to its page: its edge is no place to add one.
@@ -3252,7 +3265,7 @@ export class InkSurface {
     // Only a landing pen voids a finger gesture.
     onPanCancel: () => {
       this.fingerTap = null;
-      this.stopPress();
+      if (!this.circlePress) this.stopPress();
       this.touchPanning = false;
       this.pullAdd.hide();
       this.pinch = null;
@@ -3262,7 +3275,7 @@ export class InkSurface {
     },
     onPinchStart: (centerX, centerY) => {
       this.fingerTap = null;
-      this.stopPress();
+      if (!this.circlePress) this.stopPress();
       if (this.imageDrag || this.groupDrag) return;
       this.zoomAnim = null;
       this.pinch = { raw: this.userZoom, centerX, centerY };
@@ -4581,6 +4594,7 @@ export class InkSurface {
     const reach = candidate.stroke.size / 2 + CIRCLE_HOLD_TOLERANCE_PX / this.unitScale;
     if (!strokeHitByPoint(candidate.stroke, local.x, local.y, reach)) return;
     this.circlePress = { box, at: { x: local.x, y: local.y }, t: now() };
+    this.stopHold(); // Circle-to-Lasso owns this hold before shape recognition.
     this.startPress(() => this.circleHeld(true));
   }
 
@@ -4674,7 +4688,7 @@ export class InkSurface {
       held: false,
     };
     // Held still, the press opens the Paste / Unlock bar instead.
-    this.startPress(() => this.lassoHeld());
+    // Pencil lasso input belongs to selection, not the finger Paste recognizer.
   }
 
   /** The pen moved: extend the loop (clamped to its page) and redraw it. */
@@ -4690,15 +4704,6 @@ export class InkSurface {
     const loop = this.lassoLoop(lasso);
     // Drawn rounded off, as GoodNotes draws it; taken on the loop as drawn.
     this.renderer?.renderLasso(lasso.box.index, lasso.mode === "rect" ? loop : smoothLoop(loop));
-  }
-
-  /** The lasso's pen stayed put long enough: open the tap-and-hold bar where it is. */
-  private lassoHeld(): void {
-    const lasso = this.lasso;
-    if (!lasso) return;
-    lasso.held = true;
-    this.renderer?.clearWet();
-    this.openPressMenu(lasso.box, lasso.origin);
   }
 
   private targetAt(clientX: number, clientY: number): ClipboardTarget | null {
@@ -4741,6 +4746,14 @@ export class InkSurface {
       const box = this.boxForPage(target.pageId);
       if (box) this.openPressMenu(box, p);
     }
+  }
+
+  private dismissPressMenu(): void {
+    if (!this.pressMenu) return;
+    this.pressMenu = null;
+    this.stopPress();
+    this.actionBar.closeMenu();
+    this.syncActionBar();
   }
 
   private startPress(open: () => void): void {
