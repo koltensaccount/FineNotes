@@ -72,6 +72,11 @@ class El {
   addEventListener(n: string, f: () => void) {
     this.handlers.set(n, f);
   }
+  cloneNode() {
+    const copy = new El(this.tag);
+    copy.attrs = {...this.attrs};
+    return copy;
+  }
   click() {
     this.handlers.get("click")?.();
   }
@@ -257,20 +262,28 @@ describe("writing popover bounds", () => {
   });
 });
 
-describe("actual ink contrast surfaces", () => {
-  it.each(["#000000", "#ffffff", "#111111", "#fefefe", "#ff0000", "#0000ff", "#ffff00"])(
-    "keeps %s unchanged on light/dark page surfaces across theme changes",
-    (color) => {
-      for (const paper of ["#ffffff", "#1c1d21"]) {
-        const options = { type: "ball" as const, width: 3, color, paper };
-        const svg = createStrokePreview(options, doc) as unknown as El;
-        expect(svg.children[0].attrs.fill).toBe(paper);
-        expect(svg.children[0].attrs.class).toBe("goodobsidian-preview-paper");
-        expect(svg.children[1].attrs.stroke).toBe(color);
-        expect(options.color).toBe(color);
-      }
-    },
-  );
+describe("shape-following preview contrast", () => {
+  it.each(["#000000", "#ffffff", "#111111", "#fefefe", "#ff0000", "#0000ff", "#ffff00"])("keeps %s unchanged without a backing rectangle", color => {
+    for (const background of ["rgb(255, 255, 255)", "rgb(28, 29, 33)"]) {
+      const localDoc = {...new El().ownerDocument, body: {}, defaultView: {getComputedStyle: () => ({backgroundColor: background})}} as unknown as Document;
+      const svg = createStrokePreview({type: "ball", width: 3, color, paper: "#ffffff"}, localDoc) as unknown as El;
+      expect(svg.children.some(el => el.tag === "rect")).toBe(false);
+      expect(svg.children.at(-1)!.attrs.stroke).toBe(color);
+    }
+  });
+  it.each(["solid", "dashed", "dotted"] as const)("low-contrast %s halo preserves geometry and dash intervals", lineStyle => {
+    const svg = createStrokePreview({type: "ball", width: 3, color: "#ffffff", lineStyle}, doc) as unknown as El;
+    expect(svg.children).toHaveLength(2);
+    const [halo, ink] = svg.children;
+    expect(halo.attrs.d).toBe(ink.attrs.d);
+    expect(halo.attrs["stroke-dasharray"]).toBe(ink.attrs["stroke-dasharray"]);
+    expect(Number(halo.attrs["stroke-width"])).toBeGreaterThan(Number(ink.attrs["stroke-width"]));
+    expect(ink.attrs.stroke).toBe("#ffffff");
+  });
+  it("high-contrast ink renders only its normal stroke", () => {
+    const svg = createStrokePreview({type: "ball", width: 3, color: "#000000"}, doc) as unknown as El;
+    expect(svg.children).toHaveLength(1);
+  });
 });
 
 it("selected width tap edits the exact stable slot; unselected tap selects and Save targets that slot", () => {

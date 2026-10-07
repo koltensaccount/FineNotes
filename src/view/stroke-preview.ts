@@ -90,6 +90,27 @@ export function strokePreviewGeometry(options: StrokePreviewOptions) {
     style: options.type === "highlighter" ? "solid" : (options.lineStyle ?? "solid"),
   };
 }
+/** Local UI contrast only; stored and rendered notebook colors are untouched. */
+function uiBackground(doc: Document): string {
+  const win = doc.defaultView;
+  let surface = doc.querySelector?.(".goodobsidian-popover, .goodobsidian-options") ?? doc.body;
+  let value = "";
+  while (surface && win) {
+    value = win.getComputedStyle(surface).backgroundColor;
+    if (value !== "transparent" && !/rgba\([^)]*,\s*0\s*\)/.test(value)) break;
+    surface = surface.parentElement;
+  }
+  const rgb = value.match(/rgba?\(\s*(\d+)[, ]+\s*(\d+)[, ]+\s*(\d+)/);
+  return rgb ? "#" + rgb.slice(1, 4).map(v => Number(v).toString(16).padStart(2, "0")).join("") : "#ffffff";
+}
+function luminance(color: string): number {
+  const hex = parseHexColor(color) ?? "#ffffff";
+  const channels = [1, 3, 5].map(i => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
 const NS = "http://www.w3.org/2000/svg";
 export function createStrokePreview(options: StrokePreviewOptions, doc: Document): SVGSVGElement {
   const g = strokePreviewGeometry(options),
@@ -104,6 +125,7 @@ export function createStrokePreview(options: StrokePreviewOptions, doc: Document
   svg.setAttribute("data-preview-tool", options.type);
   svg.setAttribute("data-preview-style", g.style);
   const color = options.color ?? "currentColor";
+  const background = uiBackground(doc);
   const path = doc.createElementNS(NS, "path");
   path.setAttribute("d", g.expressive && g.style === "solid" ? g.ribbon : g.path);
   path.setAttribute("fill", g.expressive && g.style === "solid" ? color : "none");
@@ -125,7 +147,7 @@ export function createStrokePreview(options: StrokePreviewOptions, doc: Document
         highlighterSwatch(
           options.color ?? HIGHLIGHTER_COLORS[0],
           options.highlighterAlpha,
-          options.paper,
+          background,
         ),
       );
     svg.setAttribute(
@@ -133,14 +155,21 @@ export function createStrokePreview(options: StrokePreviewOptions, doc: Document
       String(options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA),
     );
   }
-  if (options.paper && color !== "currentColor") {
-    const paper = doc.createElementNS(NS, "rect");
-    paper.setAttribute("class", "goodobsidian-preview-paper");
-    paper.setAttribute("width", String(g.w));
-    paper.setAttribute("height", String(g.h));
-    paper.setAttribute("rx", "4");
-    paper.setAttribute("fill", options.paper);
-    svg.append(paper);
+  const ink = options.type === "highlighter" ? highlighterSwatch(color, options.highlighterAlpha, background) : color;
+  if (parseHexColor(color)) {
+    const a = luminance(ink), b = luminance(background);
+    if ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 2) {
+      const halo = path.cloneNode(true) as SVGPathElement;
+      halo.setAttribute("class", "goodobsidian-stroke-halo");
+      halo.setAttribute("fill", "none");
+      halo.setAttribute("stroke", "var(--text-muted)");
+      halo.setAttribute("stroke-width", String(g.expressive && g.style === "solid" ? 1.5 : g.width + 1.5));
+      halo.setAttribute("stroke-linejoin", "round");
+      halo.setAttribute("opacity", "0.55");
+      halo.setAttribute("aria-hidden", "true");
+      // Clone retains the exact dash/dot intervals: the underlay never bridges gaps.
+      svg.append(halo);
+    }
   }
   svg.append(path);
   return svg;

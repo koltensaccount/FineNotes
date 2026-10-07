@@ -76,7 +76,6 @@ export function renderThicknessEditor(
     readout.setText(label);
     range.value = String(nearestStop(options.stops, current.width));
     range.setAttribute("aria-valuetext", `${label} thickness`);
-    preview.setCssStyles({ background: current.paper ?? "#ffffff" });
     preview.replaceChildren(createStrokePreview(current, body.ownerDocument));
     list.empty();
     for (const [index, width] of options.presets().entries()) {

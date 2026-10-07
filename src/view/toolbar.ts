@@ -810,7 +810,7 @@ export class Toolbar {
     const active = this.activePenType();
     const pen = this.optionsEl.createEl("button", { cls: "goodobsidian-pentype" });
     pen.append(
-      createStrokePreview({ ...this.previewOptions(), compact: true }, this.host.ownerDocument),
+      createStrokePreview({ ...this.previewOptions(), color: "currentColor", compact: true }, this.host.ownerDocument),
     );
     pen.setAttribute("aria-label", `${active.label} options`);
     pen.setAttribute("title", `${active.label} options`);
