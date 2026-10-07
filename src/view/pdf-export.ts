@@ -44,6 +44,8 @@ export interface PdfExportSources {
 }
 
 export interface PdfExportOptions {
+  /** Optional ownership metadata; manual exports omit it. */
+  subject?: string;
   title: string;
   /** Called before each page renders: `done` pages of `total` are finished. */
   onProgress?: (done: number, total: number) => void;
@@ -60,7 +62,9 @@ export async function exportPagesToPdf(
   const out: PdfImagePage[] = [];
   const hasPdf = pages.some((page) => page.backdrop.kind === "pdf");
   if (hasPdf && !sources.readPdf) throw new Error("PDF source reader unavailable");
-  const composer = hasPdf ? await PdfComposer.create(options.title, sources.readPdf!) : null;
+  const composer = hasPdf
+    ? await PdfComposer.create(options.title, sources.readPdf!, options.subject)
+    : null;
   for (const [i, page] of pages.entries()) {
     if (options.cancelled?.()) throw new DOMException("Export cancelled", "AbortError");
     options.onProgress?.(i, pages.length);
@@ -77,7 +81,11 @@ export async function exportPagesToPdf(
   if (options.cancelled?.()) throw new DOMException("Export cancelled", "AbortError");
   options.onProgress?.(pages.length, pages.length);
   if (composer) return composer.save();
-  return buildImagePdf(out, { title: options.title, created: new Date() });
+  return buildImagePdf(out, {
+    title: options.title,
+    created: new Date(),
+    subject: options.subject,
+  });
 }
 
 /** One page as a JPEG, sized for print, with its size in points. */

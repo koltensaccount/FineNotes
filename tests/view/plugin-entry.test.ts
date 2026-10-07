@@ -378,6 +378,7 @@ describe("registration", () => {
         "create-notebook-from-pdf",
         "create-notebook-with-last-settings",
         "export-pdf",
+        "update-companion-pdf",
         "fit-reset-view",
         "import-pdf",
         "import-vault-pdf",

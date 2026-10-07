@@ -135,3 +135,25 @@ describe("existing PDF export integration", () => {
     ).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+describe("companion uses the same high-quality PDF exporter", () => {
+  it.each([false, true])(
+    "embeds optional ownership for PDF-backed=%s without altering manual export",
+    async (backed) => {
+      const pages = backed ? [pdfPage()] : [blankPage("p1")];
+      const input = { ...sources, readPdf: source };
+      const subject = "FineNotes companion a3f9211234567890";
+      const companion = await PDFDocument.load(
+        await exportPagesToPdf(pages, input, { title: "Biology", subject }),
+      );
+      expect(companion.getSubject()).toBe(subject);
+      expect(companion.getPageCount()).toBe(1);
+      const manual = await PDFDocument.load(
+        await exportPagesToPdf(pages, input, { title: "Biology" }),
+      );
+      expect(manual.getSubject()).toBeUndefined();
+      if (backed)
+        expect(companion.getPages()[0].node.Resources()?.keys().length).toBeGreaterThan(0);
+    },
+  );
+});
