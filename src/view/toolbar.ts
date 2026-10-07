@@ -1802,6 +1802,7 @@ export class Toolbar {
       this.refreshQuickWidths();
       this.syncActive();
     };
+    this.popover?.addClass("has-thickness-editor");
     this.widthEditorRefresh = renderThicknessEditor(body, {
       current: () => this.previewOptions(),
       presets: () => this.widths,

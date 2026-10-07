@@ -5681,3 +5681,10 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   color: var(--text-on-accent);
   opacity: 0.82;
 }
+.goodobsidian-popover.has-thickness-editor {
+  width: 360px;
+}
+.goodobsidian-popover .goodobsidian-width-popover {
+  width: 100%;
+  min-width: 0;
+}
