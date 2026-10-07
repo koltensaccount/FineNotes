@@ -192,3 +192,11 @@ Deleting the selected preset picks the next remaining row at that position, othe
 Version-1 and pre-preset settings migrate in user order. A previously selected color outside a nonempty legacy palette is retained as an ordinary preset. Version-2 reload preserves IDs, including duplicate color values. The upgrade is persisted once; no notebook format changes are involved.
 
 Regression coverage includes actual strip rendering after selected default red is edited to existing blue, the live drawing callback, reopening the same editor after reorder, first/middle/last edits, delete fallback, added colors, independent tools, restore and both legacy migrations. Physical iPad verification remains pending.
+
+## Tool-specific default polish (version 3)
+
+New profiles (explicitly identified during plugin settings initialization) receive five Highlighter colors: yellow `#f2d45c`, green `#8bcb84`, cyan `#78c3df`, pink `#e99cb5`, peach `#f2af7e`. Highlighter nominal widths are 5/8/12 page px; its unchanged 4× nib gives actual thickness about 4.1/6.6/9.8 mm, with 8 selected. Pen defaults remain unchanged. Restore colors/widths applies only to the selected tool and uses these new defaults.
+
+Version 3 adds `highlighterWidths` and `selectedHighlighterWidth`; existing `widths`/`selectedWidth` now belong to Pen. Versions 1/2 shared widths and active width migrate into independent copies for both tools, including empty arrays and active values outside the slider. Existing palettes, IDs, selections and customized widths are never overwritten by the new defaults. The upgrade saves once; version-3 reload is idempotent. No notebook/ink schema changes occur. Existing users must explicitly Restore Defaults to adopt the improved Highlighter starting choices.
+
+The independent `feature/writing-tool-ui` branch supplies SVG tool identity and the generic visual thickness editor. Integration wires its optional management callbacks to these per-tool preferences; the independent preset branch remains buildable without the UI feature. Physical iPad verification is pending.

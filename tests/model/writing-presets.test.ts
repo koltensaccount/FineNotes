@@ -159,7 +159,7 @@ describe("stable mutable color presets", () => {
       selectedColors: { pen: "#0000ff", highlighter: "#def" },
     };
     const p = migrateWritingPresets({ ...DEFAULT_SETTINGS, writingPresets: old });
-    expect(p.version).toBe(2);
+    expect(p.version).toBe(3);
     expect(colors(p)).toEqual(["#ff0000", "#0000ff"]);
     expect(selectedColor(p, "pen")).toBe("#0000ff");
     expect(selectedColor(p, "highlighter")).toBe("#ddeeff");
