@@ -1,3 +1,4 @@
+import { colorList, type WritingPresets } from "./model/writing-presets";
 /**
  * The plugin's stored settings (`data.json`) and the pure rules around them.
  * No Obsidian and no DOM, so all of it is tested; `settings.ts` draws the tab.
@@ -30,6 +31,8 @@ import type { EraserMode } from "./view/toolbar";
 export type ToolId = "pen" | "highlighter" | "eraser" | "select";
 
 export interface GoodObsidianSettings {
+  /** Versioned user-managed toolbar preferences, upgraded explicitly on load. */
+  writingPresets?: WritingPresets;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;
@@ -268,8 +271,24 @@ export function shownValue(settings: GoodObsidianSettings, key: string): unknown
 
 /** Store what a settings control was set to, in `data.json`'s own units. */
 export function storeShownValue(settings: GoodObsidianSettings, key: string, shown: unknown): void {
+  const previous = settings.customColors;
   const convert = conversion(key);
   (settings as unknown as Record<string, unknown>)[key] = convert ? convert.store(shown) : shown;
+  if (settings.writingPresets && key === "defaultSize")
+    settings.writingPresets.selectedWidth = settings.defaultSize;
+  if (settings.writingPresets && key === "defaultColor")
+    settings.writingPresets.selectedColors.pen = settings.defaultColor;
+  // Retain the legacy settings field as a bulk importer for both palettes.
+  if (key === "customColors" && settings.writingPresets) {
+    const old = colorList(previous);
+    const added = colorList(settings.customColors);
+    for (const tool of ["pen", "highlighter"] as const) {
+      settings.writingPresets.palettes[tool] = colorList([
+        ...settings.writingPresets.palettes[tool].filter((color) => !old.includes(color)),
+        ...added,
+      ]);
+    }
+  }
 }
 
 /**

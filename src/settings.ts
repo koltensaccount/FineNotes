@@ -122,7 +122,7 @@ const DESC = {
   strokeSize: "How thick the pen writes when you open an ink note.",
   highlighter: "How opaque highlighter strokes are.",
   customColors:
-    "More swatches for the palette: hex colors separated by commas, such as #ff8800, #00ccaa.",
+    "Bulk import into both writing palettes: hex colors separated by commas, such as #ff8800, #00ccaa. Manage individual presets in the toolbar.",
   recognition:
     "What the “Recognize handwriting” command and automatic recognition use. Manual = you " +
     "type the transcription; Cloud AI sends an image of each page to the AI service below. " +

@@ -1,3 +1,4 @@
+import { migrateWritingPresets } from "../../src/model/writing-presets";
 /**
  * The plugin entry (`src/main.ts`) as Obsidian sees it: what `onload`
  * registers, which view a file opens in, how saved settings load, and the
@@ -658,9 +659,57 @@ describe("toggling between the notebook and markdown", () => {
 // --- Settings --------------------------------------------------------------------------
 
 describe("loading settings", () => {
+  it("serializes rapid preset writes so the final saved order is current", async () => {
+    await load({ writingPresets: migrateWritingPresets(DEFAULT_SETTINGS) });
+    let release: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const writes: unknown[] = [];
+    const save = vi.spyOn(plugin, "saveData").mockImplementation(async (settings) => {
+      writes.push(structuredClone(settings));
+      if (writes.length === 1) await pending;
+    });
+    const p = plugin.settings.writingPresets!;
+    const first = plugin.saveWritingPresets(p);
+    await flush();
+    p.palettes.pen.reverse();
+    const second = plugin.saveWritingPresets(p);
+    await flush();
+    expect(writes).toHaveLength(1);
+    release();
+    await Promise.all([first, second]);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toMatchObject({ writingPresets: p });
+    save.mockRestore();
+  });
+
+  it("upgrades legacy palettes once and reloads managed order without loss", async () => {
+    await load({
+      customColors: ["#abc"],
+      defaultColor: "#123456",
+      defaultSize: 8,
+      highlighterAlpha: 0.65,
+    });
+    const p = plugin.settings.writingPresets!;
+    expect(p.palettes.pen).toContain("#aabbcc");
+    expect(p.palettes.highlighter).not.toBe(p.palettes.pen);
+    expect(registered.saved).toHaveLength(1);
+    p.palettes.pen.reverse();
+    await plugin.saveWritingPresets(p);
+    const saved = structuredClone(registered.saved.at(-1));
+    registered.unload();
+    await load(saved);
+    expect(plugin.settings.writingPresets).toEqual(p);
+    expect(plugin.settings.highlighterAlpha).toBe(0.65);
+    expect(registered.saved).toHaveLength(0);
+  });
   it("starts from the defaults when nothing is saved", async () => {
     await load(null);
-    expect(plugin.settings).toEqual(DEFAULT_SETTINGS);
+    expect(plugin.settings).toEqual({
+      ...DEFAULT_SETTINGS,
+      writingPresets: migrateWritingPresets(DEFAULT_SETTINGS),
+    });
     expect(plugin.settings).not.toBe(DEFAULT_SETTINGS);
     plugin.settings.apiKeys.openai = "x";
     expect(DEFAULT_SETTINGS.apiKeys).toEqual({});
@@ -825,7 +874,10 @@ describe("What's new", () => {
   });
 
   it("does nothing when the version is the one already seen", async () => {
-    await load({ lastSeenVersion: VERSION });
+    await load({
+      lastSeenVersion: VERSION,
+      writingPresets: migrateWritingPresets(DEFAULT_SETTINGS),
+    });
     app.workspace.fireLayoutReady();
     await flush();
     expect(opened).toEqual([]);
@@ -858,7 +910,10 @@ describe("the Scribble notice", () => {
   });
 
   it("is not shown on an iPhone or a desktop, and not again after a sync", async () => {
-    await load({ lastSeenVersion: VERSION });
+    await load({
+      lastSeenVersion: VERSION,
+      writingPresets: migrateWritingPresets(DEFAULT_SETTINGS),
+    });
     Object.assign(Platform, { isIosApp: true, isTablet: false, isPhone: true });
     await plugin.maybeShowScribbleNotice();
     Object.assign(Platform, { isIosApp: false, isTablet: true });

@@ -1,3 +1,4 @@
+import { type WritingPresets, migrateWritingPresets } from "./model/writing-presets";
 import { FileExplorerNotebookButton } from "./view/file-explorer-notebook-button";
 import { DEFAULT_SHAPE_COLOR, parseHexColor, recentColorsOf } from "./model/colors";
 import { type PenGestures, penGesturesOf } from "./ink/pen-gestures";
@@ -358,6 +359,7 @@ export default class GoodObsidianPlugin extends Plugin {
     const saved = own ?? (await this.settingsFromPreviousId());
     this.firstInstall = saved === null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    this.settings.writingPresets = migrateWritingPresets(this.settings);
     // A record of its own: the key store mutates it, and the default's must
     // stay empty.
     const keys = saved?.apiKeys;
@@ -378,7 +380,8 @@ export default class GoodObsidianPlugin extends Plugin {
     delete loaded.trocrModel;
     // Settings found under the old id are written to this id's folder at
     // once, so the carry-over happens exactly one time.
-    if (own === null && saved !== null) await this.saveSettings();
+    if (saved && !saved.writingPresets) await this.saveSettings();
+    else if (own === null && saved !== null) await this.saveSettings();
   }
 
   /**
@@ -401,6 +404,15 @@ export default class GoodObsidianPlugin extends Plugin {
       // Unreadable or not JSON: start from the defaults, as a new install does.
       return null;
     }
+  }
+
+  private presetSave = Promise.resolve();
+
+  /** Serialize rapid slider/palette changes so an older write cannot finish last. */
+  saveWritingPresets(presets: WritingPresets): Promise<void> {
+    this.settings.writingPresets = presets;
+    this.presetSave = this.presetSave.catch(() => {}).then(() => this.saveSettings());
+    return this.presetSave;
   }
 
   async saveSettings(): Promise<void> {

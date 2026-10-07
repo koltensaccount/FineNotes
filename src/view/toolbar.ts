@@ -1,3 +1,10 @@
+import {
+  type WritingPresets,
+  type WritingTool,
+  saveWidth,
+  removeWidth,
+} from "../model/writing-presets";
+import { renderPresetColors } from "./preset-colors";
 /**
  * The two-tier toolbar of the ink note view.
  *
@@ -59,7 +66,7 @@
 
 import { drawingToolOf, selectedTool } from "./tool-return";
 import { setIcon } from "obsidian";
-import { DEFAULT_ERASER_SIZE, ERASER_SIZES, PALETTE } from "../constants";
+import { DEFAULT_ERASER_SIZE, ERASER_SIZES, PALETTE, SIZES } from "../constants";
 import {
   CONNECTOR_PRESETS,
   SHAPE_PRESETS,
@@ -351,6 +358,8 @@ export interface ToolbarCallbacks {
 }
 
 export interface ToolbarOptions {
+  writingPresets?: WritingPresets;
+  onPresetsChange?: (presets: WritingPresets) => void;
   /** The pen width the width popover's reset returns to; default the middle preset. */
   defaultSize?: number;
 }
@@ -421,7 +430,27 @@ export class Toolbar {
   private pillMorph: Animation | null = null;
   /** The button under a pointer that is down on a bar, drawn pressed. */
   private pressed: HTMLElement | null = null;
-  private palette: string[];
+  private initialPalette: string[];
+  private presetDispose: (() => void) | null = null;
+  private presetDragging = false;
+  private paletteTool: WritingTool | null = null;
+  private get writingTool(): WritingTool {
+    return this.state.tool === "highlighter" ? "highlighter" : "pen";
+  }
+  private get palette(): string[] {
+    return this.options.writingPresets?.palettes[this.writingTool] ?? this.initialPalette;
+  }
+  private get widths(): readonly number[] {
+    return this.options.writingPresets?.widths ?? this.initialWidths;
+  }
+  private presetsChanged(): void {
+    const presets = this.options.writingPresets;
+    if (!presets) return;
+    this.state.color = presets.selectedColors[this.writingTool];
+    this.options.onPresetsChange?.(presets);
+    this.buildOptions();
+    this.syncActive();
+  }
   /** The pen or highlighter last in use, which "select again" goes back to. */
   private drawingTool: ActiveTool = "pen";
 
@@ -433,12 +462,12 @@ export class Toolbar {
   constructor(
     private readonly host: HTMLElement,
     palette: readonly string[],
-    private readonly widths: readonly number[],
+    private readonly initialWidths: readonly number[],
     private state: ToolbarState,
     private readonly callbacks: ToolbarCallbacks,
     private readonly options: ToolbarOptions = {},
   ) {
-    this.palette = [...palette];
+    this.initialPalette = [...palette];
     this.barEl = host.createDiv({ cls: "goodobsidian-toolbar" });
     this.barEl.setAttribute("role", "toolbar");
     this.barEl.setAttribute("aria-label", "Handwriting tools");
@@ -720,6 +749,10 @@ export class Toolbar {
   }
 
   private buildPenOptions(): void {
+    if (this.paletteTool !== this.writingTool && this.options.writingPresets) {
+      this.state.color = this.options.writingPresets.selectedColors[this.writingTool];
+    }
+    this.paletteTool = this.writingTool;
     // One live pen button, not four permanent swatches. The three pen styles
     // remain one tap away in its menu, keeping the writing area clear.
     const active = this.activePenType();
@@ -792,6 +825,10 @@ export class Toolbar {
 
   private setPenColor(color: string): void {
     this.state.color = color;
+    if (this.options.writingPresets) {
+      this.options.writingPresets.selectedColors[this.writingTool] = color;
+      this.options.onPresetsChange?.(this.options.writingPresets);
+    }
     this.callbacks.onColorChange(color);
     this.buildOptions();
     this.syncActive();
@@ -814,6 +851,26 @@ export class Toolbar {
     const body = this.openPopover(kind, anchor);
     // Pointing at its swatch, as Notability's picker does.
     this.popover?.addClass("is-color-popover", "has-arrow");
+    if (kind === "pen-color" && this.options.writingPresets) {
+      this.popover?.addClass("is-preset-manager");
+      this.presetDispose = renderPresetColors(
+        body,
+        this.options.writingPresets,
+        this.writingTool,
+        () => this.presetsChanged(),
+        (color) => {
+          this.closePopover();
+          pick(color);
+        },
+        (active) => {
+          this.presetDragging = active;
+        },
+        () => this.state.recentColors ?? [],
+        (color) => this.rememberColor(color),
+      );
+      this.keepPopoverInside(anchor);
+      return;
+    }
     renderColorPicker(body, {
       current,
       extra: this.pickerExtras(current),
@@ -1478,6 +1535,11 @@ export class Toolbar {
 
   private choosePenType(spec: PenTypeSpec): void {
     this.state.penType = spec.id;
+    if (this.options.writingPresets)
+      this.state.color =
+        this.options.writingPresets.selectedColors[
+          spec.tool === "highlighter" ? "highlighter" : "pen"
+        ];
     if (this.state.tool !== spec.tool) {
       this.state.tool = spec.tool;
       this.callbacks.onToolChange(spec.tool);
@@ -1498,14 +1560,13 @@ export class Toolbar {
     if (!quick.includes(size) && Number.isFinite(size) && size > 0) {
       quick[quick.length - 1] = size;
     }
-    return quick;
+    return quick.sort((a, b) => a - b);
   }
 
   /** Black, red and blue are the uncluttered default; preserve a live custom ink. */
   private quickColors(): string[] {
-    const quick = this.palette
-      .filter((color) => color.toLowerCase() !== "#ffffff")
-      .slice(0, QUICK_COLORS);
+    const quick = this.palette.slice(0, QUICK_COLORS);
+    if (this.options.writingPresets) return quick;
     if (quick.length === 0) quick.push(this.state.color);
     else if (!quick.includes(this.state.color) && this.state.color.toLowerCase() !== "#ffffff") {
       quick[quick.length - 1] = this.state.color;
@@ -1552,8 +1613,8 @@ export class Toolbar {
     // half px (FineNotes#7). The highlighter keeps the thinnest preset.
     const highlighter =
       this.state.tool !== "shape" && penTypeFor(this.state).tool === "highlighter";
-    const floor = highlighter ? Math.min(...this.widths) : 0;
-    const stops = widthStops(this.widths, !highlighter);
+    const floor = highlighter ? SIZES[0] : 0;
+    const stops = widthStops(SIZES, !highlighter);
     range.min = "0";
     range.max = String(stops.length - 1);
     range.step = "1";
@@ -1564,7 +1625,7 @@ export class Toolbar {
       const width = chosenWidth(this.state.size, floor);
       readout.setText(formatMm(width));
       range.value = String(nearestStop(stops, width));
-      markChosen(presets, this.state.size);
+      markChosen(presets, this.state.size, true);
     };
     const pick = (width: number): void => {
       this.setWidth(width);
@@ -1583,6 +1644,67 @@ export class Toolbar {
       });
       presets.set(width, preset);
     }
+    if (this.options.writingPresets) {
+      const preferences = this.options.writingPresets;
+      body.createDiv({
+        cls: "goodobsidian-popover-hint",
+        text: "Choose a width with the slider, then save it or replace a preset. Widths always sort from thin to thick.",
+      });
+      const manager = body.createDiv({ cls: "goodobsidian-preset-list" });
+      const render = (): void => {
+        manager.empty();
+        presets.clear();
+        for (const width of preferences.widths) {
+          const item = manager.createDiv({ cls: "goodobsidian-preset-row" });
+          const select = item.createEl("button", {
+            cls: "clickable-icon",
+            text: formatMm(width),
+            attr: { "aria-label": `Select ${formatMm(width)}` },
+          });
+          presets.set(width, select);
+          select.addEventListener("click", () => {
+            pick(width);
+            settle();
+          });
+          const replace = item.createEl("button", {
+            cls: "clickable-icon",
+            text: "Replace",
+            attr: { "aria-label": `Replace ${formatMm(width)} with current width` },
+          });
+          replace.addEventListener("click", () => {
+            saveWidth(preferences, this.state.size, width);
+            this.setWidth(preferences.selectedWidth);
+            this.presetsChanged();
+            render();
+            show();
+          });
+          const remove = item.createEl("button", {
+            cls: "clickable-icon",
+            text: "×",
+            attr: { "aria-label": `Remove ${formatMm(width)}` },
+          });
+          remove.addEventListener("click", () => {
+            removeWidth(preferences, width);
+            this.presetsChanged();
+            render();
+          });
+        }
+      };
+      const add = body.createEl("button", {
+        cls: "clickable-icon",
+        text: "Save current width as preset",
+      });
+      add.addEventListener("click", () => {
+        saveWidth(preferences, this.state.size);
+        this.presetsChanged();
+        render();
+      });
+      // The managed list replaces the static chips; slider selection stays live.
+      row.empty();
+      render();
+      this.popover?.addClass("is-preset-manager");
+      this.keepPopoverInside(anchor);
+    }
     // Live while dragging; the pill's widths follow once the thumb is let go.
     range.addEventListener("input", () => pick(stops[Number(range.value)] ?? this.state.size));
     range.addEventListener("change", settle);
@@ -1596,6 +1718,10 @@ export class Toolbar {
   /** A new pen width, from a preset, the slider or a reset. */
   private setWidth(width: number): void {
     this.state.size = width;
+    if (this.options.writingPresets) {
+      this.options.writingPresets.selectedWidth = width;
+      this.options.onPresetsChange?.(this.options.writingPresets);
+    }
     this.callbacks.onSizeChange(width);
   }
 
@@ -1752,6 +1878,16 @@ export class Toolbar {
     popover.setAttribute("role", "dialog");
     // Removed with the popover, so its listeners need no disposer.
     this.keepFocus(popover, false);
+    for (const type of [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "touchstart",
+      "touchmove",
+      "touchend",
+    ]) {
+      popover.addEventListener(type, (event) => event.stopPropagation());
+    }
     const body = popover.createDiv({ cls: "goodobsidian-popover-body" });
 
     const hostBox = this.host.getBoundingClientRect();
@@ -1767,6 +1903,9 @@ export class Toolbar {
   }
 
   private closePopover(): void {
+    this.presetDispose?.();
+    this.presetDispose = null;
+    this.presetDragging = false;
     this.popover?.remove();
     this.popover = null;
     this.popoverKind = null;
@@ -1785,6 +1924,11 @@ export class Toolbar {
     const hostBox = this.host.getBoundingClientRect();
     const anchorBox = anchor.getBoundingClientRect();
     const box = popover.getBoundingClientRect();
+    if (popover.hasClass("is-preset-manager")) {
+      popover.setCssStyles({
+        maxHeight: `${Math.max(44, hostBox.bottom - box.top - EDGE_INSET)}px`,
+      });
+    }
     let shift = 0;
     if (box.right > hostBox.right - EDGE_INSET) shift = hostBox.right - EDGE_INSET - box.right;
     if (box.left + shift < hostBox.left + EDGE_INSET) shift = hostBox.left + EDGE_INSET - box.left;
@@ -1799,6 +1943,11 @@ export class Toolbar {
   private installDismiss(): void {
     const onDown = (event: PointerEvent): void => {
       if (!this.popover) return;
+      if (this.presetDragging) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       const target = event.target as Node | null;
       if (
         target &&
