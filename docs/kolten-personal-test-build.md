@@ -13,7 +13,7 @@
 
 Every feature passes test, typecheck, lint, lint:review, format:check and production build with Node 22. The preset validation uses an isolated snapshot byte-checked against the source because local file-provider reads stalled. Integration adds tests for blue edited defaults with dashed ink; palette scrolling/control exclusions alongside multi-touch; actual history Undo/Redo and companion updates; deleting/restoring content; screenshot event routing into picture placement/selection and companion output; style-only fingerprint invalidation; PDF-backed styled overlays with companion ownership; close/reopen without a redundant export.
 
-The integration full suite uses four workers to avoid artificial contention in the existing shape-recognition timing test. Its original 250 ms limit is unchanged. The initial unconstrained run passed 3,192 tests but exceeded that limit once; the focused test passed. Final integration validation passed all 3,231 tests across 161 files, typecheck, lint, lint:review, formatting and production build.
+The integration full suite uses four workers to avoid artificial contention in the existing shape-recognition timing test. Its original 250 ms limit is unchanged. The initial unconstrained run passed 3,192 tests but exceeded that limit once; the focused test passed. Final integration validation passed all 3,246 tests across 161 files, typecheck, lint, lint:review, formatting and production build.
 
 ## Install the exact beta
 
