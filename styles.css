@@ -5437,3 +5437,103 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
     animation: none;
   }
 }
+
+/* User-managed writing presets: bounded popovers, full-size touch controls. */
+.goodobsidian-popover.is-preset-manager {
+  width: min(390px, calc(100% - 24px));
+  max-height: calc(100% - 120px - var(--keyboard-height, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.goodobsidian-preset-list {
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.goodobsidian-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-s);
+}
+.goodobsidian-preset-row button,
+.is-preset-manager .goodobsidian-popover-body > button {
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.goodobsidian-preset-handle {
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.goodobsidian-preset-row.is-dragging {
+  opacity: 0.6;
+  background: var(--background-modifier-hover);
+}
+.goodobsidian-preset-row.is-drop-target {
+  box-shadow: inset 0 3px var(--interactive-accent);
+}
+.goodobsidian-preset-color {
+  flex: 1;
+  gap: 8px;
+}
+.goodobsidian-preset-color::before {
+  content: "";
+  background: var(--preset-color);
+  border: 1px solid var(--background-modifier-border);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.goodobsidian-preset-color[aria-pressed="true"] {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+.goodobsidian-preset-row button.is-active {
+  background: var(--background-modifier-hover);
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+/* Five full-size swatches in a native scrolling strip; add remains outside it. */
+.goodobsidian-options.is-writing {
+  touch-action: pan-x;
+}
+.goodobsidian-quick-colors {
+  display: flex;
+  align-items: center;
+  flex: 0 1 266px;
+  min-width: 88px;
+  gap: 2px;
+  position: sticky;
+  right: 0;
+  background: var(--gob-pill-bg);
+}
+.goodobsidian-color-strip {
+  display: flex;
+  flex: 1 1 220px;
+  min-width: 44px;
+  max-width: 220px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.goodobsidian-color-strip::-webkit-scrollbar {
+  display: none;
+}
+.goodobsidian-options .goodobsidian-color-strip button.goodobsidian-swatch,
+.goodobsidian-quick-colors .goodobsidian-color-more {
+  flex: 0 0 44px;
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: pan-x;
+}
+.goodobsidian-color-strip .goodobsidian-swatch-mark {
+  display: none;
+}
+.goodobsidian-color-strip .goodobsidian-swatch.is-active {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}

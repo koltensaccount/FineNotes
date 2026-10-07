@@ -1,3 +1,4 @@
+import { migrateWritingPresets } from "../model/writing-presets";
 /**
  * The notebook view: one ink note (`.notebook.md`, `.page.md`, or the older
  * `.ink.md`) open in a tab. Obsidian reads and writes the file; this view
@@ -168,8 +169,10 @@ const ignore = (): void => undefined;
 function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
   return {
     tool: s.defaultTool,
-    color: s.defaultColor,
-    size: s.defaultSize,
+    color:
+      s.writingPresets?.selectedColors[s.defaultTool === "highlighter" ? "highlighter" : "pen"] ??
+      s.defaultColor,
+    size: s.writingPresets?.selectedWidth ?? s.defaultSize,
     // A notebook opens with the Fountain pen, a pressure pen.
     pressureEnabled: s.pressureWidth,
     shapeSnapEnabled: s.drawAndHold,
@@ -964,7 +967,17 @@ export class InkView extends TextFileView {
         onSearch: () => void this.openSearch(),
         onMore: (anchor) => this.toggleMorePanel(anchor),
       },
-      { defaultSize: this.settings.defaultSize },
+      {
+        defaultSize: this.settings.defaultSize,
+        writingPresets: this.settings.writingPresets ?? migrateWritingPresets(this.settings),
+        onPresetsChange: (presets) => {
+          void this.plugin.saveWritingPresets(presets).catch(() => {
+            new Notice(
+              "FineNotes: writing presets could not be saved. Try again before closing Obsidian.",
+            );
+          });
+        },
+      },
     );
 
     const pdfCache = new PdfBackdropCache(this.app);

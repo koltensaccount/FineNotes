@@ -44,6 +44,8 @@ export default defineConfig({
         "src/view/surface-keys.ts",
         "src/view/notebook-keys.ts",
         "src/view/scroll-thumb-drag.ts",
+        "src/view/preset-drag.ts",
+        "src/view/color-strip-input.ts",
         "src/view/tool-return.ts",
         "src/view/pointer-hud.ts",
         "src/view/surface-size.ts",
