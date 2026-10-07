@@ -5536,4 +5536,142 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 .goodobsidian-color-strip .goodobsidian-swatch.is-active {
   box-shadow: inset 0 0 0 2px var(--interactive-accent);
+/* Writing previews remain vectors, with normal touch targets at every pane width. */
+.goodobsidian-stroke-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+.goodobsidian-pentype {
+  width: 64px;
+  min-width: 64px;
+}
+.goodobsidian-pentype .goodobsidian-stroke-preview {
+  width: 54px;
+  height: 30px;
+}
+.goodobsidian-bar-group.is-tools [data-tool="pen"] .goodobsidian-stroke-preview {
+  width: 32px;
+  height: 24px;
+}
+.goodobsidian-pen-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 12px;
+}
+.goodobsidian-pen-choice > svg {
+  width: 76px;
+  height: 32px;
+  flex: 0 0 76px;
+}
+.goodobsidian-pen-caption {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  min-width: 0;
+}
+.goodobsidian-pen-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.goodobsidian-quick-widths {
+  display: flex;
+  flex: 0 0 auto;
+}
+.goodobsidian-width > .goodobsidian-stroke-preview {
+  width: 32px;
+  height: 28px;
+}
+.goodobsidian-thickness-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.goodobsidian-live-stroke {
+  height: 86px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px;
+}
+.goodobsidian-thickness-range {
+  width: 100%;
+  min-height: 44px;
+  touch-action: pan-x;
+  margin: 0;
+}
+.goodobsidian-thickness-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.goodobsidian-thickness-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.goodobsidian-thickness-choice {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 0;
+}
+.goodobsidian-thickness-choice svg {
+  width: 80px;
+  height: 32px;
+  flex: 0 1 80px;
+}
+.goodobsidian-thickness-row button {
+  min-height: 44px;
+}
+.goodobsidian-thickness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.goodobsidian-thickness-actions button {
+  min-height: 44px;
+  flex: 1 1 auto;
+}
+.goodobsidian-width-popover {
+  width: min(320px, 100%);
+}
+.goodobsidian-popover {
+  max-width: calc(100% - 16px);
+  max-height: min(75vh, 640px);
+  overflow: auto;
+}
+@media (max-width: 420px) {
+  .goodobsidian-pen-choice {
+    gap: 8px;
+  }
+  .goodobsidian-pen-choice > svg {
+    width: 60px;
+    flex-basis: 60px;
+  }
+  .goodobsidian-thickness-row {
+    flex-wrap: wrap;
+  }
+}
+.goodobsidian-thickness-presets {
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-height: 600px) {
+  .goodobsidian-live-stroke {
+    height: 64px;
+  }
+  .goodobsidian-thickness-presets {
+    max-height: 132px;
+  }
 }

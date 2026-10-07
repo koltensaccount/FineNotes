@@ -1011,6 +1011,13 @@ export class InkView extends TextFileView {
             );
           });
         },
+        highlighterAlpha: this.settings.highlighterAlpha,
+        previewPaper: () => {
+          const page = this.surface?.document.pages[this.surface.currentPage];
+          return page && "paperColor" in page.backdrop
+            ? (page.backdrop.paperColor ?? paperTheme(this.surface?.darkPaper ?? false).paper)
+            : paperTheme(this.surface?.darkPaper ?? false).paper;
+        },
       },
     );
 
