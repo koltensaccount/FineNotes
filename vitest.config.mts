@@ -37,6 +37,8 @@ export default defineConfig({
         "src/canvas/text-layout.ts",
         "src/canvas/lasso.ts",
         "src/view/selection-bar-model.ts",
+        "src/view/context-input.ts",
+        "src/view/clipboard-read.ts",
         "src/view/view-routing.ts",
         "src/view/load-guard.ts",
         "src/view/text-panel.ts",

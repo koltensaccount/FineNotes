@@ -1,5 +1,7 @@
 import { migrateWritingPresets } from "../model/writing-presets";
 import { lineStyleOf } from "../ink/line-style";
+import { type ClipboardTarget } from "./clipboard-read";
+import { NativePasteModal } from "./native-paste";
 /**
  * The notebook view: one ink note (`.notebook.md`, `.page.md`, or the older
  * `.ink.md`) open in a tab. Obsidian reads and writes the file; this view
@@ -203,6 +205,7 @@ export class InkView extends TextFileView {
 
   /** True from `onOpen` to `onClose`, while the view's DOM exists. */
   private mounted = false;
+  private nativePasteModal: NativePasteModal | null = null;
   private surface: InkSurface | null = null;
   private toolbar: Toolbar | null = null;
   private sidebar: PageSidebar | null = null;
@@ -354,6 +357,8 @@ export class InkView extends TextFileView {
    * file's data arrives: `setViewData` is the only thing that judges a read.
    */
   clear(): void {
+    this.nativePasteModal?.close();
+    this.nativePasteModal = null;
     // The page this file was left on, before its document goes.
     this.recordLastPage();
     this.restoredPath = null;
@@ -428,6 +433,8 @@ export class InkView extends TextFileView {
   }
 
   override async onClose(): Promise<void> {
+    this.nativePasteModal?.close();
+    this.nativePasteModal = null;
     this.recordLastPage();
     this.audio?.destroy();
     this.audio = null;
@@ -1064,8 +1071,16 @@ export class InkView extends TextFileView {
         onTextEditing: (style) => this.toolbar?.setTextTarget(style),
         // A copied picture also goes to the system clipboard, for other apps;
         // one pasted from there comes in as any other picture does.
-        onCopyImage: (image) => copyPictureToSystemClipboard(this.app, image),
-        onPasteImage: (file) => void this.pastePictureFile(file),
+        onCopyImage: (image, marker) => copyPictureToSystemClipboard(this.app, image, marker),
+        onPasteImage: (file, target) => void this.pastePictureFile(file, target),
+        onNativePaste: (pasted) => {
+          const surface = this.surface;
+          this.nativePasteModal?.close();
+          this.nativePasteModal = new NativePasteModal(this.app, (file) => {
+            if (surface === this.surface) pasted(file);
+          });
+          this.nativePasteModal.open();
+        },
       },
     );
     this.surface.setBackdropPainter(this.backdrops);
@@ -1879,7 +1894,9 @@ export class InkView extends TextFileView {
    * A picture pasted from the system clipboard (Cmd/Ctrl+V): saved as an
    * attachment and placed like one from Photos. Errors end in a notice.
    */
-  private async pastePictureFile(file: File): Promise<void> {
+  private async pastePictureFile(file: File, target: ClipboardTarget = {}): Promise<void> {
+    const note = this.file;
+    const surface = this.surface;
     let bytes: ArrayBuffer;
     try {
       bytes = await file.arrayBuffer();
@@ -1888,7 +1905,16 @@ export class InkView extends TextFileView {
       new Notice(`FineNotes: couldn't paste that picture — ${message}`, 8000);
       return;
     }
-    await this.insertImageBytes(bytes, file.type, file.name || "Pasted image");
+    if (this.file !== note || this.surface !== surface || !surface) return;
+    const pageIndex = target.pageId
+      ? surface.document.pages.findIndex((page) => page.id === target.pageId)
+      : surface.currentPage;
+    if (pageIndex < 0) return;
+    await this.insertImageBytes(bytes, file.type, file.name || "Pasted image", {
+      pageIndex,
+      pageId: target.pageId,
+      at: target.at,
+    });
   }
 
   /**
@@ -1931,14 +1957,20 @@ export class InkView extends TextFileView {
     const surface = this.surface;
     if (!surface || this.isProtected()) return null;
     const doc = surface.document;
-    const index = Math.max(
-      0,
-      Math.min(doc.pages.length - 1, options.pageIndex ?? surface.currentPage),
-    );
+    const index = options.pageId
+      ? doc.pages.findIndex((page) => page.id === options.pageId)
+      : Math.max(0, Math.min(doc.pages.length - 1, options.pageIndex ?? surface.currentPage));
     const page = doc.pages[index];
     if (!page) return null;
     const box =
-      options.box ?? placeImageBox({ width, height }, page.geometry, surface.visibleRegion(index));
+      options.box ??
+      placeImageBox(
+        { width, height },
+        page.geometry,
+        surface.visibleRegion(index),
+        undefined,
+        options.at,
+      );
     const image = newImageElement(doc, path, box);
     surface.applyCommand(new InsertImage(page.id, image));
     if (options.select !== false) surface.selectImage(page.id, image.id);

@@ -36,6 +36,10 @@ import { pickImageFile } from "./image-import";
 export interface InsertImageOptions {
   /** 0-based page to place it on. Default: the page in view. */
   pageIndex?: number;
+  /** Stable page identity for asynchronous clipboard import. */
+  pageId?: string;
+  /** Centre at this page-space interaction point, keeping the picture on the page. */
+  at?: { x: number; y: number };
   /**
    * Page-space box to place it in, instead of the default (centred in the
    * visible part of the page, fitted inside 60 % of it, aspect kept).

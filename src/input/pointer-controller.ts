@@ -153,6 +153,7 @@ export class PointerController {
   }
 
   private pressed(event: PointerEvent): void {
+    if (event.pointerType === "mouse" && event.button != null && event.button !== 0) return;
     const { pointerId, clientX, clientY, timeStamp } = event;
     const role = roleOf(event.pointerType, this.stroke !== null);
     if (role === "draw" && this.stroke === null && this.handHeld()) {

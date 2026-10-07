@@ -46,6 +46,7 @@ export function placeImageBox(
   page: PageGeometry,
   visible?: Bounds | null,
   fraction = IMAGE_PLACE_FRACTION,
+  at?: { x: number; y: number },
 ): { x: number; y: number; w: number; h: number } {
   const valid = natural.width > 0 && natural.height > 0;
   const nw = valid && Number.isFinite(natural.width) ? natural.width : 1;
@@ -61,8 +62,8 @@ export function placeImageBox(
   const h = nh * k;
 
   const area = clipToPage(visible ?? null, page);
-  const cx = (area.minX + area.maxX) / 2;
-  const cy = (area.minY + area.maxY) / 2;
+  const cx = at?.x ?? (area.minX + area.maxX) / 2;
+  const cy = at?.y ?? (area.minY + area.maxY) / 2;
   return {
     x: clamp(cx - w / 2, 0, Math.max(0, page.width - w)),
     y: clamp(cy - h / 2, 0, Math.max(0, page.height - h)),

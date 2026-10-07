@@ -1,4 +1,14 @@
 import { lineStyleOf } from "../ink/line-style";
+import { bindContextInput } from "./context-input";
+import {
+  type ClipboardTarget,
+  type ClipboardRead,
+  PasteGate,
+  clipboardMarker,
+  imageFileOf,
+  readSystemClipboard,
+  writeSelectionMarker,
+} from "./clipboard-read";
 import { bindScrollThumb } from "./scroll-thumb-drag";
 import type { PdfRenderArea } from "../canvas/pdf-raster";
 /**
@@ -454,13 +464,14 @@ export interface InkSurfaceCallbacks {
    * also put its pixels on the system clipboard, where other apps can paste
    * them; ink cannot travel that way.
    */
-  onCopyImage?: (image: ImageElement) => void;
+  onCopyImage?: (image: ImageElement, marker: string) => void;
   /**
    * Cmd/Ctrl+V found a picture on the system clipboard, fresher than the
    * plugin's own (see `handlePaste`). The host saves and places it. Without
    * this, only the plugin's clipboard is pasted.
    */
-  onPasteImage?: (file: File) => void;
+  onPasteImage?: (file: File, target?: ClipboardTarget) => void;
+  onNativePaste?: (pasted: (file: File) => void) => void;
 }
 
 /**
@@ -910,6 +921,10 @@ export class InkSurface {
   private pressTimer = 0;
   /** Cmd/Ctrl+V waiting for the browser's paste event (see PASTE_EVENT_WAIT_MS). */
   private pasteTimer = 0;
+  private readonly pasteGate = new PasteGate();
+  private pasteRequest: { ticket: number; target: ClipboardTarget; completed: number } | null =
+    null;
+  private lastPastePoint: ClipboardTarget = {};
   /** Whether a host set an image painter: without one, pictures are neither drawn nor pasted. */
   private imagesShown = false;
   /** A finger went down and could still turn out to be a tap. */
@@ -1300,12 +1315,12 @@ export class InkSurface {
       if (event.type === "touchmove" && this.touchPanning && event.cancelable) {
         event.preventDefault();
       }
-      // With the lasso, a finger held still is a tap-and-hold (Paste,
-      // Unlock). Cancelling its touchstart keeps WebKit's own long press from
+      // A finger held still opens our page context actions with any tool.
+      // Cancelling its touchstart keeps WebKit's own long press from
       // claiming it and ending it in pointercancel, as it does a held Pencil.
       // No finger tap needs its click here: with the lasso, text boxes are
       // selected, not typed in, and every control acts on pointer events.
-      if (event.type === "touchstart" && this.toolState.tool === "select" && event.cancelable) {
+      if (event.type === "touchstart" && event.cancelable) {
         event.preventDefault();
       }
     };
@@ -1349,6 +1364,21 @@ export class InkSurface {
       });
     }
 
+    this.disposers.push(
+      bindContextInput(this.surfaceEl, {
+        blocked: () =>
+          this.handHeld ||
+          this.scroller.isAnimating ||
+          !!this.builder ||
+          !!this.lasso ||
+          !!this.cropping,
+        remember: (x, y) => {
+          this.lastPastePoint = this.targetAt(x, y) ?? this.lastPastePoint;
+        },
+        open: (x, y) => this.contextAt(x, y),
+      }),
+    );
+
     // Leaving the app may put something newer on the system clipboard: from
     // then on, a picture pasted from there wins over the plugin's clipboard
     // (see `handlePaste`). Idempotent, so every open surface may report it.
@@ -1380,6 +1410,8 @@ export class InkSurface {
    * host's to remove.
    */
   destroy(): void {
+    this.pasteGate.cancel();
+    this.pasteRequest = null;
     window.clearTimeout(this.wheelSnapTimer);
     this.cancelPendingReturn();
     window.clearTimeout(this.detailRestTimer);
@@ -1426,6 +1458,9 @@ export class InkSurface {
    * history starts empty, and new ids count on from the ones `doc` holds.
    */
   setDocument(doc: InkDocument): void {
+    this.pasteGate.cancel();
+    this.pasteRequest = null;
+    this.lastPastePoint = {};
     this.doc = doc;
     this.strokeIds.restart(strokeIdsOf(doc));
     this.textBoxIds.restart(textBoxIdsOf(doc));
@@ -3154,9 +3189,6 @@ export class InkSurface {
       if (this.handHeld) this.scrollEl.addClass("is-hand-dragging");
       if (!this.touchPanning) {
         this.fingerTap = this.scroller.isAnimating || this.handHeld ? null : { x, y, t };
-        if (this.fingerTap && this.toolState.tool === "select" && !this.lasso) {
-          this.startPress(() => this.fingerHeld(x, y));
-        }
       }
       if (!this.touchPanning) {
         this.swipeFromPage = this.pageIndex;
@@ -4653,14 +4685,46 @@ export class InkSurface {
     this.openPressMenu(lasso.box, lasso.origin);
   }
 
-  /** A finger held still on the page with the lasso: the same bar, where it rests. */
-  private fingerHeld(clientX: number, clientY: number): void {
-    if (!this.fingerTap || this.lasso || this.imageDrag || this.groupDrag || this.cropping) return;
-    // The lift is no longer a tap.
-    this.fingerTap = null;
+  private targetAt(clientX: number, clientY: number): ClipboardTarget | null {
     const at = this.toLayout(clientX, clientY);
     const box = boxAtPoint(this.pageLayout, at.x, at.y);
-    if (box) this.openPressMenu(box, this.toPage(box, at));
+    const page = box ? this.pageAt(box.index) : null;
+    return box && page ? { pageId: page.id, at: this.toPage(box, at) } : null;
+  }
+
+  /** Only the touch/mouse adapter calls this; the Pencil's existing holds stay separate. */
+  private contextAt(clientX: number, clientY: number): void {
+    const target = this.targetAt(clientX, clientY);
+    if (!target?.pageId || !target.at) return;
+    this.lastPastePoint = target;
+    this.fingerTap = null;
+    this.stopPress();
+    this.cancelImageDrag();
+    this.cancelGroupDrag();
+    this.scroller.cancel();
+    const group = this.liveSelection();
+    const image = this.liveImageSelection();
+    const bounds = group
+      ? this.groupBounds(group)
+      : image
+        ? imageBounds(transformOf(image.image))
+        : null;
+    const selectedPage = group?.pageId ?? image?.pageId;
+    const p = target.at;
+    if (
+      bounds &&
+      selectedPage === target.pageId &&
+      p.x >= bounds.minX &&
+      p.x <= bounds.maxX &&
+      p.y >= bounds.minY &&
+      p.y <= bounds.maxY
+    ) {
+      this.syncActionBar();
+      this.actionBar.openMenu();
+    } else {
+      const box = this.boxForPage(target.pageId);
+      if (box) this.openPressMenu(box, p);
+    }
   }
 
   private startPress(open: () => void): void {
@@ -5126,7 +5190,7 @@ export class InkSurface {
         label: "Cut",
         group: "edit",
         bar: true,
-        menu: "none",
+        menu: "tile",
         run: () => this.cutSelection(),
       },
       { id: "copy", icon: "copy", label: "Copy", group: "edit", run: () => this.copySelection() },
@@ -5186,9 +5250,16 @@ export class InkSurface {
       icon: "clipboard-paste",
       label: "Paste",
       group: "edit",
-      enabled: clipboard.canPaste(this.imagesShown),
+      enabled:
+        clipboard.canPaste(this.imagesShown) || (this.imagesShown && !!this.callbacks.onPasteImage),
       run: () => {
-        this.paste({ pageId, at });
+        this.requestPaste(
+          {
+            pageId,
+            at: at ?? (this.lastPastePoint.pageId === pageId ? this.lastPastePoint.at : undefined),
+          },
+          true,
+        );
       },
     };
   }
@@ -5316,6 +5387,7 @@ export class InkSurface {
         },
         bounds,
       );
+      writeSelectionMarker(clipboard.version);
       this.syncActionBar();
       return true;
     }
@@ -5325,7 +5397,7 @@ export class InkSurface {
       { strokes: [], images: [sel.image], textBoxes: [] },
       imageBounds(transformOf(sel.image)),
     );
-    this.callbacks.onCopyImage?.(sel.image);
+    this.callbacks.onCopyImage?.(sel.image, clipboardMarker(clipboard.version));
     this.syncActionBar();
     return true;
   }
@@ -5408,49 +5480,104 @@ export class InkSurface {
       return true;
     }
     if (key !== "v" || this.cropping) return false;
-    // Not prevented: the browser's paste event follows, and may carry a
-    // picture from another app (`handlePaste`). Where none comes — WebKit
-    // sends none while nothing editable has focus — paste our own.
-    window.clearTimeout(this.pasteTimer);
-    this.pasteTimer = window.setTimeout(() => {
-      this.pasteTimer = 0;
-      this.paste();
-    }, PASTE_EVENT_WAIT_MS);
+    // Keep the browser's native event, but start the API read inside this gesture.
+    this.requestPaste(this.clipboardTarget(), false);
     return true;
   }
 
-  /**
-   * A paste event reached the host. The plugin's clipboard is pasted — unless
-   * the system clipboard holds a picture and is likely the fresher of the
-   * two (the plugin's is empty, or the app was left since it was filled, so
-   * another app may have copied since); then the picture goes to the host's
-   * `onPasteImage`. Text fields keep their own pastes. Returns whether the
-   * paste was taken.
-   */
-  handlePaste(event: ClipboardEvent): boolean {
+  private clipboardTarget(): ClipboardTarget {
+    if (
+      this.lastPastePoint.pageId &&
+      this.doc.pages.some((page) => page.id === this.lastPastePoint.pageId)
+    )
+      return this.lastPastePoint;
+    const page = this.doc.pages[this.currentPage];
+    if (!page) return {};
+    const area = this.visibleRegion(this.currentPage);
+    return {
+      pageId: page.id,
+      at: area
+        ? { x: (area.minX + area.maxX) / 2, y: (area.minY + area.maxY) / 2 }
+        : { x: page.geometry.width / 2, y: page.geometry.height / 2 },
+    };
+  }
+
+  private requestPaste(target: ClipboardTarget, explicit: boolean): void {
     window.clearTimeout(this.pasteTimer);
-    this.pasteTimer = 0;
-    if (isEditable(event.target) || this.editingTextView() || this.cropping) return false;
-    // A protected note refuses the paste once (its host says why), whichever
-    // clipboard it would have come from.
-    if (this.callbacks.isLocked?.()) {
-      event.preventDefault();
-      return true;
-    }
-    const onImage = this.imagesShown ? this.callbacks.onPasteImage : undefined;
-    const file = onImage ? imageFileOf(event.clipboardData) : null;
-    const systemFirst =
-      file !== null && (clipboard.leftSinceCopy || !clipboard.canPaste(this.imagesShown));
-    if (!systemFirst && this.paste()) {
-      event.preventDefault();
-      return true;
-    }
-    if (file && onImage) {
-      event.preventDefault();
-      onImage(file);
+    const request = { ticket: this.pasteGate.begin(), target, completed: 0 };
+    this.pasteRequest = request;
+    const reading = readSystemClipboard();
+    // Attach rejection handling immediately, including while waiting for the native event.
+    const result = reading.then(
+      (data) => ({ data }),
+      () => ({ data: null }),
+    );
+    const finish = async (): Promise<void> => {
+      const { data } = await result;
+      if (this.pasteRequest !== request || request.completed) return;
+      const internal = data?.text === clipboardMarker(clipboard.version);
+      if (internal || data?.file) {
+        this.consumePaste(request, data);
+      } else if (
+        (!data || !data.text) &&
+        clipboard.canPaste(this.imagesShown) &&
+        !clipboard.leftSinceCopy
+      ) {
+        this.consumePaste(request, { file: null, text: clipboardMarker(clipboard.version) });
+      } else if (explicit && this.imagesShown) {
+        this.callbacks.onNativePaste?.((file) => {
+          if (this.pasteRequest === request) this.consumePaste(request, { file, text: "" });
+        });
+      }
+    };
+    if (explicit) void finish();
+    else
+      this.pasteTimer = window.setTimeout(() => {
+        this.pasteTimer = 0;
+        void finish();
+      }, PASTE_EVENT_WAIT_MS);
+  }
+
+  private consumePaste(
+    request: { ticket: number; target: ClipboardTarget; completed: number },
+    data: ClipboardRead,
+  ): boolean {
+    if (!this.pasteGate.claim(request.ticket)) return false;
+    request.completed = Date.now();
+    if (this.callbacks.isLocked?.()) return true;
+    if (data.text === clipboardMarker(clipboard.version) && this.paste(request.target)) return true;
+    if (data.file && this.imagesShown && this.callbacks.onPasteImage) {
+      this.callbacks.onPasteImage(data.file, request.target);
       return true;
     }
     return false;
+  }
+
+  /** A native image wins unless its marker identifies our actual local selection. */
+  handlePaste(event: ClipboardEvent): boolean {
+    if (isEditable(event.target) || this.editingTextView() || this.cropping) return false;
+    window.clearTimeout(this.pasteTimer);
+    this.pasteTimer = 0;
+    const active = this.pasteRequest;
+    if (active?.completed && Date.now() - active.completed < 250) {
+      event.preventDefault();
+      return true;
+    }
+    const request =
+      active && !active.completed
+        ? active
+        : { ticket: this.pasteGate.begin(), target: this.clipboardTarget(), completed: 0 };
+    this.pasteRequest = request;
+    const file = this.imagesShown ? imageFileOf(event.clipboardData) : null;
+    let text = event.clipboardData?.getData("text/plain") ?? "";
+    // Engines without system writes still retain the established local-clipboard fallback.
+    if (!file && !text && clipboard.canPaste(this.imagesShown))
+      text = clipboardMarker(clipboard.version);
+    if (!file && text !== clipboardMarker(clipboard.version) && !this.callbacks.isLocked?.())
+      return false;
+    event.preventDefault();
+    this.consumePaste(request, { file, text });
+    return true;
   }
 
   // --- A picture's order, lock and crop (0.5) ---------------------------------
@@ -6542,23 +6669,6 @@ function isEditable(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el || typeof el.tagName !== "string") return false;
   return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
-}
-
-/**
- * The first picture file a paste carries, or `null`. Looked for in `files`
- * and then among the items, since engines fill one or the other.
- */
-function imageFileOf(data: DataTransfer | null): File | null {
-  if (!data) return null;
-  for (const file of Array.from(data.files)) {
-    if (file.type.startsWith("image/")) return file;
-  }
-  for (const item of Array.from(data.items)) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-    const file = item.getAsFile();
-    if (file) return file;
-  }
-  return null;
 }
 
 /** `setIcon`, with a text fallback for mobile builds where an icon comes up blank. */
