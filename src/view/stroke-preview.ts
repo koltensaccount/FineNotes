@@ -93,7 +93,7 @@ export function strokePreviewGeometry(options: StrokePreviewOptions) {
 /** Local UI contrast only; stored and rendered notebook colors are untouched. */
 function uiBackground(doc: Document): string {
   const win = doc.defaultView;
-  let surface = doc.querySelector?.(".goodobsidian-popover, .goodobsidian-options") ?? doc.body;
+  let surface: Element | null = doc.querySelector?.(".goodobsidian-popover, .goodobsidian-options") ?? doc.body;
   let value = "";
   while (surface && win) {
     value = win.getComputedStyle(surface).backgroundColor;
