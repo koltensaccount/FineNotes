@@ -1593,6 +1593,7 @@ export class Toolbar {
     }
     const body = this.openPopover("widths", anchor);
     body.addClass("goodobsidian-width-popover");
+    this.popover?.addClass("has-thickness-editor");
     this.widthEditorRefresh = renderThicknessEditor(body, {
       current: () => this.previewOptions(),
       presets: () => this.widths,
