@@ -42,7 +42,7 @@ matching candidates are parsed to verify embedded identity. An existing valid
 stored path requires no vault search. Startup only recovers registered pending
 transactions; it never scans/parses all PDFs.
 
-If a PDF is missing after a previous successful export, automatic close leaves
+If a PDF is confirmed deleted by a live vault event, the companion becomes dirty and the next close recreates the same recorded path, after ownership/collision checks. If a PDF is missing after an offline move/rename with no matching identity suffix, automatic close leaves
 it stale and reports the missing target. **Update PDF now** can explicitly
 recreate the same recorded path. This avoids silently duplicating a PDF whose
 suffix was removed during an offline rename: enter that PDF's new path instead.
@@ -200,3 +200,9 @@ the existing CI without opening an upstream PR.
 Shortest preset physical pass: finger long-press reorder with Pencil present;
 portrait, landscape and Split View; onscreen keyboard + HEX; long-palette
 scrolling; restart and verify order and independent Pen/Highlighter selections.
+
+## Current request audit
+
+This branch remains independent of presets, multitouch and line styles. The existing exporter, association registry, rename recovery, safe-write journal and unload lifecycle are retained. Export fingerprints now retain all stroke rendering fields while excluding only stroke ID and replay timing; this includes snapped shape metadata and allows additive rendering styles to participate when integrated without depending on a separate feature branch. A confirmed live PDF deletion can automatically recreate the stable recorded target on close. An ambiguous offline missing path still uses suffix/embedded-ID recovery and explicit Update PDF now when no owned candidate can be identified, avoiding a silent duplicate after an offline rename that removed the suffix.
+
+The automatic close/background export is best effort: OS suspension or forced process termination can interrupt asynchronous work. Staging/backup recovery protects the last good file, but no code can guarantee completion after the process stops. Physical iPad lifecycle validation is still pending. Use Update PDF now and check Up to date before relying on the companion for sharing.

@@ -363,6 +363,9 @@ export class CompanionPdfManager {
     for (const entry of Object.values(this.store.entries))
       if (entry.pdfPath === path || entry.pdfPath.startsWith(path + "/")) {
         entry.dirty = true;
+        // A confirmed vault deletion can be recreated at the recorded path on close.
+        // An offline missing path remains ambiguous and still requires identity recovery.
+        delete entry.lastFingerprint;
         changed = true;
       }
     // Notebook deletion deliberately keeps both its PDF and association record.

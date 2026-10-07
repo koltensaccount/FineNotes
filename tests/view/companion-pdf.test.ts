@@ -234,8 +234,8 @@ describe("Obsidian companion adapter", () => {
     s.binary.delete(target);
     await s.manager.deleted(target);
     expect(s.manager.status(ID)).toContain("PDF missing");
-    await expect(s.manager.update(ID, s.note, s.snapshot, false)).rejects.toThrow("PDF missing");
-    await s.manager.update(ID, s.note, s.snapshot, true);
+    expect(s.manager.entry(ID)!.lastFingerprint).toBeUndefined();
+    await s.manager.update(ID, s.note, s.snapshot, false);
     expect(s.binary.size).toBe(1);
     expect(s.manager.entry(ID)!.pdfPath).toBe(target);
   });
@@ -308,4 +308,29 @@ it("rapid configuration of an old notebook creates one stable identity and appli
   expect(Object.keys(s.manager.store.entries)).toHaveLength(1);
   expect(s.fileManager.processFrontMatter).toHaveBeenCalledOnce();
   expect(s.manager.entry(ids[0])!.enabled).toBe(false);
+});
+
+it("confirmed deletion refuses an unrelated replacement at the same filename", async () => {
+  const s = setup();
+  await s.manager.configure(s.note, s.text.get(s.note.path)!, undefined, { enabled: true });
+  await s.manager.update(ID, s.note, s.snapshot, false);
+  const target = s.manager.entry(ID)!.pdfPath;
+  s.files.delete(target);
+  s.binary.delete(target);
+  await s.manager.deleted(target);
+  const unrelated = await pdf();
+  s.add(target, unrelated);
+  await expect(s.manager.update(ID, s.note, s.snapshot, false)).rejects.toThrow("unrelated file");
+  expect(s.binary.get(target)).toEqual(unrelated);
+  expect(s.manager.entry(ID)!.dirty).toBe(true);
+});
+it("offline missing targets remain recoverable without silently creating duplicates", async () => {
+  const s = setup();
+  await s.manager.configure(s.note, s.text.get(s.note.path)!, undefined, { enabled: true });
+  await s.manager.update(ID, s.note, s.snapshot, false);
+  const target = s.manager.entry(ID)!.pdfPath;
+  await s.move(s.files.get(target)!, "Offline/No identity suffix.pdf");
+  s.manager.load(structuredClone(s.manager.store));
+  await expect(s.manager.update(ID, s.note, s.snapshot, false)).rejects.toThrow("PDF missing");
+  expect(s.binary.size).toBe(1);
 });

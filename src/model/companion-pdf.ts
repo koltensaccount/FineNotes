@@ -115,7 +115,7 @@ export function companionContent(
     pages: doc.pages.map((page) => ({
       geometry: page.geometry,
       backdrop: page.backdrop,
-      strokes: page.strokes.map(({ color, size, tool, pts }) => ({ color, size, tool, pts })),
+      strokes: page.strokes.map(({ id: _id, t0: _t0, ...graphics }) => graphics),
       images: page.images.map(({ id: _id, ...image }) => image),
       textBoxes: page.textBoxes.map(({ id: _id, ...text }) => text),
     })),

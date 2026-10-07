@@ -339,3 +339,21 @@ it("simultaneous manual requests on a clean PDF retain one forced refresh", asyn
   ]);
   expect(s.render).toHaveBeenCalledOnce();
 });
+
+it("fingerprints rendering metadata while excluding stroke identity and replay timing", () => {
+  const doc = emptyDocument(1024),
+    options = { usePressure: false, highlighterAlpha: 0.4 };
+  doc.pages[0].strokes.push({
+    id: "s",
+    tool: "pen",
+    color: "#000",
+    size: 3,
+    pts: [1, 2, 0.5, 4, 5, 0.5],
+  });
+  const before = companionContent(doc, options, []);
+  doc.pages[0].strokes[0].id = "another";
+  doc.pages[0].strokes[0].t0 = 250;
+  expect(companionContent(doc, options, [])).toBe(before);
+  doc.pages[0].strokes[0].shape = "line";
+  expect(companionContent(doc, options, [])).not.toBe(before);
+});
