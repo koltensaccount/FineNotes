@@ -14,6 +14,7 @@ export function bindMultiTouchInput(
   const gesture = new MultiTouchDoubleTap((action) => {
     if (!callbacks.blocked()) callbacks[action]();
   });
+  let disposed = false;
   const down = (event: PointerEvent): void => {
     const target = event.target;
     const control =
@@ -21,10 +22,25 @@ export function bindMultiTouchInput(
       !!target.closest(
         "button, input, textarea, select, [contenteditable], [role=menu], [role=toolbar], .goodobsidian-image-ui, .goodobsidian-crop-ui, .goodobsidian-selection-ui",
       );
-    gesture.down(event, !control && element.contains(target as Node) && !callbacks.blocked());
+    if (control || !element.contains(target as Node) || callbacks.blocked()) {
+      gesture.reset(); // Sidebar/control contacts never enter canvas pointer tracking.
+      return;
+    }
+    gesture.down(event);
   };
   const move = (event: PointerEvent): void => gesture.move(event);
-  const up = (event: PointerEvent): void => gesture.up(event);
+  const handledUps = new WeakSet<Event>();
+  const up = (event: PointerEvent): void => {
+    handledUps.add(event);
+    gesture.up(event);
+  };
+  const captureUp = (event: PointerEvent): void => {
+    // Prefer normal bubbling after pan/pinch ends. A control may stop that bubble;
+    // its captured terminal event still gets cleanup at the end of this dispatch.
+    queueMicrotask(() => {
+      if (!disposed && !handledUps.has(event)) up(event);
+    });
+  };
   const cancel = (event: PointerEvent): void => gesture.cancel(event);
   const reset = (): void => gesture.reset();
   const visibility = (): void => {
@@ -33,15 +49,18 @@ export function bindMultiTouchInput(
   // Down is captured so controls/outside contacts invalidate a pending chord.
   // Up runs after the page controller has finished the gesture, before history changes.
   doc.addEventListener("pointerdown", down, { capture: true });
-  doc.addEventListener("pointermove", move);
+  doc.addEventListener("pointermove", move, { capture: true });
+  doc.addEventListener("pointerup", captureUp, { capture: true });
   doc.addEventListener("pointerup", up);
   doc.addEventListener("pointercancel", cancel, { capture: true });
   doc.addEventListener("visibilitychange", visibility);
   win?.addEventListener("blur", reset);
   const dispose = (): void => {
+    disposed = true;
     reset();
     doc.removeEventListener("pointerdown", down, { capture: true });
-    doc.removeEventListener("pointermove", move);
+    doc.removeEventListener("pointermove", move, { capture: true });
+    doc.removeEventListener("pointerup", captureUp, { capture: true });
     doc.removeEventListener("pointerup", up);
     doc.removeEventListener("pointercancel", cancel, { capture: true });
     doc.removeEventListener("visibilitychange", visibility);

@@ -145,6 +145,7 @@ describe("touch chord double taps", () => {
     expect(r.invoke).not.toHaveBeenCalled();
     r.gesture.up(r.pointer(9, 250, 0, 0, "pen"));
     r.tap(2, 300);
+    expect(r.invoke).not.toHaveBeenCalled();
     r.tap(2, 450);
     expect(r.invoke).toHaveBeenCalledExactlyOnceWith("undo");
   });
@@ -212,4 +213,50 @@ describe("touch chord double taps", () => {
     expect(r.invoke).not.toHaveBeenCalled();
     expect(fingers.active).toBe(false);
   });
+});
+
+it.each([2, 3])(
+  "cancel with a missing sibling release recovers the very next %s-finger pair",
+  (n) => {
+    const r = rig();
+    r.gesture.down(r.pointer(10, 0));
+    r.gesture.down(r.pointer(11, 5));
+    r.gesture.cancel(r.pointer(10, 50));
+    // Pointer 11 never delivers up: cancellation must discard the entire chord.
+    r.tap(n, 300);
+    r.tap(n, 450);
+    expect(r.invoke).toHaveBeenCalledExactlyOnceWith(n === 2 ? "undo" : "redo");
+  },
+);
+it.each(["pinch", "pan", "slow"])(
+  "%s rejection never disables the next Undo/Redo pair",
+  (reason) => {
+    const r = rig();
+    r.gesture.down(r.pointer(1, 0));
+    r.gesture.down(r.pointer(2, 5));
+    if (reason === "pinch") r.gesture.move(r.pointer(1, 20, 20));
+    if (reason === "pan") {
+      r.gesture.move(r.pointer(1, 20, 50));
+      r.gesture.move(r.pointer(2, 25, 80));
+    }
+    r.gesture.up(r.pointer(1, reason === "slow" ? 300 : 60));
+    r.gesture.up(r.pointer(2, reason === "slow" ? 305 : 65));
+    r.tap(2, 500);
+    r.tap(2, 650);
+    r.tap(3, 800);
+    r.tap(3, 950);
+    expect(r.invoke.mock.calls).toEqual([["undo"], ["redo"]]);
+  },
+);
+
+it("a fresh primary stream recovers from completely missing old terminal events", () => {
+  const r = rig();
+  r.gesture.down(r.pointer(90, 0));
+  r.gesture.down(r.pointer(91, 5));
+  r.gesture.down({ ...r.pointer(1, 300), isPrimary: true });
+  r.gesture.down(r.pointer(2, 305));
+  r.gesture.up(r.pointer(1, 360));
+  r.gesture.up(r.pointer(2, 365));
+  r.tap(2, 450);
+  expect(r.invoke).toHaveBeenCalledExactlyOnceWith("undo");
 });

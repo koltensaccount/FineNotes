@@ -21,6 +21,7 @@ function rig() {
   const undo = vi.fn(),
     redo = vi.fn();
   let blocked = false;
+  const listeners = vi.spyOn(doc, "addEventListener");
   let binding = bindMultiTouchInput(el as unknown as HTMLElement, {
     undo,
     redo,
@@ -55,6 +56,7 @@ function rig() {
   return {
     el,
     doc,
+    listeners,
     undo,
     redo,
     send,
@@ -146,4 +148,37 @@ describe("multitouch page adapter", () => {
     r.tap(2, 600);
     expect(r.undo).toHaveBeenCalledOnce();
   });
+});
+
+it("sidebar pointers with missing releases never enter canvas state", () => {
+  const r = rig(),
+    sidebar = new El();
+  sidebar.inside = false;
+  r.send("pointerdown", 90, 0, sidebar);
+  r.send("pointerdown", 91, 5, sidebar);
+  r.tap(2, 300);
+  r.tap(2, 450);
+  expect(r.undo).toHaveBeenCalledOnce();
+  r.dispose();
+});
+it("a stopped terminal bubble still clears Pencil state before the next canvas Undo", async () => {
+  const r = rig();
+  r.send("pointerdown", 90, 0, r.el, "pen");
+  // Deliver only capture: a control stops the terminal event before bubbling.
+  const capture = r.listeners.mock.calls.find(
+    ([name, , options]) => name === "pointerup" && typeof options === "object" && options?.capture,
+  )?.[1] as (event: PointerEvent) => void;
+  expect(capture).toBeDefined();
+  capture({
+    pointerId: 90,
+    pointerType: "pen",
+    timeStamp: 80,
+    clientX: 0,
+    clientY: 100,
+  } as PointerEvent);
+  await Promise.resolve();
+  r.tap(2, 300);
+  r.tap(2, 450);
+  expect(r.undo).toHaveBeenCalledOnce();
+  r.dispose();
 });

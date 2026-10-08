@@ -5,6 +5,7 @@ export interface GesturePointer {
   clientX: number;
   clientY: number;
   timeStamp: number;
+  isPrimary?: boolean;
 }
 type Action = "undo" | "redo";
 interface Contact {
@@ -31,6 +32,7 @@ export class MultiTouchDoubleTap {
   constructor(private readonly invoke: (action: Action) => void) {}
   down(pointer: GesturePointer, allowed = true): void {
     if (pointer.pointerType === "pen") {
+      this.pens.clear(); // The page controller owns only one active Pencil stroke.
       this.pens.add(pointer.pointerId);
       this.invalidate();
       return;
@@ -39,10 +41,10 @@ export class MultiTouchDoubleTap {
       this.invalidate();
       return;
     }
-    if (this.contacts.has(pointer.pointerId)) {
-      this.invalidate();
-      return;
-    }
+    // A new primary touch (or reused ID) proves an earlier stream ended,
+    // even when WebKit omitted its terminal pointer event.
+    if ((pointer.isPrimary && this.contacts.size > 0) || this.contacts.has(pointer.pointerId))
+      this.reset();
     if (this.contacts.size === 0) {
       this.started = pointer.timeStamp;
       this.valid = allowed && this.pens.size === 0;
@@ -105,6 +107,7 @@ export class MultiTouchDoubleTap {
       (this.peak !== 2 && this.peak !== 3)
     ) {
       this.invalidate();
+      this.clearChord(); // An independently active Pencil still owns its contact.
       return;
     }
     const first = this.first;
@@ -113,22 +116,29 @@ export class MultiTouchDoubleTap {
       first.count === this.peak &&
       Math.hypot(first.x - this.anchor.x, first.y - this.anchor.y) <= 32
     ) {
-      this.first = null;
-      this.valid = false;
-      this.invoke(this.peak === 2 ? "undo" : "redo");
+      const action = this.peak === 2 ? "undo" : "redo";
+      this.reset();
+      this.invoke(action);
     } else {
       this.first = { count: this.peak, ...this.anchor, ended: pointer.timeStamp };
+      this.clearChord();
     }
   }
-  cancel(pointer?: GesturePointer): void {
-    this.invalidate();
-    if (pointer?.pointerType === "pen") this.pens.delete(pointer.pointerId);
-    if (pointer?.pointerType === "touch") this.contacts.delete(pointer.pointerId);
+  cancel(_pointer?: GesturePointer): void {
+    this.reset();
   }
   reset(): void {
     this.invalidate();
-    this.contacts.clear();
+    this.clearChord();
     this.pens.clear();
+  }
+  private clearChord(): void {
+    this.contacts.clear();
+    this.started = 0;
+    this.valid = false;
+    this.peak = 0;
+    this.seen = 0;
+    this.anchor = { x: 0, y: 0 };
   }
   private invalidate(): void {
     this.valid = false;

@@ -1706,6 +1706,7 @@ export class InkSurface {
       // Zoomed in, a row is held to the page being read (`ensurePaperSize`),
       // so a glide to another page stopped at this one's edge. Move the hold
       // to the new page and land on its top-left corner, at the same zoom.
+      this.resetMultiTouch();
       this.dismissPressMenu();
       this.pageIndex = clamped;
       this.ensurePaperSize();
@@ -1762,6 +1763,7 @@ export class InkSurface {
   }
 
   setTool(tool: ActiveTool): void {
+    this.resetMultiTouch();
     this.dismissPressMenu();
     // The toolbar shares `toolState` and has already written the new tool
     // into it, so the one being replaced is read from `toolSeen`.
@@ -2186,6 +2188,7 @@ export class InkSurface {
     this.indicatorEl.setText(total > 0 ? `${index + 1} of ${total}` : "0 of 0");
     this.indicatorEl.toggleClass("is-hidden", total === 0);
     if (index !== this.pageIndex) {
+      this.resetMultiTouch();
       this.dismissPressMenu();
       this.pageIndex = index;
       this.callbacks.onPageChange?.(index, total);
