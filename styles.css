@@ -72,6 +72,9 @@ body,
   --gob-card-bg: var(--background-primary);
   --gob-pill-bg: var(--background-primary);
   --gob-pop-bg: var(--background-primary);
+  --gob-pop-compact: 248px;
+  --gob-pop-standard: 360px;
+  --gob-pop-wide: 400px;
   --gob-sheet-bg: var(--background-primary);
   --gob-group-bg: var(--background-secondary);
   --gob-side-bg: var(--background-secondary);
@@ -112,7 +115,7 @@ body,
   /* Frost, used only inside the @supports blocks that can draw it. */
   --gob-frost: color-mix(in srgb, var(--background-primary) 78%, transparent);
   --gob-frost-side: color-mix(in srgb, var(--background-secondary) 80%, transparent);
-  --gob-blur: blur(24px) saturate(1.7);
+  --gob-blur: blur(16px) saturate(1.4);
 
   /* Motion (GoodNotes, measured). */
   --gob-ease-out: cubic-bezier(0.25, 0.8, 0.3, 1);
@@ -189,7 +192,9 @@ body,
   -webkit-user-select: none;
   box-sizing: border-box;
   min-height: var(--gob-bar-h);
-  border-bottom: var(--gob-bar-border);
+  border: var(--gob-bar-border);
+  border-radius: var(--gob-radius-m);
+  box-shadow: var(--gob-shadow-float);
 }
 
 .goodobsidian-toolbar::-webkit-scrollbar {
@@ -529,12 +534,19 @@ body,
   position: absolute;
   z-index: 30;
   transform: translateX(-50%);
-  max-width: min(320px, calc(100vw - 24px));
+  width: min(var(--gob-popover-width, var(--gob-pop-standard)), calc(100% - 16px));
+  max-width: calc(100% - 16px);
+  max-height: min(75vh, 640px);
+  overflow: auto;
   border: 1px solid var(--gob-line);
   border-radius: var(--gob-pop-radius);
   background: var(--gob-pop-bg);
-  box-shadow: var(--gob-shadow-sheet);
+  box-shadow: var(--gob-shadow-float);
 }
+
+.goodobsidian-popover.is-compact-selector { --gob-popover-width: var(--gob-pop-compact); }
+.goodobsidian-popover.is-standard-editor { --gob-popover-width: var(--gob-pop-standard); }
+.goodobsidian-popover.is-wide-editor { --gob-popover-width: var(--gob-pop-wide); }
 
 /* Menus and popovers fade in over 0.16 s. */
 
@@ -588,8 +600,8 @@ body,
 }
 
 .goodobsidian-popover button.goodobsidian-wide.is-active {
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
+  color: var(--text-normal);
+  background: var(--gob-accent-tint);
 }
 
 .goodobsidian-swatch {
@@ -1638,15 +1650,14 @@ body.is-mobile .goodobsidian-scrollthumb {
   animation: goodobsidian-fade-in 0.16s ease-out;
 }
 
-/* Lasso: action bar and its menu keep Obsidian's dark palette (theme-dark
-   on them), restyled as the version's cards. */
+/* Selection chrome uses the host theme, including in light mode. */
 
 .goodobsidian-selection-bar,
 .goodobsidian-selection-menu {
-  --gob-sel-bg: var(--color-base-10);
-  --gob-sel-line: var(--color-base-30);
-  --gob-sel-icon: var(--color-base-70);
-  --gob-sel-well: var(--color-base-25);
+  --gob-sel-bg: var(--gob-pop-bg);
+  --gob-sel-line: var(--gob-line);
+  --gob-sel-icon: var(--text-normal);
+  --gob-sel-well: var(--gob-well);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2509,8 +2520,8 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0 10px;
   border: none;
   border-radius: var(--gob-radius-m);
@@ -2527,8 +2538,8 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
 }
 
 .goodobsidian-text-popover .goodobsidian-text-option.clickable-icon.is-active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
+  background: var(--gob-accent-tint);
+  color: var(--text-normal);
 }
 
 .goodobsidian-text-popover .goodobsidian-text-option.clickable-icon:disabled {
@@ -2984,13 +2995,11 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
 /* The rows × columns picker: 8 × 8 cells a fingertip can hit (44 px on an
    iPad, shrinking to 28 px on a narrow pane). The cells up to the chosen
    size fill with the accent. Wider than other popovers to fit the grid. */
-.goodobsidian-popover.is-table-picker {
-  max-width: min(420px, calc(100vw - 24px));
-}
 
 .goodobsidian-table-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(28px, var(--gob-touch)));
+  grid-template-columns: repeat(8, minmax(28px, 1fr));
+  overflow-x: auto;
   gap: 4px;
 }
 
@@ -3001,16 +3010,25 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
   min-height: 28px;
   aspect-ratio: 1 / 1;
   padding: 0;
-  border: 1.5px solid var(--background-modifier-border);
+  border: 1px solid var(--text-faint);
   border-radius: var(--gob-radius-s);
-  background: transparent;
+  background: var(--background-secondary);
   box-shadow: none;
   opacity: 1;
 }
 
 .goodobsidian-popover button.goodobsidian-table-cell.is-picked {
   border-color: var(--interactive-accent);
-  background: var(--interactive-accent);
+  background: var(--gob-accent-tint);
+}
+.goodobsidian-popover button.goodobsidian-table-cell.is-current {
+  box-shadow: inset 0 0 0 1px var(--text-normal);
+}
+.goodobsidian-popover button.goodobsidian-table-cell.is-preview-end,
+.goodobsidian-popover button.goodobsidian-table-cell:hover {
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: -1px;
+  background: var(--gob-active-press);
 }
 
 .goodobsidian-popover-hint {
@@ -3125,7 +3143,7 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
 }
 
 .goodobsidian-popover button.goodobsidian-lasso-type.is-active {
-  background: var(--background-modifier-hover);
+  background: var(--gob-accent-tint);
   box-shadow: inset 0 0 0 1px var(--background-modifier-border);
 }
 
@@ -3252,10 +3270,7 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
   stroke-linejoin: round;
 }
 
-/* The action bar and its "…" menu, after GoodNotes: dark in every theme.
-   Both carry Obsidian's own `theme-dark` class, which re-declares the
-   --color-base-* palette (and --color-red) on them, so these are Obsidian's
-   variables in their dark flavour whatever the app theme is. */
+/* Selection controls share the theme-aware floating surface. */
 .goodobsidian-selection-bar {
   position: absolute;
   z-index: 2;
@@ -5404,13 +5419,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
     opacity: 1;
   }
 
-  /* A popover holds controls to read at a glance: more paper, same blur. */
-  .goodobsidian-popover {
-    background: var(--gob-pop-bg);
-    -webkit-backdrop-filter: blur(20px) saturate(1.6);
-    backdrop-filter: blur(20px) saturate(1.6);
-  }
-
   .goodobsidian-pagesidebar-top {
     background: var(--gob-frost-side);
     -webkit-backdrop-filter: var(--gob-blur);
@@ -5644,14 +5652,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   min-height: 44px;
   flex: 1 1 auto;
 }
-.goodobsidian-width-popover {
-  width: min(320px, 100%);
-}
-.goodobsidian-popover {
-  max-width: calc(100% - 16px);
-  max-height: min(75vh, 640px);
-  overflow: auto;
-}
 @media (max-width: 420px) {
   .goodobsidian-pen-choice {
     gap: 8px;
@@ -5678,11 +5678,8 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   }
 }
 .goodobsidian-popover .goodobsidian-pen-choice.is-active .goodobsidian-pen-hint {
-  color: var(--text-on-accent);
+  color: var(--text-muted);
   opacity: 0.82;
-}
-.goodobsidian-popover.has-thickness-editor {
-  width: 360px;
 }
 .goodobsidian-popover .goodobsidian-width-popover {
   width: 100%;
@@ -5891,6 +5888,10 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and
   (background: color-mix(in srgb, red 50%, transparent)) {
+  .goodobsidian-toolbar,
+  .goodobsidian-options,
+  .goodobsidian-rec-pill,
+  .goodobsidian-player,
   .goodobsidian-popover,
   .goodobsidian-addpage,
   .goodobsidian-more,
@@ -5900,9 +5901,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
     -webkit-backdrop-filter: var(--gob-blur);
     backdrop-filter: var(--gob-blur);
   }
-}
-.goodobsidian-popover.has-thickness-editor {
-  width: 400px;
 }
 .goodobsidian-thickness-editor {
   gap: 16px;
@@ -5957,6 +5955,12 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   color: var(--text-normal);
   background: var(--gob-pop-bg);
   white-space: nowrap;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium, 500);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 1;
 }
 .goodobsidian-pages-header .goodobsidian-pagesidebar-filter { min-width: 0; overflow: hidden; }
 .goodobsidian-pages-header .goodobsidian-pagesidebar-filter > span:first-child { overflow: hidden; text-overflow: ellipsis; }
@@ -5966,7 +5970,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-page-check svg { width: 16px; height: 16px; }
 .goodobsidian-page-bulk-actions { gap: 6px; }
 .goodobsidian-page-bulk-actions button { color: var(--text-normal); border-radius: var(--gob-radius-m); }
-.goodobsidian-popover.has-line-styles { width: 248px; }
 .goodobsidian-popover.has-line-styles .goodobsidian-popover-body { padding: 8px; gap: 2px; }
 .goodobsidian-line-style-anchor .goodobsidian-stroke-preview { width: 44px; height: 28px; }
 .goodobsidian-popover .goodobsidian-line-style-choice.clickable-icon {
@@ -5990,7 +5993,9 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-line-style-check svg { width: 16px; height: 16px; }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and
   (background: color-mix(in srgb, red 50%, transparent)) {
-  .goodobsidian-pages-header { background: var(--gob-frost-side); -webkit-backdrop-filter: var(--gob-blur); backdrop-filter: var(--gob-blur); }
+  .goodobsidian-pages-header { background: transparent; }
   .goodobsidian-pages-header .goodobsidian-pagesidebar-filter.clickable-icon,
   .goodobsidian-pages-header .goodobsidian-page-selection-controls button.clickable-icon { background: var(--gob-frost); }
+  /* The sticky color strip needs a light mask, not a second backdrop blur. */
+  .goodobsidian-quick-colors { background: var(--gob-frost); }
 }

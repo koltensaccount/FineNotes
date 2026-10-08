@@ -1,4 +1,4 @@
-import { claimTransient } from "./transient-popover";
+import { AnchoredNativeMenus } from "./transient-popover";
 /**
  * The page sidebar: GoodNotes' thumbnail panel, opened from the leftmost
  * toolbar button.
@@ -168,7 +168,7 @@ export class PageSidebar {
   private selected = new Set<string>();
   private readonly selectionBar: HTMLElement;
   private readonly pagesHeader: HTMLElement;
-  private nativeMenu: Menu | null = null;
+  private readonly nativeMenus: AnchoredNativeMenus<Menu>;
   private readonly bulkBar: HTMLElement;
   private doc: InkDocument | null = null;
   private current = 0;
@@ -185,6 +185,7 @@ export class PageSidebar {
     private readonly callbacks: PageSidebarCallbacks,
     private render: PageSidebarRenderOptions,
   ) {
+    this.nativeMenus = new AnchoredNativeMenus(host.ownerDocument);
     this.el = host.createDiv({ cls: "goodobsidian-pagesidebar is-hidden" });
     this.el.setAttribute("role", "navigation");
     this.el.setAttribute("aria-label", "Pages");
@@ -291,7 +292,7 @@ export class PageSidebar {
   setOpen(open: boolean, animate = false): void {
     if (open === this.open) return;
     this.open = open;
-    if (!open) this.nativeMenu?.hide();
+    if (!open) this.nativeMenus.close();
     if (!open) this.thumbs.forEach((view) => view.drag?.cancel());
     this.slide?.cancel();
     this.slide = null;
@@ -333,7 +334,7 @@ export class PageSidebar {
 
   /** Show the page thumbnails or the recordings. */
   showTab(tab: SidebarTab): void {
-    this.nativeMenu?.hide();
+    this.nativeMenus.close();
     this.thumbs.forEach((view) => view.drag?.cancel());
     this.tab = tab;
     this.pagesHeader.toggleClass("is-hidden", tab !== "pages");
@@ -429,8 +430,8 @@ export class PageSidebar {
       el.disabled = this.single && action !== "copy";
     }
     const more = button(this.bulkBar, "•••", () => {
-      const menu = new Menu();
-    this.ownMenu(menu);
+      const menu = this.nativeMenus.open(more, () => new Menu());
+      if (!menu) return;
       for (const [label, action] of [
         ["Export selected pages", "export"],
         ["Bookmark", "bookmark"],
@@ -450,16 +451,11 @@ export class PageSidebar {
     more.setAttribute("aria-label", "More page actions");
   }
 
-  private ownMenu(menu: Menu): void {
-    this.nativeMenu?.hide();
-    this.nativeMenu = menu;
-    const release = claimTransient(this.el.ownerDocument, menu, () => menu.hide());
-    menu.onHide(() => { release(); if (this.nativeMenu === menu) this.nativeMenu = null; });
-  }
+  dismissMenu(): void { this.nativeMenus.close(); }
 
   private showFilterMenu(): void {
-    const menu = new Menu();
-    this.ownMenu(menu);
+    const menu = this.nativeMenus.open(this.filterChip, () => new Menu());
+    if (!menu) return;
     for (const filter of ["all", "bookmarks"] as const) {
       menu.addItem((item) =>
         item
@@ -504,7 +500,7 @@ export class PageSidebar {
   /** The document (or its page list) changed. Cheap: repaint is debounced. */
   setDocument(doc: InkDocument): void {
     if (this.doc && this.doc !== doc) {
-      this.nativeMenu?.hide();
+      this.nativeMenus.close();
       this.thumbs.forEach((view) => view.drag?.cancel());
       this.selected.clear();
       this.selecting = false;
@@ -569,7 +565,7 @@ export class PageSidebar {
   }
 
   destroy(): void {
-    this.nativeMenu?.hide();
+    this.nativeMenus.destroy();
     window.clearTimeout(this.refreshTimer);
     window.cancelAnimationFrame(this.paintFrame);
     this.slide?.cancel();
@@ -649,8 +645,8 @@ export class PageSidebar {
 
   private showContentsMenu(index: number, event: MouseEvent, anchor: HTMLElement): void {
     const act = (action: PageAction) => () => this.callbacks.onPageAction(action, index, anchor);
-    const menu = new Menu();
-    this.ownMenu(menu);
+    const menu = this.nativeMenus.open(anchor, () => new Menu());
+    if (!menu) return;
     menu.addItem((item) => item.setTitle("Rename").setIcon("pencil").onClick(act("contents")));
     menu.addItem((item) =>
       item.setTitle("Remove from contents").setIcon("list-x").onClick(act("contents-remove")),
@@ -786,8 +782,8 @@ export class PageSidebar {
     const backdrop = this.doc?.pages[index]?.backdrop;
     const cover = !!backdrop && backdrop.kind !== "pdf" && isCoverRuling(backdrop.kind);
     const act = (action: PageAction) => () => this.callbacks.onPageAction(action, index, anchor);
-    const menu = new Menu();
-    this.ownMenu(menu);
+    const menu = this.nativeMenus.open(anchor, () => new Menu());
+    if (!menu) return;
     const marked = this.doc?.pages[index]?.bookmarked === true;
     menu.addItem((item) =>
       item

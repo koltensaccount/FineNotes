@@ -1,6 +1,7 @@
 import { presetActivation } from "../../src/view/transient-popover";
 import { describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", () => import("./fake-obsidian"));
+vi.mock("../../src/view/thickness-editor", () => ({ renderThicknessEditor: vi.fn(() => Object.assign(() => {}, { dispose: () => {} })) }));
 const { Toolbar, PEN_TYPES } = await import("../../src/view/toolbar");
 import { migrateWritingPresets, selectedColor, selectColor } from "../../src/model/writing-presets";
 import { DEFAULT_SETTINGS } from "../../src/settings-data";
@@ -10,6 +11,7 @@ function setup() {
   const state = { tool: "pen", color: selectedColor(presets, "pen"), size: 3 };
   const toolbar = Object.assign(Object.create(Toolbar.prototype) as object, {
     state,
+    popoverDisposers: [],
     options: { writingPresets: presets, onPresetsChange: save },
     callbacks: {
       onColorChange: vi.fn(),
@@ -119,4 +121,37 @@ it("selected color closes its anchored editor; changing presets closes and selec
   s.toolbar.activateColorPreset({} as HTMLElement, blue.id, blue.color);
   expect(s.presets.selectedIds.pen).toBe(blue.id); expect(s.state.color).toBe(blue.color);
   expect(editor).not.toHaveBeenCalled();
+});
+
+
+describe("popover anchors and eraser resizing", () => {
+  it("rebinds rebuilt controls without changing preset anchor identity", () => {
+    const button = (label: string, classes: string[], connected: boolean, dataset = {}) => ({ isConnected: connected, dataset, classList: Object.assign([...classes], { contains: (name: string) => classes.includes(name) }), getAttribute: () => label });
+    const old = button("Eraser erases: All ink", ["goodobsidian-erasermode", "goodobsidian-eraserfilter"], false);
+    const rebuilt = button("Eraser erases: Highlighter only", ["goodobsidian-erasermode", "goodobsidian-eraserfilter", "is-filtered"], true);
+    const toolbar = Object.assign(Object.create(Toolbar.prototype), { popoverAnchor: old, popoverPresetId: null, optionsEl: { querySelectorAll: () => [rebuilt] } });
+    expect(toolbar.resolvePopoverAnchor()).toBe(rebuilt);
+    toolbar.popoverPresetId = "width-3";
+    expect(toolbar.resolvePopoverAnchor()).toBeNull();
+    rebuilt.dataset = { widthId: "width-3" };
+    expect(toolbar.resolvePopoverAnchor()).toBe(rebuilt);
+  });
+  it("eraser slider/reset use the eraser callback without changing writing widths or colors", async () => {
+    const { renderThicknessEditor } = await import("../../src/view/thickness-editor");
+    vi.mocked(renderThicknessEditor).mockClear();
+    const state = { tool: "eraser", eraserSize: 24, eraserMode: "stroke", size: 5, color: "#123456" };
+    const callback = vi.fn(), close = vi.fn();
+    const anchor = {};
+    const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, popoverKind: null, popover: { addClass: vi.fn() }, openPopover: vi.fn(() => ({})), closePopover: close, keepPopoverInside: vi.fn(), callbacks: { onEraserChange: callback }, syncActive: vi.fn() });
+    toolbar.toggleEraserSizeList(anchor);
+    const options = vi.mocked(renderThicknessEditor).mock.calls[0][1];
+    expect(options.title).toBe("Eraser size");
+    options.select(17.5);
+    expect(callback).toHaveBeenLastCalledWith("stroke", 17.5);
+    expect(options.current().width).toBe(17.5);
+    expect(state.size).toBe(5); expect(state.color).toBe("#123456");
+    options.reset(); expect(state.eraserSize).toBe(24);
+    toolbar.popoverKind = "eraser-size"; toolbar.popoverAnchor = anchor;
+    toolbar.toggleEraserSizeList(anchor); expect(close).toHaveBeenCalledOnce();
+  });
 });

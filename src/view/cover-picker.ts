@@ -181,7 +181,7 @@ export class CoverPopover {
   private closed = false;
 
   constructor(anchor: HTMLElement, options: CoverPopoverOptions) {
-    this.el = document.body.createDiv({ cls: "goodobsidian-addpage goodobsidian-coverpopover" });
+    this.el = anchor.ownerDocument.body.createDiv({ cls: "goodobsidian-addpage goodobsidian-coverpopover" });
     this.el.setAttribute("role", "dialog");
     this.el.setAttribute("aria-label", "Change cover");
     this.el.createDiv({ cls: "goodobsidian-addpage-title", text: "Change cover" });

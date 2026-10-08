@@ -1,4 +1,4 @@
-import { installPopoverDismiss } from "./template-picker";
+import { installPopoverDismiss, placePopover } from "./template-picker";
 /**
  * The "Insert image" menu: the popover the toolbar's image button opens,
  * after GoodNotes' — Photos, Take photo, From vault — and the vault picker
@@ -181,7 +181,7 @@ export class ImageMenuPopover {
     private readonly context: ImageMenuContext,
     title = "Insert image",
   ) {
-    this.el = document.body.createDiv({ cls: "goodobsidian-addpage goodobsidian-imagemenu" });
+    this.el = anchor.ownerDocument.body.createDiv({ cls: "goodobsidian-addpage goodobsidian-imagemenu" });
     this.el.setAttribute("role", "menu");
     this.el.setAttribute("aria-label", title);
     this.el.createDiv({ cls: "goodobsidian-addpage-title", text: title });
@@ -219,15 +219,7 @@ export class ImageMenuPopover {
 
   /** Below the anchor, right-aligned to it, kept inside the window. */
   private place(): void {
-    const r = this.anchor.getBoundingClientRect();
-    const width = Math.min(POPOVER_WIDTH, window.innerWidth - 16);
-    let left = r.right - width;
-    if (left < 8) left = Math.min(r.left, window.innerWidth - width - 8);
-    left = Math.max(8, left);
-    const height = this.el.offsetHeight;
-    let top = r.bottom + 6;
-    if (top + height > window.innerHeight - 8) top = Math.max(8, r.top - height - 6);
-    this.el.setCssStyles({ left: `${left}px`, top: `${top}px`, width: `${width}px` });
+    placePopover(this.el, this.anchor, POPOVER_WIDTH);
   }
 
   private installDismiss(): void {

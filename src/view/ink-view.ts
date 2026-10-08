@@ -1,4 +1,4 @@
-import { claimTransient, dismissTransient } from "./transient-popover";
+import { AnchoredNativeMenus, dismissTransient } from "./transient-popover";
 import { effectivePdfQuality, pdfQuality, type PdfQuality } from "../export/pdf-quality";
 import {
   copiedPages,
@@ -238,9 +238,7 @@ export class InkView extends TextFileView {
   private sidebar: PageSidebar | null = null;
   /** The ⋯ panel, while open. */
   private morePanel: MorePanel | null = null;
-  private addPagesMenu: { menu: Menu; anchor: HTMLElement } | null = null;
-  private addPagesAnchors = new WeakSet<HTMLElement>();
-  private addPagesPointerToggle = false;
+  private nativeMenus: AnchoredNativeMenus<Menu> | null = null;
   private addPagePopover: { popover: AddPagePopover; anchor: HTMLElement } | null = null;
   private coverPopover: { popover: CoverPopover; anchor: HTMLElement } | null = null;
   private aiMenu: AiMenuPopover | null = null;
@@ -405,8 +403,9 @@ export class InkView extends TextFileView {
   // --- Opening and closing ---------------------------------------------------
 
   override async onOpen(): Promise<void> {
+    this.nativeMenus = new AnchoredNativeMenus(this.contentEl.ownerDocument);
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
-      if (leaf !== this.leaf) this.addPagesMenu?.menu.hide();
+      if (leaf !== this.leaf) this.dismissMenus();
     }));
     this.buildDom();
     this.mounted = true;
@@ -420,8 +419,7 @@ export class InkView extends TextFileView {
    * running recording so it joins *this* note, and save that.
    */
   override async onUnloadFile(file: TFile): Promise<void> {
-    this.addPagesMenu?.menu.hide();
-    this.addPagesPointerToggle = false;
+    this.dismissMenus();
     if (await this.audio?.finishForUnload()) await this.saveNow();
     if (this.companionUnloadedFile !== file) {
       this.companionUnloadedFile = file;
@@ -475,8 +473,8 @@ export class InkView extends TextFileView {
   }
 
   override async onClose(): Promise<void> {
-    this.addPagesMenu?.menu.hide();
-    this.addPagesPointerToggle = false;
+    this.nativeMenus?.destroy();
+    this.nativeMenus = null;
     this.nativePasteModal?.close();
     this.nativePasteModal = null;
     if (this.file !== this.companionUnloadedFile) await this.updateCompanionPdf(false);
@@ -989,6 +987,7 @@ export class InkView extends TextFileView {
       {
         returnToPenOnReselect: () => this.settings.returnToPenOnReselect === true,
         onToolChange: (tool) => {
+          dismissTransient(this.contentEl.ownerDocument);
           this.surface?.setTool(tool);
           if (tool === "text" && this.surface) this.plugin.offerTextHint(this.surface);
         },
@@ -1955,27 +1954,18 @@ export class InkView extends TextFileView {
    * Open GoodNotes' "Add Page" popover on `anchor`, for page `ref`. A second
    * tap on the same control closes it.
    */
+  private dismissMenus(): void {
+    this.nativeMenus?.close();
+    this.toolbar?.dismissPopover();
+    this.sidebar?.dismissMenu();
+    this.morePanel?.close();
+    this.addPagePopover?.popover.close();
+    this.coverPopover?.popover.close();
+    this.imageMenu?.popover.close();
+    this.aiMenu?.close();
+  }
+
   private openAddPage(anchor: HTMLElement, ref: number, position: InsertPosition): void {
-    if (this.addPagesPointerToggle) {
-      this.addPagesPointerToggle = false;
-      this.addPagesMenu?.menu.hide();
-      return;
-    }
-    const currentMenu = this.addPagesMenu;
-    if (currentMenu) {
-      currentMenu.menu.hide();
-      if (currentMenu.anchor === anchor) return;
-    }
-    if (!this.addPagesAnchors.has(anchor)) {
-      this.addPagesAnchors.add(anchor);
-      // Remember the anchor tap before the native menu's outside dismissal.
-      // Each pointerdown resets this flag, including after a cancelled tap.
-      this.registerDomEvent(anchor.ownerDocument, "pointerdown", (event) => {
-        if (anchor.contains(event.target as Node)) {
-          this.addPagesPointerToggle = this.addPagesMenu?.anchor === anchor;
-        }
-      }, true);
-    }
     const open = this.addPagePopover;
     this.addPagePopover = null;
     if (open?.popover.isOpen) {
@@ -1986,7 +1976,8 @@ export class InkView extends TextFileView {
     const at = Math.max(0, Math.min(this.doc.pages.length - 1, ref));
     const page = this.doc.pages[at];
     if (!page) return;
-    const menu = new Menu();
+    const menu = this.nativeMenus?.open(anchor, () => new Menu());
+    if (!menu) return;
     menu.addItem((item) => item.setTitle("Add Pages").setDisabled(true));
     menu.addItem((item) =>
       item
@@ -2028,12 +2019,6 @@ export class InkView extends TextFileView {
           .onClick(() => void this.pasteManagedPages()),
       );
     }
-    this.addPagesMenu = { menu, anchor };
-    const release = claimTransient(anchor.ownerDocument, menu, () => menu.hide());
-    menu.onHide(() => {
-      release();
-      if (this.addPagesMenu?.menu === menu) this.addPagesMenu = null;
-    });
     const box = anchor.getBoundingClientRect();
     menu.showAtPosition({ x: box.left, y: box.bottom }, anchor.ownerDocument);
   }

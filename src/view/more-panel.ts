@@ -1,3 +1,4 @@
+import { placePopover } from "./template-picker";
 import { claimTransient } from "./transient-popover";
 /**
  * The ⋯ panel beside the toolbar's settings gear: GoodNotes' "More" sheet, from
@@ -77,7 +78,7 @@ export class MorePanel {
     private readonly page: MorePanelPage,
     private readonly actions: MorePanelActions,
   ) {
-    this.el = document.body.createDiv({ cls: "goodobsidian-more" });
+    this.el = anchor.ownerDocument.body.createDiv({ cls: "goodobsidian-more" });
     this.el.setAttribute("role", "dialog");
     this.el.setAttribute("aria-label", "More");
     this.keyboard = new DialogKeyboard(this.el);
@@ -238,20 +239,11 @@ export class MorePanel {
 
   /** Below ⋯, right-aligned to it, as tall as the window allows; the rest scrolls. */
   private place(): void {
-    const r = this.anchor.getBoundingClientRect();
-    const width = Math.min(PANEL_WIDTH, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
-    const height = Math.min(this.el.offsetHeight, window.innerHeight - 16);
-    const top = r.bottom + 6 + height <= window.innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - height - 6);
-    this.el.setCssStyles({
-      left: `${left}px`,
-      top: `${top}px`,
-      width: `${width}px`,
-      maxHeight: `${Math.max(160, window.innerHeight - top - 8)}px`,
-    });
+    placePopover(this.el, this.anchor, PANEL_WIDTH);
   }
 
   private installDismiss(): void {
+    const doc = this.anchor.ownerDocument, win = doc.defaultView!;
     this.dispose.push(claimTransient(this.el.ownerDocument, this, () => this.close()));
     const outside = (event: Event): void => {
       const target = event.target as Node | null;
@@ -267,17 +259,19 @@ export class MorePanel {
     };
     // Capture: the drawing surface consumes its own pointer events. A swipe
     // anywhere else starts with one of these, so it closes the panel too.
-    document.addEventListener("pointerdown", outside, true);
-    document.addEventListener("touchstart", outside, { capture: true, passive: true });
-    document.addEventListener("wheel", outside, { capture: true, passive: true });
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", onResize);
+    doc.addEventListener("pointerdown", outside, true);
+    doc.addEventListener("touchstart", outside, { capture: true, passive: true });
+    doc.addEventListener("wheel", outside, { capture: true, passive: true });
+    doc.addEventListener("keydown", onKey);
+    win.addEventListener("resize", onResize);
+    win.visualViewport?.addEventListener("resize", onResize);
     this.dispose.push(() => {
-      document.removeEventListener("pointerdown", outside, true);
-      document.removeEventListener("touchstart", outside, true);
-      document.removeEventListener("wheel", outside, true);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", onResize);
+      doc.removeEventListener("pointerdown", outside, true);
+      doc.removeEventListener("touchstart", outside, true);
+      doc.removeEventListener("wheel", outside, true);
+      doc.removeEventListener("keydown", onKey);
+      win.removeEventListener("resize", onResize);
+      win.visualViewport?.removeEventListener("resize", onResize);
     });
   }
 }

@@ -460,6 +460,7 @@ export class Toolbar {
   /** The button under a pointer that is down on a bar, drawn pressed. */
   private pressed: HTMLElement | null = null;
   private initialPalette: string[];
+  private popoverDisposers: Array<() => void> = [];
   private presetDispose: (() => void) | null = null;
   private presetDragging = false;
   private paletteTool: WritingTool | null = null;
@@ -1147,6 +1148,8 @@ export class Toolbar {
       this.eraserSizeButtons.set(size, button);
     }
 
+    this.chevronButton(this.optionsEl, "Eraser size", button => this.toggleEraserSizeList(button));
+
     // What it erases: GoodNotes' "Erase highlighter only", and "pen only".
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
     const filter = eraserFilterFor(this.state);
@@ -1238,7 +1241,7 @@ export class Toolbar {
    * under the pointer, but nothing depends on hover.
    */
   private toggleTablePicker(anchor: HTMLElement): void {
-    if (this.popoverKind === "table") {
+    if (this.popoverKind === "table" && this.popoverAnchor === anchor) {
       this.closePopover();
       return;
     }
@@ -1253,6 +1256,11 @@ export class Toolbar {
       for (const cell of cells) {
         const inside = cell.size.rows <= size.rows && cell.size.cols <= size.cols;
         cell.button.toggleClass("is-picked", inside);
+        cell.button.toggleClass("is-preview-end", cell.size.rows === size.rows && cell.size.cols === size.cols);
+        const current = tableSizeFor(this.state);
+        const selected = cell.size.rows === current.rows && cell.size.cols === current.cols;
+        cell.button.toggleClass("is-current", selected);
+        cell.button.setAttribute("aria-pressed", String(selected));
       }
     };
     for (let rows = 1; rows <= TABLE_MAX_ROWS; rows++) {
@@ -1305,7 +1313,7 @@ export class Toolbar {
    * element the lasso picks up. It hangs from the lasso button with an arrow.
    */
   private toggleLassoPopover(anchor: HTMLElement): void {
-    if (this.popoverKind === "lasso") {
+    if (this.popoverKind === "lasso" && this.popoverAnchor === anchor) {
       this.closePopover();
       return;
     }
@@ -1562,7 +1570,7 @@ export class Toolbar {
     render: (body: HTMLElement) => void,
   ): void {
     const key = `text-${kind}`;
-    if (this.popoverKind === key) {
+    if (this.popoverKind === key && this.popoverAnchor === anchor) {
       this.closePopover();
       return;
     }
@@ -1590,7 +1598,8 @@ export class Toolbar {
     if (!popover) return;
     const hostBox = this.host.getBoundingClientRect();
     const anchorBox = anchor.getBoundingClientRect();
-    const floor = Math.min(hostBox.bottom, window.innerHeight - keyboardHeight()) - EDGE_INSET;
+    const win = this.host.ownerDocument.defaultView!;
+    const floor = Math.min(hostBox.bottom, win.innerHeight - keyboardHeight()) - EDGE_INSET;
     const below = floor - (anchorBox.bottom + 8);
     const above = anchorBox.top - 8 - (hostBox.top + EDGE_INSET);
     const height = popover.offsetHeight;
@@ -1600,11 +1609,12 @@ export class Toolbar {
       popover.addClass("opens-up");
       popover.setCssStyles({
         top: `${Math.round(anchorBox.top - 8 - room - hostBox.top)}px`,
-        maxHeight: `${Math.round(room)}px`,
+        maxHeight: `${Math.max(0, Math.round(room))}px`,
+        transform: "translateX(-50%)",
       });
       return;
     }
-    popover.setCssStyles({ maxHeight: `${Math.max(96, Math.round(below))}px` });
+    popover.setCssStyles({ maxHeight: `${Math.max(0, Math.round(below))}px` });
   }
 
   private renderTextColors(body: HTMLElement): void {
@@ -1957,15 +1967,36 @@ export class Toolbar {
     this.callbacks.onSizeChange(width);
   }
 
+  private toggleEraserSizeList(anchor: HTMLElement): void {
+    if (this.popoverKind === "eraser-size" && this.popoverAnchor === anchor) { this.closePopover(); return; }
+    const body = this.openPopover("eraser-size", anchor);
+    this.popover?.addClass("has-thickness-editor");
+    const select = (size: number): void => {
+      this.state.eraserSize = size;
+      this.callbacks.onEraserChange?.(eraserModeFor(this.state), size);
+      this.syncActive();
+    };
+    this.widthEditorRefresh = renderThicknessEditor(body, {
+      title: "Eraser size",
+      resetLabel: "Reset eraser size",
+      current: () => ({ type: "ball", width: eraserSizeFor(this.state), color: "currentColor", compact: false }),
+      presets: () => ERASER_SIZES,
+      stops: widthStops(ERASER_SIZES, false),
+      select,
+      reset: () => select(DEFAULT_ERASER_SIZE),
+    });
+    this.keepPopoverInside(anchor);
+  }
+
   private toggleEraserModeList(anchor: HTMLElement): void {
-    if (this.popoverKind === "eraser-mode") {
+    if (this.popoverKind === "eraser-mode" && this.popoverAnchor === anchor) {
       this.closePopover();
       return;
     }
     const body = this.openPopover("eraser-mode", anchor);
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Eraser" });
     for (const mode of ERASER_MODES) {
-      const button = body.createEl("button", { cls: "goodobsidian-wide", text: mode.label });
+      const button = body.createEl("button", { cls: "goodobsidian-wide clickable-icon", text: mode.label });
       button.toggleClass("is-active", mode.id === eraserModeFor(this.state));
       button.addEventListener("click", () => {
         this.closePopover();
@@ -1975,6 +2006,7 @@ export class Toolbar {
         this.syncActive();
       });
     }
+    this.keepPopoverInside(anchor);
   }
 
   /**
@@ -1982,7 +2014,7 @@ export class Toolbar {
    * is on, so turning one on turns the other off. Both off erases all ink.
    */
   private toggleEraserFilterList(anchor: HTMLElement): void {
-    if (this.popoverKind === "eraser-filter") {
+    if (this.popoverKind === "eraser-filter" && this.popoverAnchor === anchor) {
       this.closePopover();
       return;
     }
@@ -2131,7 +2163,9 @@ export class Toolbar {
   private openPopover(kind: string, anchor: HTMLElement): HTMLElement {
     this.closePopover();
     // Appended to the host, not to a bar: either bar would clip it.
-    const popover = this.host.createDiv({ cls: "goodobsidian-popover" });
+    const compact = ["line-style", "eraser-mode", "text-align", "text-format", "text-list", "text-spacing"].includes(kind);
+    const wide = ["table", "widths", "eraser-size", "text-font"].includes(kind);
+    const popover = this.host.createDiv({ cls: `goodobsidian-popover ${compact ? "is-compact-selector" : wide ? "is-wide-editor" : "is-standard-editor"}` });
     popover.setAttribute("role", "dialog");
     // Removed with the popover, so its listeners need no disposer.
     this.keepFocus(popover, false);
@@ -2159,10 +2193,28 @@ export class Toolbar {
     this.popoverTool = this.state.tool;
     this.releaseTransient = claimTransient(this.host.ownerDocument, this, () => this.closePopover());
     this.popoverKind = kind;
+    const win = this.host.ownerDocument.defaultView;
+    const reposition = (): void => {
+      if (!this.popover) return;
+      this.popoverAnchor = this.resolvePopoverAnchor();
+      if (!this.popoverAnchor) { this.closePopover(); return; }
+      this.keepPopoverInside(this.popoverAnchor);
+      if (this.popoverKind?.startsWith("text-")) this.keepPopoverAboveKeyboard(this.popoverAnchor);
+    };
+    win?.addEventListener("resize", reposition);
+    win?.visualViewport?.addEventListener("resize", reposition);
+    this.popoverDisposers.push(() => {
+      win?.removeEventListener("resize", reposition);
+      win?.visualViewport?.removeEventListener("resize", reposition);
+    });
     return body;
   }
 
+  dismissPopover(): void { this.closePopover(); }
+
   private closePopover(): void {
+    for (const dispose of this.popoverDisposers) dispose();
+    this.popoverDisposers = [];
     this.releaseTransient?.(); this.releaseTransient = null;
     this.popoverAnchor = null; this.popoverPresetId = null; this.popoverTool = null;
     this.presetDispose?.();
@@ -2182,21 +2234,41 @@ export class Toolbar {
    * pill centred on the page, so in portrait on an iPad (an ~820 px pane)
    * the ~370 px picker would hang some 60 px off the right edge.
    */
+  private resolvePopoverAnchor(): HTMLElement | null {
+    const old = this.popoverAnchor;
+    if (!old || old.isConnected) return old;
+    const buttons = [...this.optionsEl.querySelectorAll<HTMLElement>("button")];
+    if (this.popoverPresetId) return buttons.find(el => el.dataset.widthId === this.popoverPresetId || el.dataset.presetId === this.popoverPresetId) ?? null;
+    const roles = [...old.classList].filter(name => !["is-active", "is-on", "is-filtered", "is-hidden"].includes(name));
+    const candidates = buttons.filter(el => roles.length && roles.every(role => el.classList.contains(role)));
+    return candidates.find(el => el.getAttribute("aria-label") === old.getAttribute("aria-label")) ?? (candidates.length === 1 ? candidates[0] : null);
+  }
+
   private keepPopoverInside(anchor: HTMLElement): void {
     const popover = this.popover;
     if (!popover) return;
     const hostBox = this.host.getBoundingClientRect();
     const anchorBox = anchor.getBoundingClientRect();
-    const fit = writingPopoverFit(hostBox, anchorBox);
+    const win = this.host.ownerDocument.defaultView!;
+    const viewport = win.visualViewport;
+    const fitBox = {
+      top: Math.max(hostBox.top, viewport?.offsetTop ?? 0),
+      bottom: Math.min(hostBox.bottom, (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight)),
+      width: Math.max(0, Math.min(hostBox.right, (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth)) - Math.max(hostBox.left, viewport?.offsetLeft ?? 0)),
+    };
+    const fit = writingPopoverFit(fitBox, anchorBox);
     popover.setCssStyles({
-      top: `${Math.round(fit.top)}px`, maxHeight: `${Math.floor(fit.maxHeight)}px`,
+      left: `${Math.round(anchorBox.left - hostBox.left + anchorBox.width / 2)}px`,
+      top: `${Math.round(fit.top + fitBox.top - hostBox.top)}px`, maxHeight: `${Math.floor(fit.maxHeight)}px`,
       maxWidth: `${Math.floor(fit.maxWidth)}px`,
       transform: fit.above ? "translate(-50%, -100%)" : "translateX(-50%)",
     });
     const box = popover.getBoundingClientRect();
+    const leftEdge = Math.max(hostBox.left, viewport?.offsetLeft ?? 0);
+    const rightEdge = Math.min(hostBox.right, (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth));
     let shift = 0;
-    if (box.right > hostBox.right - EDGE_INSET) shift = hostBox.right - EDGE_INSET - box.right;
-    if (box.left + shift < hostBox.left + EDGE_INSET) shift = hostBox.left + EDGE_INSET - box.left;
+    if (box.right > rightEdge - EDGE_INSET) shift = rightEdge - EDGE_INSET - box.right;
+    if (box.left + shift < leftEdge + EDGE_INSET) shift = leftEdge + EDGE_INSET - box.left;
     // A popover with an arrow keeps it pointing at the anchor.
     popover.setCssProps({ "--gob-popover-arrow": `${Math.round(-shift)}px` });
     if (shift === 0) return;
@@ -2208,6 +2280,7 @@ export class Toolbar {
   private installDismiss(): void {
     const onDown = (event: PointerEvent): void => {
       if (!this.popover) return;
+      this.popoverAnchor = this.resolvePopoverAnchor();
       if (this.presetDragging) {
         return;
       }
@@ -2264,6 +2337,11 @@ export class Toolbar {
       left: `${Math.round(left)}px`,
       top: `${Math.round(this.barBottom())}px`,
     });
+    if (this.popover) {
+      this.popoverAnchor = this.resolvePopoverAnchor();
+      if (this.popoverAnchor) this.keepPopoverInside(this.popoverAnchor);
+      else this.closePopover();
+    }
   }
 
   /** The floating pill's box in host px, or `null` while it is not shown. */

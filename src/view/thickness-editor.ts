@@ -7,6 +7,8 @@ import {
   type StrokePreviewOptions,
 } from "./stroke-preview";
 export interface ThicknessEditorOptions {
+  title?: string;
+  resetLabel?: string;
   current: () => StrokePreviewOptions;
   presets: () => readonly number[];
   stops: readonly number[];
@@ -33,7 +35,7 @@ export function renderThicknessEditor(
   let disposers: Array<() => void> = [];
   body.addClass("goodobsidian-thickness-editor");
   const head = body.createDiv({ cls: "goodobsidian-width-head" });
-  head.createDiv({ cls: "goodobsidian-popover-label", text: "Stroke thickness" });
+  head.createDiv({ cls: "goodobsidian-popover-label", text: options.title ?? "Stroke thickness" });
   const readout = head.createSpan({
     cls: "goodobsidian-width-readout",
     attr: { "aria-live": "polite" },
@@ -42,7 +44,7 @@ export function renderThicknessEditor(
   const range = body.createEl("input", {
     type: "range",
     cls: "goodobsidian-thickness-range",
-    attr: { "aria-label": "Stroke thickness" },
+    attr: { "aria-label": options.title ?? "Stroke thickness" },
   });
   range.min = "0";
   range.max = String(options.stops.length - 1);
@@ -58,7 +60,7 @@ export function renderThicknessEditor(
     return el;
   };
   const footer = body.createDiv({ cls: "goodobsidian-thickness-actions" });
-  button(footer, "Reset thickness", () => {
+  button(footer, options.resetLabel ?? "Reset thickness", () => {
     options.reset();
     refresh();
   });
@@ -78,7 +80,7 @@ export function renderThicknessEditor(
       label = previewThicknessLabel(current.type, current.width);
     head
       .querySelector?.(".goodobsidian-popover-label")
-      ?.setText(options.editing?.() ? "Edit width slot" : "Stroke thickness");
+      ?.setText(options.editing?.() ? "Edit width slot" : options.title ?? "Stroke thickness");
     readout.setText(label);
     range.value = String(nearestStop(options.stops, current.width));
     range.setAttribute("aria-valuetext", `${label} thickness`);

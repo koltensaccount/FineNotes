@@ -20,10 +20,7 @@ import { claimTransient } from "./transient-popover";
  * Pencil tap. So every control here acts on a pointerup that follows a
  * pointerdown on the same control, and on a keyboard click (`detail === 0`).
  *
- * The pill and the menu are dark in every theme, as GoodNotes draws them.
- * They carry Obsidian's own `theme-dark` class, which re-declares the
- * `--color-base-*` palette on them, and styles.css colours them from those —
- * Obsidian's variables, dark flavour, whatever the app theme is.
+ * The pill and menu follow the host theme and shared floating chrome.
  */
 
 import { setIcon } from "obsidian";
@@ -45,7 +42,6 @@ const EDGE_MARGIN_PX = 8;
 /** Space between the "…" button and the menu, px. */
 const MENU_GAP_PX = 6;
 /** The menu's height cap never goes below this, however little room is left. */
-const MENU_MIN_HEIGHT_PX = 160;
 
 export interface ShowOptions {
   /** Room to keep free above the selection (a handle drawn there), px. */
@@ -63,6 +59,12 @@ export class SelectionActionBar {
   private key = "";
   /** The visible area the bar was last placed in, for placing the menu. */
   private visible: Bounds | null = null;
+  private readonly onMenuKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.menuEl) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeMenu();
+  };
   private readonly onOutsideDown = (event: PointerEvent): void => {
     const target = event.target as Node | null;
     if (target && (this.menuEl?.contains(target) || this.moreButton?.contains(target))) return;
@@ -131,6 +133,7 @@ export class SelectionActionBar {
     this.menuEl = null;
     this.moreButton?.removeClass("is-active");
     this.parent.ownerDocument.removeEventListener("pointerdown", this.onOutsideDown, true);
+    (this.parent.ownerDocument.defaultView ?? this.parent.ownerDocument).removeEventListener("keydown", this.onMenuKey as EventListener, true);
   }
 
   destroy(): void {
@@ -215,6 +218,7 @@ export class SelectionActionBar {
     this.moreButton?.addClass("is-active");
     this.renderMenu();
     this.parent.ownerDocument.addEventListener("pointerdown", this.onOutsideDown, true);
+    (this.parent.ownerDocument.defaultView ?? this.parent.ownerDocument).addEventListener("keydown", this.onMenuKey as EventListener, true);
   }
 
   private renderMenu(): void {
@@ -333,7 +337,7 @@ export class SelectionActionBar {
     // made it run off the screen): past that it scrolls.
     const below = visible.maxY - EDGE_MARGIN_PX - (anchor.maxY + MENU_GAP_PX);
     const above = anchor.minY - MENU_GAP_PX - (visible.minY + EDGE_MARGIN_PX);
-    menu.setCssStyles({ maxHeight: `${Math.round(Math.max(MENU_MIN_HEIGHT_PX, below, above))}px` });
+    menu.setCssStyles({ maxHeight: `${Math.round(Math.max(0, below, above))}px`, maxWidth: `${Math.max(0, visible.maxX - visible.minX - 2 * EDGE_MARGIN_PX)}px` });
     const at = placeFloating(anchor, { w: menu.offsetWidth, h: menu.offsetHeight }, visible, {
       gap: MENU_GAP_PX,
       margin: EDGE_MARGIN_PX,

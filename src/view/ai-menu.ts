@@ -1,4 +1,4 @@
-import { installPopoverDismiss } from "./template-picker";
+import { installPopoverDismiss, placePopover } from "./template-picker";
 /**
  * The AI menu: the sheet the toolbar's sparkles button opens. Same look and
  * behaviour as the Add Page popover (a card attached to <body>, below its
@@ -26,7 +26,7 @@ export class AiMenuPopover {
     items: readonly AiMenuItem[],
     private readonly run: (id: string) => void,
   ) {
-    this.el = document.body.createDiv({ cls: "goodobsidian-addpage goodobsidian-aimenu" });
+    this.el = anchor.ownerDocument.body.createDiv({ cls: "goodobsidian-addpage goodobsidian-aimenu" });
     this.el.setAttribute("role", "menu");
     this.el.setAttribute("aria-label", "AI");
     this.build(items);
@@ -84,13 +84,7 @@ export class AiMenuPopover {
 
   /** Below the anchor, left-aligned to it, kept inside the window. */
   private place(): void {
-    const r = this.anchor.getBoundingClientRect();
-    const width = Math.min(POPOVER_WIDTH, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
-    const height = this.el.offsetHeight;
-    let top = r.bottom + 6;
-    if (top + height > window.innerHeight - 8) top = Math.max(8, r.top - height - 6);
-    this.el.setCssStyles({ left: `${left}px`, top: `${top}px`, width: `${width}px` });
+    placePopover(this.el, this.anchor, POPOVER_WIDTH);
   }
 
   private installDismiss(): void {

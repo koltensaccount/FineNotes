@@ -58,15 +58,24 @@ export function paintTemplatePreview(
 
 /** Below `anchor`, right-aligned to it, kept inside the window. */
 export function placePopover(el: HTMLElement, anchor: HTMLElement, maxWidth: number): void {
+  const win = anchor.ownerDocument.defaultView!;
+  const viewport = win.visualViewport;
+  const leftEdge = (viewport?.offsetLeft ?? 0) + 8;
+  const topEdge = (viewport?.offsetTop ?? 0) + 8;
+  const rightEdge = (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth) - 8;
+  const bottomEdge = (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight) - 8;
   const r = anchor.getBoundingClientRect();
-  const width = Math.min(maxWidth, window.innerWidth - 16);
-  let left = r.right - width;
-  if (left < 8) left = Math.min(r.left, window.innerWidth - width - 8);
-  left = Math.max(8, left);
-  const height = el.offsetHeight;
-  let top = r.bottom + 6;
-  if (top + height > window.innerHeight - 8) top = Math.max(8, r.top - height - 6);
-  el.setCssStyles({ left: `${left}px`, top: `${top}px`, width: `${width}px` });
+  const width = Math.max(0, Math.min(maxWidth, rightEdge - leftEdge));
+  el.setCssStyles({ width: `${width}px`, maxHeight: `${Math.max(0, bottomEdge - topEdge)}px` });
+  const desiredHeight = el.offsetHeight;
+  const below = Math.max(0, bottomEdge - r.bottom - 6);
+  const above = Math.max(0, r.top - topEdge - 6);
+  const flip = desiredHeight > below && above > below;
+  const room = flip ? above : below;
+  const height = Math.min(desiredHeight, room);
+  const left = Math.max(leftEdge, Math.min(r.right - width, rightEdge - width));
+  const top = Math.max(topEdge, Math.min(flip ? r.top - height - 6 : r.bottom + 6, bottomEdge - height));
+  el.setCssStyles({ left: `${left}px`, top: `${top}px`, maxHeight: `${room}px`, overflowY: "auto" });
 }
 
 /**
@@ -99,6 +108,8 @@ export function installPopoverDismiss(
   doc.addEventListener("pointerdown", onDown, true);
   doc.addEventListener("keydown", onKey);
   win.addEventListener("resize", onResize);
+  win.visualViewport?.addEventListener("resize", onResize);
+  win.visualViewport?.addEventListener("scroll", onResize);
   // A second tap on the anchor is the host's to handle: it closes the
   // popover instead of opening another (see each popover's `isOpen`).
   return () => {
@@ -106,6 +117,8 @@ export function installPopoverDismiss(
     doc.removeEventListener("pointerdown", onDown, true);
     doc.removeEventListener("keydown", onKey);
     win.removeEventListener("resize", onResize);
+    win.visualViewport?.removeEventListener("resize", onResize);
+    win.visualViewport?.removeEventListener("scroll", onResize);
   };
 }
 
@@ -137,7 +150,7 @@ export class AddPagePopover {
     private readonly options: AddPagePopoverOptions,
   ) {
     this.position = options.position;
-    this.el = document.body.createDiv({ cls: "goodobsidian-addpage" });
+    this.el = anchor.ownerDocument.body.createDiv({ cls: "goodobsidian-addpage" });
     this.el.setAttribute("role", "dialog");
     this.el.setAttribute("aria-label", "Add page");
     this.build();
