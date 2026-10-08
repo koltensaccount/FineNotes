@@ -6026,7 +6026,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 
 /* Eraser controls remain complete on narrow panes: visible scroll affordance
-   and an always-reachable entry for filtering, diameter and page actions. */
+   and an always-reachable Clear page action. */
 .goodobsidian-options.is-eraser {
   touch-action: pan-x;
   scrollbar-width: thin;
@@ -6035,12 +6035,14 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 .goodobsidian-options.is-eraser::-webkit-scrollbar { display: block; height: 4px; }
 .goodobsidian-options.is-eraser::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
-.goodobsidian-options .goodobsidian-eraser-more {
+.goodobsidian-options .goodobsidian-eraser-clear {
   position: sticky;
   right: 0;
   z-index: 1;
   background: var(--gob-pill-bg);
   border-left: 1px solid var(--gob-line);
+  color: var(--text-error);
+  padding-inline: 12px;
 }
 .goodobsidian-options .goodobsidian-eraser-size-control { gap: 4px; font-variant-numeric: tabular-nums; }
 .goodobsidian-eraser-size-control svg { width: 14px; height: 14px; }

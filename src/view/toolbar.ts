@@ -1172,9 +1172,8 @@ export class Toolbar {
     filterButton.setAttribute("aria-label", `Eraser erases: ${ERASER_FILTER_LABELS[filter]}`);
     filterButton.addEventListener("click", () => this.toggleEraserFilterList(filterButton));
 
-    const more = this.optionsEl.createEl("button", { cls: "goodobsidian-eraser-more clickable-icon", attr: { "aria-label": "Eraser options and page actions", title: "Eraser options and page actions" } });
-    iconOrText(more, "ellipsis", "");
-    more.addEventListener("click", () => this.toggleEraserSettings(more));
+    const clear = this.optionsEl.createEl("button", { cls: "goodobsidian-eraser-clear clickable-icon", text: "Clear page", attr: { "aria-label": "Clear page", title: "Clear page" } });
+    clear.addEventListener("click", () => { this.closePopover(); this.callbacks.onClear(); });
   }
 
   private buildShapeOptions(): void {
@@ -2045,18 +2044,6 @@ export class Toolbar {
     this.keepPopoverInside(anchor);
   }
 
-  private toggleEraserSettings(anchor: HTMLElement): void {
-    if (this.popoverAnchor === anchor && ["eraser-settings", "eraser-size"].includes(this.popoverKind ?? "")) { this.closePopover(); return; }
-    const body = this.openPopover("eraser-settings", anchor);
-    const size = body.createEl("button", { cls: "goodobsidian-wide clickable-icon", text: `Adjust diameter · ${previewThicknessLabel("ball", eraserSizeFor(this.state))}` });
-    size.addEventListener("click", () => this.toggleEraserSizeList(anchor));
-    this.renderEraserFilters(body);
-    body.createDiv({ cls: "goodobsidian-popover-divider" });
-    const clear = body.createEl("button", { cls: "goodobsidian-wide mod-warning clickable-icon", text: "Clear page…" });
-    clear.addEventListener("click", () => { this.closePopover(); this.callbacks.onClear(); });
-    this.keepPopoverInside(anchor);
-  }
-
   private togglePenTypeList(): void {
     if (this.popoverKind === "pens") {
       this.closePopover();
@@ -2178,7 +2165,7 @@ export class Toolbar {
     // Appended to the host, not to a bar: either bar would clip it.
     const compact = ["line-style", "eraser-mode", "text-align", "text-format", "text-list", "text-spacing"].includes(kind);
     const wide = ["table", "widths", "eraser-size", "text-font"].includes(kind);
-    const dense = ["pens", "pen-color", "shape-color", "widths", "eraser-size", "eraser-settings", "eraser-filter", "lasso", "text-font", "text-size", "text-color", "text-fill"].includes(kind);
+    const dense = ["pens", "pen-color", "shape-color", "widths", "eraser-size", "eraser-filter", "lasso", "text-font", "text-size", "text-color", "text-fill"].includes(kind);
     const popover = this.host.createDiv({ cls: `goodobsidian-popover ${dense ? "is-dense-editor" : ""} ${compact ? "is-compact-selector" : wide ? "is-wide-editor" : "is-standard-editor"}` });
     popover.setAttribute("role", "dialog");
     // Removed with the popover, so its listeners need no disposer.
