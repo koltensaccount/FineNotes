@@ -72,6 +72,7 @@ body,
   --gob-card-bg: var(--background-primary);
   --gob-pill-bg: var(--background-primary);
   --gob-pop-bg: var(--background-primary);
+  --gob-editor-bg: var(--background-secondary);
   --gob-pop-compact: 248px;
   --gob-pop-standard: 360px;
   --gob-pop-wide: 400px;
@@ -113,8 +114,8 @@ body,
   --gob-pill-gap: 8px;
 
   /* Frost, used only inside the @supports blocks that can draw it. */
-  --gob-frost: color-mix(in srgb, var(--background-primary) 78%, transparent);
-  --gob-frost-side: color-mix(in srgb, var(--background-secondary) 80%, transparent);
+  --gob-frost: color-mix(in srgb, var(--background-primary) 88%, transparent);
+  --gob-frost-side: color-mix(in srgb, var(--background-secondary) 90%, transparent);
   --gob-blur: blur(16px) saturate(1.4);
 
   /* Motion (GoodNotes, measured). */
@@ -547,6 +548,21 @@ body,
 .goodobsidian-popover.is-compact-selector { --gob-popover-width: var(--gob-pop-compact); }
 .goodobsidian-popover.is-standard-editor { --gob-popover-width: var(--gob-pop-standard); }
 .goodobsidian-popover.is-wide-editor { --gob-popover-width: var(--gob-pop-wide); }
+.goodobsidian-popover.is-dense-editor {
+  background: var(--gob-editor-bg);
+  color: var(--text-normal);
+}
+.goodobsidian-popover.is-dense-editor .goodobsidian-color-picker,
+.goodobsidian-popover.is-dense-editor .goodobsidian-color-mixer {
+  background: var(--gob-editor-bg);
+  color: var(--text-normal);
+}
+.goodobsidian-popover.is-dense-editor input:not([type="range"]) {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border: 1px solid var(--gob-line);
+}
+
 
 /* Menus and popovers fade in over 0.16 s. */
 
@@ -5031,7 +5047,8 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 
 .goodobsidian-color-grid {
   display: grid;
-  grid-template-columns: repeat(7, var(--gob-touch-compact));
+  grid-template-columns: repeat(auto-fill, minmax(var(--gob-touch-compact), 1fr));
+  justify-items: center;
   gap: 2px;
 }
 
@@ -5053,6 +5070,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   border-radius: 50%;
   /* Ringed, so white shows on a white popover. */
   box-shadow: var(--gob-ring-disc);
+  border: 1px solid var(--text-muted);
 }
 
 .goodobsidian-color-swatch.is-active .goodobsidian-color-disc {
@@ -5211,8 +5229,8 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   padding: 0 14px;
   border: 1px solid var(--gob-line);
   border-radius: var(--gob-radius-m);
-  background: var(--gob-well);
-  color: var(--text-muted);
+  background: var(--background-primary);
+  color: var(--text-normal);
   font-family: var(--font-monospace);
   font-size: 16px;
 }
@@ -5395,6 +5413,11 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 
 /* ------------------------------------------------------- frosted chrome */
 
+@supports (background: color-mix(in srgb, red 50%, white)) {
+  body, .theme-dark { --gob-editor-bg: color-mix(in srgb, var(--background-primary) 90%, var(--text-normal) 10%); }
+}
+
+
 /*
  * Frosted small controls, after GoodNotes (research/goodnotes-smoothness
  * §12): the page shows through, blurred. Only small things get it, since
@@ -5490,7 +5513,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-preset-color::before {
   content: "";
   background: var(--preset-color);
-  border: 1px solid var(--background-modifier-border);
+  border: 1px solid var(--text-muted);
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -5604,6 +5627,11 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   min-width: 0;
 }
 .goodobsidian-live-stroke {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 86px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
@@ -5867,7 +5895,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 
 /* Shared floating chrome follows the host theme, with an opaque fallback. */
-.goodobsidian-popover,
+.goodobsidian-popover:not(.is-dense-editor),
 .goodobsidian-addpage,
 .goodobsidian-more,
 .goodobsidian-selection-menu,
@@ -5888,11 +5916,9 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and
   (background: color-mix(in srgb, red 50%, transparent)) {
-  .goodobsidian-toolbar,
-  .goodobsidian-options,
   .goodobsidian-rec-pill,
   .goodobsidian-player,
-  .goodobsidian-popover,
+  .goodobsidian-popover:not(.is-dense-editor),
   .goodobsidian-addpage,
   .goodobsidian-more,
   .goodobsidian-selection-menu,
@@ -5996,6 +6022,32 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   .goodobsidian-pages-header { background: transparent; }
   .goodobsidian-pages-header .goodobsidian-pagesidebar-filter.clickable-icon,
   .goodobsidian-pages-header .goodobsidian-page-selection-controls button.clickable-icon { background: var(--gob-frost); }
-  /* The sticky color strip needs a light mask, not a second backdrop blur. */
-  .goodobsidian-quick-colors { background: var(--gob-frost); }
+  /* Drawing strips and their sticky color controls retain solid semantic surfaces. */
 }
+
+/* Eraser controls remain complete on narrow panes: visible scroll affordance
+   and an always-reachable entry for filtering, diameter and page actions. */
+.goodobsidian-options.is-eraser {
+  touch-action: pan-x;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) var(--gob-pill-bg);
+  padding-bottom: 6px;
+}
+.goodobsidian-options.is-eraser::-webkit-scrollbar { display: block; height: 4px; }
+.goodobsidian-options.is-eraser::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+.goodobsidian-options .goodobsidian-eraser-more {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--gob-pill-bg);
+  border-left: 1px solid var(--gob-line);
+}
+.goodobsidian-options .goodobsidian-eraser-size-control { gap: 4px; font-variant-numeric: tabular-nums; }
+.goodobsidian-eraser-size-control svg { width: 14px; height: 14px; }
+.goodobsidian-live-stroke .goodobsidian-eraser-preview { width: 64px; height: 64px; }
+.goodobsidian-thickness-choice .goodobsidian-eraser-preview { width: 32px; height: 32px; flex: 0 0 32px; }
+.goodobsidian-popover button.goodobsidian-wide.mod-warning { color: var(--text-error); }
+.goodobsidian-popover.is-preset-manager button { color: var(--text-normal); }
+.goodobsidian-popover.is-preset-manager .goodobsidian-preset-row button { background: var(--background-primary); }
+.goodobsidian-popover.is-preset-manager .goodobsidian-preset-row button:hover { background: var(--background-modifier-hover); }
+.goodobsidian-popover.is-preset-manager .goodobsidian-preset-color[aria-pressed="true"] { background: var(--gob-accent-tint); }

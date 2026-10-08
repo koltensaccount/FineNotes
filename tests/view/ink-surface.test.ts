@@ -1338,3 +1338,19 @@ describe("finger constraints eligibility and commit", () => {
     expect(surface.snap).toBe(snap); expect(surface.endWetStroke).not.toHaveBeenCalled();
   });
 });
+
+
+describe("eraser size and mode routing", () => {
+  it("reads the shared adjustable diameter for partial/whole erasing and the cursor, preserving filtering", () => {
+    const state = { eraserSize: 10, eraserMode: "standard", eraserFilter: "all" };
+    const page = {}, partial = vi.fn(() => true), whole = vi.fn(() => true), cursor = vi.fn();
+    const surface = surfaceWith({ toolState: state, atFitZoom: (n: number) => n, pageAt: () => page, eraseLast: null, erasePartialAt: partial, eraseWholeAt: whole, eraserCursorEl: { removeClass: vi.fn(), setCssStyles: cursor } });
+    Object.defineProperty(surface, "unitScale", { value: 1 });
+    const box = { index: 0, x: 0, y: 0 }, at = { x: 100, y: 100 };
+    run(surface, "eraseAt", box, at);
+    expect(partial).toHaveBeenLastCalledWith(page, at, 5, "all"); expect(cursor.mock.calls[0][0].width).toBe("10px");
+    state.eraserSize = 31.5; state.eraserMode = "stroke"; state.eraserFilter = "highlighter";
+    run(surface, "eraseAt", box, at);
+    expect(whole).toHaveBeenLastCalledWith(page, at, 15.75, "highlighter"); expect(cursor.mock.calls[1][0].width).toBe("32px");
+  });
+});

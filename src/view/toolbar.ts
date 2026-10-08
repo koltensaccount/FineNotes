@@ -493,6 +493,7 @@ export class Toolbar {
     this.syncActive();
   }
   private quickWidthEl: HTMLElement | null = null;
+  private eraserSizeLabel: HTMLElement | null = null;
   private widthEditorRefresh: ((() => void) & { dispose: () => void }) | null = null;
   /** The pen or highlighter last in use, which "select again" goes back to. */
   private drawingTool: ActiveTool = "pen";
@@ -754,6 +755,7 @@ export class Toolbar {
     this.optionDisposers = [];
     for (const dispose of this.widthInputDisposers) dispose();
     this.widthInputDisposers = [];
+    this.optionsEl.toggleClass("is-eraser", this.state.tool === "eraser");
     this.optionsEl.toggleClass(
       "is-writing",
       this.state.tool === "pen" || this.state.tool === "highlighter",
@@ -1148,7 +1150,10 @@ export class Toolbar {
       this.eraserSizeButtons.set(size, button);
     }
 
-    this.chevronButton(this.optionsEl, "Eraser size", button => this.toggleEraserSizeList(button));
+    const sizeControl = this.optionsEl.createEl("button", { cls: "goodobsidian-eraser-size-control clickable-icon", attr: { "aria-label": "Adjust eraser diameter", title: "Adjust eraser diameter" } });
+    this.eraserSizeLabel = sizeControl.createSpan({ text: previewThicknessLabel("ball", eraserSizeFor(this.state)) });
+    iconOrText(sizeControl.createSpan(), "chevron-down", "");
+    sizeControl.addEventListener("click", () => this.toggleEraserSizeList(sizeControl));
 
     // What it erases: GoodNotes' "Erase highlighter only", and "pen only".
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
@@ -1167,12 +1172,9 @@ export class Toolbar {
     filterButton.setAttribute("aria-label", `Eraser erases: ${ERASER_FILTER_LABELS[filter]}`);
     filterButton.addEventListener("click", () => this.toggleEraserFilterList(filterButton));
 
-    this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
-    const clear = this.optionsEl.createEl("button", {
-      cls: "goodobsidian-text-button",
-      text: "Clear page",
-    });
-    clear.addEventListener("click", () => this.callbacks.onClear());
+    const more = this.optionsEl.createEl("button", { cls: "goodobsidian-eraser-more clickable-icon", attr: { "aria-label": "Eraser options and page actions", title: "Eraser options and page actions" } });
+    iconOrText(more, "ellipsis", "");
+    more.addEventListener("click", () => this.toggleEraserSettings(more));
   }
 
   private buildShapeOptions(): void {
@@ -1979,6 +1981,17 @@ export class Toolbar {
     this.widthEditorRefresh = renderThicknessEditor(body, {
       title: "Eraser size",
       resetLabel: "Reset eraser size",
+      measurement: "diameter",
+      preview: (size, compact, doc) => {
+        const svg = eraserSizeGlyph(size, doc, 0.5);
+        svg.classList.add("goodobsidian-eraser-preview");
+        svg.removeAttribute("aria-hidden");
+        svg.setAttribute("role", "img");
+        svg.setAttribute("aria-label", `Eraser diameter ${previewThicknessLabel("ball", size)}`);
+        svg.setAttribute("width", compact ? "32" : "64");
+        svg.setAttribute("height", compact ? "32" : "64");
+        return svg;
+      },
       current: () => ({ type: "ball", width: eraserSizeFor(this.state), color: "currentColor", compact: false }),
       presets: () => ERASER_SIZES,
       stops: widthStops(ERASER_SIZES, false),
@@ -2009,38 +2022,38 @@ export class Toolbar {
     this.keepPopoverInside(anchor);
   }
 
-  /**
-   * "Erase highlighter only" and "Erase pen only", as switches: at most one
-   * is on, so turning one on turns the other off. Both off erases all ink.
-   */
-  private toggleEraserFilterList(anchor: HTMLElement): void {
-    if (this.popoverKind === "eraser-filter" && this.popoverAnchor === anchor) {
-      this.closePopover();
-      return;
-    }
-    const body = this.openPopover("eraser-filter", anchor);
-    body.addClass("goodobsidian-eraser-filter");
-    const set = (filter: EraserFilter): void => {
-      this.state.eraserFilter = filter;
-      this.callbacks.onEraserFilterChange?.(filter);
-      this.buildOptions();
-      this.popoverRender?.();
-    };
-    this.popoverRender = () => {
-      body.empty();
-      body.createDiv({ cls: "goodobsidian-popover-label", text: "What the eraser erases" });
-      const list = body.createDiv({ cls: "goodobsidian-switch-list" });
-      const filter = eraserFilterFor(this.state);
-      this.switchRow(list, "Erase highlighter only", filter === "highlighter", (on) =>
-        set(on ? "highlighter" : "all"),
-      );
-      this.switchRow(list, "Erase pen only", filter === "pen", (on) => set(on ? "pen" : "all"));
-      body.createDiv({
-        cls: "goodobsidian-popover-hint",
-        text: "Pictures and text boxes are never erased.",
+  private renderEraserFilters(body: HTMLElement): void {
+    body.createDiv({ cls: "goodobsidian-popover-label", text: "What to erase" });
+    for (const filter of ["all", "highlighter", "pen"] as const) {
+      const button = body.createEl("button", { cls: "goodobsidian-wide clickable-icon", text: ERASER_FILTER_LABELS[filter], attr: { "aria-pressed": String(filter === eraserFilterFor(this.state)) } });
+      button.toggleClass("is-active", filter === eraserFilterFor(this.state));
+      button.addEventListener("click", () => {
+        this.state.eraserFilter = filter;
+        this.callbacks.onEraserFilterChange?.(filter);
+        this.closePopover();
+        this.buildOptions();
+        this.syncActive();
       });
-    };
-    this.popoverRender();
+    }
+    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Images and text boxes are kept." });
+  }
+
+  private toggleEraserFilterList(anchor: HTMLElement): void {
+    if (this.popoverKind === "eraser-filter" && this.popoverAnchor === anchor) { this.closePopover(); return; }
+    const body = this.openPopover("eraser-filter", anchor);
+    this.renderEraserFilters(body);
+    this.keepPopoverInside(anchor);
+  }
+
+  private toggleEraserSettings(anchor: HTMLElement): void {
+    if (this.popoverAnchor === anchor && ["eraser-settings", "eraser-size"].includes(this.popoverKind ?? "")) { this.closePopover(); return; }
+    const body = this.openPopover("eraser-settings", anchor);
+    const size = body.createEl("button", { cls: "goodobsidian-wide clickable-icon", text: `Adjust diameter · ${previewThicknessLabel("ball", eraserSizeFor(this.state))}` });
+    size.addEventListener("click", () => this.toggleEraserSizeList(anchor));
+    this.renderEraserFilters(body);
+    body.createDiv({ cls: "goodobsidian-popover-divider" });
+    const clear = body.createEl("button", { cls: "goodobsidian-wide mod-warning clickable-icon", text: "Clear page…" });
+    clear.addEventListener("click", () => { this.closePopover(); this.callbacks.onClear(); });
     this.keepPopoverInside(anchor);
   }
 
@@ -2165,7 +2178,8 @@ export class Toolbar {
     // Appended to the host, not to a bar: either bar would clip it.
     const compact = ["line-style", "eraser-mode", "text-align", "text-format", "text-list", "text-spacing"].includes(kind);
     const wide = ["table", "widths", "eraser-size", "text-font"].includes(kind);
-    const popover = this.host.createDiv({ cls: `goodobsidian-popover ${compact ? "is-compact-selector" : wide ? "is-wide-editor" : "is-standard-editor"}` });
+    const dense = ["pens", "pen-color", "shape-color", "widths", "eraser-size", "eraser-settings", "eraser-filter", "lasso", "text-font", "text-size", "text-color", "text-fill"].includes(kind);
+    const popover = this.host.createDiv({ cls: `goodobsidian-popover ${dense ? "is-dense-editor" : ""} ${compact ? "is-compact-selector" : wide ? "is-wide-editor" : "is-standard-editor"}` });
     popover.setAttribute("role", "dialog");
     // Removed with the popover, so its listeners need no disposer.
     this.keepFocus(popover, false);
@@ -2470,6 +2484,7 @@ export class Toolbar {
   /** Mark every choice button that matches the state, and unmark the rest. */
   syncActive(): void {
     const { state } = this;
+    if (state.tool === "eraser") this.eraserSizeLabel?.setText(previewThicknessLabel("ball", eraserSizeFor(state)));
     this.refreshQuickWidths();
     this.widthEditorRefresh?.();
     const penControl = this.toolButtons.get("pen");
@@ -2633,17 +2648,17 @@ function lassoGlyph(mode: LassoMode): SVGElement {
 }
 
 /** An eraser-size control: a hollow circle whose diameter grows with the size. */
-function eraserSizeGlyph(size: number): SVGElement {
-  const svg = activeDocument.createElementNS(SVG_NS, "svg");
+function eraserSizeGlyph(size: number, doc: Document = activeDocument, minimumRadius = 3): SVGElement {
+  const svg = doc.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 28 28");
   svg.setAttribute("width", "28");
   svg.setAttribute("height", "28");
   svg.setAttribute("aria-hidden", "true");
   const largest = ERASER_SIZES[ERASER_SIZES.length - 1];
-  const circle = activeDocument.createElementNS(SVG_NS, "circle");
+  const circle = doc.createElementNS(SVG_NS, "circle");
   circle.setAttribute("cx", "14");
   circle.setAttribute("cy", "14");
-  circle.setAttribute("r", String(Math.max(3, (12 * size) / largest)));
+  circle.setAttribute("r", String(Math.max(minimumRadius, (12 * size) / largest)));
   circle.setAttribute("fill", "none");
   circle.setAttribute("stroke", "currentColor");
   circle.setAttribute("stroke-width", "1.5");

@@ -9,6 +9,8 @@ import {
 export interface ThicknessEditorOptions {
   title?: string;
   resetLabel?: string;
+  measurement?: string;
+  preview?: (width: number, compact: boolean, doc: Document) => Node;
   current: () => StrokePreviewOptions;
   presets: () => readonly number[];
   stops: readonly number[];
@@ -83,8 +85,8 @@ export function renderThicknessEditor(
       ?.setText(options.editing?.() ? "Edit width slot" : options.title ?? "Stroke thickness");
     readout.setText(label);
     range.value = String(nearestStop(options.stops, current.width));
-    range.setAttribute("aria-valuetext", `${label} thickness`);
-    preview.replaceChildren(createStrokePreview(current, body.ownerDocument));
+    range.setAttribute("aria-valuetext", `${label} ${options.measurement ?? "thickness"}`);
+    preview.replaceChildren(options.preview?.(current.width, false, body.ownerDocument) ?? createStrokePreview(current, body.ownerDocument));
     footer.querySelectorAll("button").forEach((el) => {
       if (el.textContent === "Add current width") el.hidden = !!options.editing?.();
     });
@@ -108,7 +110,7 @@ export function renderThicknessEditor(
           list.children[to]?.querySelector<HTMLElement>(".goodobsidian-preset-handle")?.focus();
         }, options.dragging ?? (() => {})));
       }
-      const pick = button(row, `${name} thickness`, () => {
+      const pick = button(row, `${name} ${options.measurement ?? "thickness"}`, () => {
         if (active && id && options.edit) options.edit(id);
         else if (id && options.selectSlot) options.selectSlot(id);
         else options.select(width);
@@ -116,7 +118,7 @@ export function renderThicknessEditor(
       });
       pick.empty();
       pick.addClass("goodobsidian-thickness-choice");
-      pick.append(createStrokePreview({ ...current, width, compact: true }, body.ownerDocument));
+      pick.append(options.preview?.(width, true, body.ownerDocument) ?? createStrokePreview({ ...current, width, compact: true }, body.ownerDocument));
       pick.createSpan({ text: name });
       pick.toggleClass("is-active", !!active);
       pick.setAttribute("aria-pressed", String(!!active));

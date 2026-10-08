@@ -1,3 +1,4 @@
+import { ConfirmModal } from "../ui/confirm-modal";
 import { AnchoredNativeMenus, dismissTransient } from "./transient-popover";
 import { effectivePdfQuality, pdfQuality, type PdfQuality } from "../export/pdf-quality";
 import {
@@ -1003,7 +1004,7 @@ export class InkView extends TextFileView {
         pressureAllowed: () => this.settings.pressureWidth,
         onUndo: () => this.surface?.undo(),
         onRedo: () => this.surface?.redo(),
-        onClear: () => this.clearPage(),
+        onClear: () => void this.clearPage(),
         onAddPage: (anchor) => this.openAddPage(anchor, this.surface?.currentPage ?? 0, "after"),
         onPenTypeChange: () => this.toolbar?.syncActive(),
         onEraserChange: (mode, size) => this.plugin.saveEraser(mode, size),
@@ -2688,10 +2689,12 @@ export class InkView extends TextFileView {
    * wrote around it stay. Undo brings the ink back, not the transcription;
    * running it again does.
    */
-  private clearPage(): void {
+  private async clearPage(): Promise<void> {
     const surface = this.surface;
     const page = this.doc.pages[surface?.currentPage ?? 0];
-    if (!surface?.clearStrokes()) return;
+    if (!surface || !page) return;
+    if (!(await ConfirmModal.confirm(this.app, { title: "Clear page ink?", message: "Remove handwriting, highlighter ink and drawn shapes on this page? Images and text boxes are kept. You can undo this action.", cta: "Clear page" }))) return;
+    if (this.surface !== surface || this.doc.pages[surface.currentPage] !== page || !surface.clearStrokes()) return;
     const transcribed = readTextSection(this.noteBody) !== null;
     if (page && transcribed) this.writeTranscripts([{ page, text: "", hash: "" }]);
     // The whole-note hash from before per-page transcription no longer holds.

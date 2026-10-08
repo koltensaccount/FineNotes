@@ -139,7 +139,7 @@ describe("popover anchors and eraser resizing", () => {
   it("eraser slider/reset use the eraser callback without changing writing widths or colors", async () => {
     const { renderThicknessEditor } = await import("../../src/view/thickness-editor");
     vi.mocked(renderThicknessEditor).mockClear();
-    const state = { tool: "eraser", eraserSize: 24, eraserMode: "stroke", size: 5, color: "#123456" };
+    const state = { tool: "eraser", eraserSize: 24, eraserMode: "stroke", eraserFilter: "highlighter", size: 5, color: "#123456" };
     const callback = vi.fn(), close = vi.fn();
     const anchor = {};
     const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, popoverKind: null, popover: { addClass: vi.fn() }, openPopover: vi.fn(() => ({})), closePopover: close, keepPopoverInside: vi.fn(), callbacks: { onEraserChange: callback }, syncActive: vi.fn() });
@@ -150,8 +150,32 @@ describe("popover anchors and eraser resizing", () => {
     expect(callback).toHaveBeenLastCalledWith("stroke", 17.5);
     expect(options.current().width).toBe(17.5);
     expect(state.size).toBe(5); expect(state.color).toBe("#123456");
+    expect(state.eraserMode).toBe("stroke"); expect(state.eraserFilter).toBe("highlighter");
+    const doc = { createElementNS: (_ns: string, tag: string) => ({ tag, attrs: {} as Record<string, string>, children: [] as unknown[], classList: { add: () => {} }, setAttribute(name: string, value: string) { this.attrs[name] = value; }, removeAttribute(name: string) { delete this.attrs[name]; }, append(child: unknown) { this.children.push(child); } }) };
+    const preview = options.preview!(17.5, false, doc as unknown as Document) as unknown as { tag: string; attrs: Record<string,string>; children: Array<{ tag: string; attrs: Record<string,string> }> };
+    expect(preview.children[0].tag).toBe("circle");
+    expect(preview.children[0].attrs.fill).toBe("none");
+    expect(Number(preview.children[0].attrs.r)).toBeCloseTo(12 * 17.5 / 48);
+    expect(preview.attrs["aria-label"]).toContain("Eraser diameter");
     options.reset(); expect(state.eraserSize).toBe(24);
     toolbar.popoverKind = "eraser-size"; toolbar.popoverAnchor = anchor;
     toolbar.toggleEraserSizeList(anchor); expect(close).toHaveBeenCalledOnce();
   });
+});
+
+
+it("eraser filter choices expose All ink/Highlighter/Pen without resetting mode or diameter", () => {
+  const entries: Array<{ label: string; click?: () => void }> = [];
+  const body = { createDiv: () => ({}), createEl: (_tag: string, options: { text: string }) => {
+    const entry = { label: options.text, click: undefined as undefined | (() => void) }; entries.push(entry);
+    return { toggleClass: () => {}, addEventListener: (_type: string, click: () => void) => { entry.click = click; } };
+  } };
+  const state = { eraserMode: "stroke", eraserSize: 17.5, eraserFilter: "all" };
+  const changed = vi.fn();
+  const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, callbacks: { onEraserFilterChange: changed }, closePopover: vi.fn(), buildOptions: vi.fn(), syncActive: vi.fn() });
+  toolbar.renderEraserFilters(body);
+  expect(entries.map(e => e.label)).toEqual(["All ink", "Highlighter only", "Pen only"]);
+  entries[2].click!();
+  expect(state.eraserFilter).toBe("pen"); expect(changed).toHaveBeenCalledWith("pen");
+  expect(state.eraserMode).toBe("stroke"); expect(state.eraserSize).toBe(17.5);
 });
