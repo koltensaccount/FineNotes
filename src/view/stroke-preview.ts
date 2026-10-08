@@ -1,5 +1,5 @@
 /** Illustrative SVG samples only: never changes sampling, ink, or notebook storage. */
-import { DEFAULT_HIGHLIGHTER_ALPHA, HIGHLIGHTER_COLORS } from "../constants";
+import { DEFAULT_HIGHLIGHTER_ALPHA } from "../constants";
 import { parseHexColor } from "../model/colors";
 import { CSS_PX_PER_MM, formatMm, PAGE_PX_PER_MM } from "../model/units";
 export type PreviewTool = "ball" | "fountain" | "brush" | "highlighter";
@@ -138,18 +138,10 @@ export function createStrokePreview(options: StrokePreviewOptions, doc: Document
     if (g.style === "dotted") path.setAttribute("stroke-dasharray", `0 ${g.width * 3}`);
   }
   if (options.type === "highlighter") {
-    if (options.color === "currentColor") {
-      path.setAttribute("stroke", "currentColor");
+    {
+      path.setAttribute("stroke", color);
       path.setAttribute("opacity", String(options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA));
-    } else
-      path.setAttribute(
-        "stroke",
-        highlighterSwatch(
-          options.color ?? HIGHLIGHTER_COLORS[0],
-          options.highlighterAlpha,
-          background,
-        ),
-      );
+    }
     svg.setAttribute(
       "data-highlighter-alpha",
       String(options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA),

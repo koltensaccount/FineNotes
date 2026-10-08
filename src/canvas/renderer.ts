@@ -1209,6 +1209,7 @@ export class Renderer {
     if (!box) return;
     this.toLayoutSpace(ctx);
     this.enterPage(ctx, box);
+    this.wet.canvas.style.mixBlendMode = style.tool === "highlighter" ? "multiply" : "normal";
     for (const pts of strokes) fillStroke(ctx, pts, style, this.highlighterAlpha);
     ctx.restore();
     this.setWetVisible(true);
@@ -1225,6 +1226,7 @@ export class Renderer {
     if (!box) return;
     this.toLayoutSpace(ctx);
     this.enterPage(ctx, box);
+    this.wet.canvas.style.mixBlendMode = style.tool === "highlighter" ? "multiply" : "normal";
     paintStroke(ctx, { runs }, style, this.highlighterAlpha);
     ctx.restore();
     this.setWetVisible(true);
@@ -1233,6 +1235,7 @@ export class Renderer {
   /** Nothing is in flight any more: empty the wet layer and hide it. */
   clearWet(): void {
     this.wipe(this.wet.ctx);
+    this.wet.canvas.style.mixBlendMode = "normal";
     this.setWetVisible(false);
   }
 }
@@ -1273,7 +1276,15 @@ function paintStroke(
   // that is how a note written on one device stays legible on another.
   ctx.fillStyle = style.color;
   const styled = style.tool === "pen" && lineStyleOf(style.lineStyle) !== "solid" && !ink.paths;
-  paintInk(
+  if (highlighter) {
+    const path = new Path2D();
+    for (const run of ink.runs) traceRun(path, run);
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = style.size;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke(path);
+  } else paintInk(
     ctx,
     styled
       ? patternedRuns(ink.runs, lineStyleOf(style.lineStyle), style.size, style.dashOffset)

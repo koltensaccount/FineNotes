@@ -1,3 +1,4 @@
+import { setIcon } from "obsidian";
 import { renderColorPicker } from "./color-picker";
 import { bindPresetDrag } from "./preset-drag";
 import {
@@ -96,7 +97,7 @@ export function renderPresetColors(
         attr: { "data-preset-index": String(index), "data-preset-id": id },
       });
       const handle = button(row, `Move ${color}`, () => {});
-      handle.setText("↕");
+      setIcon(handle, "grip-vertical");
       handle.addClass("goodobsidian-preset-handle");
       disposers.push(
         bindPresetDrag(

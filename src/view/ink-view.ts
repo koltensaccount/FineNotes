@@ -2004,9 +2004,15 @@ export class InkView extends TextFileView {
     menu.addSeparator();
     menu.addItem((item) =>
       item
-        .setTitle("Import PDF…")
+        .setTitle("Import PDF from device…")
         .setIcon("file-text")
-        .onClick(() => this.importPdf()),
+        .onClick(() => this.importPdf(false)),
+    );
+    menu.addItem((item) =>
+      item
+        .setTitle("Import PDF from Obsidian vault…")
+        .setIcon("folder-open")
+        .onClick(() => this.importPdf(true)),
     );
     if (pageClipboard.vault === this.app.vault && pageClipboard.pages.length) {
       menu.addSeparator();

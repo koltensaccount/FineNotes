@@ -74,7 +74,7 @@ export class SelectionActionBar {
     label: string,
   ) {
     this.el = parent.createDiv({
-      cls: "goodobsidian-selection-bar theme-dark is-hidden",
+      cls: "goodobsidian-selection-bar is-hidden",
       attr: { role: "toolbar", "aria-label": label },
     });
     stopPageInput(this.el);

@@ -156,7 +156,7 @@ export function bindPageSidebarDrag(
     }, 350);
   };
   const click = (event: MouseEvent): void => {
-    if (suppressed && event.detail !== 0) {
+    if (options.enabled() && suppressed && event.detail !== 0) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }

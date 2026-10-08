@@ -383,9 +383,10 @@ export class PageSidebar {
     if (!this.selecting)
       button(this.selectionBar, "Select", () => {
         this.selecting = true;
+        for (const thumb of this.thumbs) thumb.drag?.cancel();
         this.renderSelection();
         this.sync();
-      });
+      }).addClass("mod-cta");
     else {
       button(this.selectionBar, "Cancel", () => {
         this.selecting = false;
@@ -658,7 +659,7 @@ export class PageSidebar {
           el: thumb.root,
           index,
         })),
-      enabled: () => !this.single && !!this.callbacks.onMovePages,
+      enabled: () => !this.selecting && !this.single && !!this.callbacks.onMovePages,
       move: (ids, gap) => this.callbacks.onMovePages?.(ids, gap),
     });
     frame.addEventListener("click", (event) => {

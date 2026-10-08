@@ -44,6 +44,8 @@ export function selectColor(presets: WritingPresets, tool: WritingTool, color: s
     saveColor(presets, tool, normalized);
   if (preset) presets.selectedIds[tool] = preset.id;
 }
+const DEFAULT_PEN_COLORS = [PALETTE[0], PALETTE[2], PALETTE[3]];
+const DEFAULT_HIGHLIGHTER_COLORS = HIGHLIGHTER_COLORS.slice(0, 3);
 const STOPS = widthStops(SIZES, true);
 export function normalizeWidth(width: number): number {
   return STOPS[nearestStop(STOPS, Number.isFinite(width) ? width : SIZES[1])];
@@ -177,7 +179,7 @@ export function moveColor(
 export function restoreColors(presets: WritingPresets, tool: WritingTool): void {
   const previous = selectedColor(presets, tool);
   presets.palettes[tool] = [];
-  for (const color of tool === "highlighter" ? HIGHLIGHTER_COLORS : PALETTE)
+  for (const color of tool === "highlighter" ? DEFAULT_HIGHLIGHTER_COLORS : DEFAULT_PEN_COLORS)
     saveColor(presets, tool, color);
   presets.selectedIds[tool] = (
     presets.palettes[tool].find((preset) => preset.color === previous) ?? presets.palettes[tool][0]
@@ -247,8 +249,8 @@ export function migrateWritingPresets(
   for (const tool of ["pen", "highlighter"] as const) {
     const values: unknown[] = Array.isArray(palettes[tool])
       ? palettes[tool]
-      : initializeDefaults && tool === "highlighter"
-        ? [...HIGHLIGHTER_COLORS]
+      : initializeDefaults
+        ? [...(tool === "highlighter" ? DEFAULT_HIGHLIGHTER_COLORS : DEFAULT_PEN_COLORS)]
         : legacy;
     for (const value of values) {
       const entry = record(value);

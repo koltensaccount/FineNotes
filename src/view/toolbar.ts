@@ -492,7 +492,7 @@ export class Toolbar {
     this.syncActive();
   }
   private quickWidthEl: HTMLElement | null = null;
-  private widthEditorRefresh: (() => void) | null = null;
+  private widthEditorRefresh: ((() => void) & { dispose: () => void }) | null = null;
   /** The pen or highlighter last in use, which "select again" goes back to. */
   private drawingTool: ActiveTool = "pen";
 
@@ -1780,7 +1780,7 @@ export class Toolbar {
   private previewOptions(width = this.state.size): StrokePreviewOptions {
     const state = this.state as ToolbarState & { lineStyle?: "solid" | "dashed" | "dotted" };
     return {
-      type: this.state.tool === "shape" ? "ball" : this.activePenType().id,
+      type: this.state.tool === "highlighter" ? "highlighter" : this.state.tool === "shape" ? "ball" : this.activePenType().id,
       width,
       color:
         this.state.tool === "shape"
@@ -1868,6 +1868,13 @@ export class Toolbar {
     body.addClass("goodobsidian-width-popover");
     const preferences = this.options.writingPresets,
       tool = this.writingTool;
+    const editWidth = (width: number): void => {
+      if (preferences && editingId) {
+        saveWidth(preferences, width, editingId, tool);
+        selectWidthSlot(preferences, tool, editingId);
+      }
+      this.setWidth(width);
+    };
     const update = (): void => {
       this.refreshQuickWidths();
       this.syncActive();
@@ -1885,23 +1892,38 @@ export class Toolbar {
       },
       selectSlot: (id) => {
         if (!preferences) return;
+        editingId = id;
+        this.popoverPresetId = id;
         selectWidthSlot(preferences, tool, id);
         this.setWidth(selectedWidthFor(preferences, tool));
         update();
       },
+      dragging: (active) => { this.presetDragging = active; },
+      reorder: preferences ? (from, to) => {
+        const values = widthsFor(preferences, tool), ids = preferences.widthIds[tool];
+        if (to < 0 || to >= values.length || from === to) return;
+        values.splice(to, 0, values.splice(from, 1)[0]);
+        ids.splice(to, 0, ids.splice(from, 1)[0]);
+        this.options.onPresetsChange?.(preferences);
+        update();
+      } : undefined,
       stops: widthStops(SIZES, tool !== "highlighter"),
       select: (width) => {
-        this.setWidth(width);
+        editWidth(width);
         update();
       },
       reset: () => {
-        this.setWidth(tool === "highlighter" ? HIGHLIGHTER_SIZES[1] : SIZES[1]);
+        editWidth(tool === "highlighter" ? HIGHLIGHTER_SIZES[1] : SIZES[1]);
         update();
       },
       manage: preferences
         ? {
             save: (width, replacing) => {
               saveWidth(preferences, width, replacing ?? editingId, tool);
+              if (replacing === undefined && editingId === undefined) {
+                editingId = preferences.widthIds[tool][preferences.widthIds[tool].length - 1];
+                this.popoverPresetId = editingId ?? null;
+              }
               if (typeof (replacing ?? editingId) === "string")
                 selectWidthSlot(preferences, tool, (replacing ?? editingId) as string);
               this.setWidth(selectedWidthFor(preferences, tool));
@@ -2144,6 +2166,7 @@ export class Toolbar {
     this.popover = null;
     this.popoverKind = null;
     this.popoverRender = null;
+    this.widthEditorRefresh?.dispose();
     this.widthEditorRefresh = null;
   }
 
@@ -2363,6 +2386,7 @@ export class Toolbar {
   /** Mark every choice button that matches the state, and unmark the rest. */
   syncActive(): void {
     const { state } = this;
+    this.refreshQuickWidths();
     this.widthEditorRefresh?.();
     const penControl = this.toolButtons.get("pen");
     if (penControl) {

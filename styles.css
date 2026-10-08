@@ -5868,3 +5868,73 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   width: 18px;
   height: 18px;
 }
+
+/* Shared floating chrome follows the host theme, with an opaque fallback. */
+.goodobsidian-popover,
+.goodobsidian-addpage,
+.goodobsidian-more,
+.goodobsidian-selection-menu,
+.goodobsidian-selection-bar {
+  background: var(--gob-pop-bg);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 14%);
+  --gob-sel-bg: var(--gob-pop-bg);
+  --gob-sel-line: var(--background-modifier-border);
+  --gob-sel-icon: var(--text-normal);
+  --gob-sel-well: var(--background-modifier-hover);
+}
+.goodobsidian-selection-bar .goodobsidian-selection-button.clickable-icon:hover:not(:disabled),
+.goodobsidian-selection-bar .goodobsidian-selection-button.clickable-icon.is-active {
+  color: var(--text-normal);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and
+  (background: color-mix(in srgb, red 50%, transparent)) {
+  .goodobsidian-popover,
+  .goodobsidian-addpage,
+  .goodobsidian-more,
+  .goodobsidian-selection-menu,
+  .goodobsidian-selection-bar {
+    background: var(--gob-frost);
+    -webkit-backdrop-filter: var(--gob-blur);
+    backdrop-filter: var(--gob-blur);
+  }
+}
+.goodobsidian-popover.has-thickness-editor {
+  width: 400px;
+}
+.goodobsidian-thickness-editor {
+  gap: 16px;
+}
+.goodobsidian-width-readout {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.goodobsidian-thickness-presets {
+  gap: 8px;
+}
+.goodobsidian-thickness-row {
+  gap: 8px;
+}
+.goodobsidian-thickness-range {
+  touch-action: none;
+}
+.goodobsidian-color-mixer button.goodobsidian-color-use.clickable-icon {
+  justify-content: center;
+  font-weight: 600;
+  min-width: 132px;
+  border: 1px solid var(--background-modifier-border);
+}
+.goodobsidian-page-selection-controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--background-primary);
+  gap: 8px;
+}
+.goodobsidian-page-selection-controls .mod-cta {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  padding-inline: 16px;
+}

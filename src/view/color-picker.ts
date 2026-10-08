@@ -171,12 +171,11 @@ export function renderColorMixer(
   const hexLabel = field.createSpan({ cls: "goodobsidian-color-hex" });
   const use = foot.createEl("button", {
     cls: "goodobsidian-color-use clickable-icon",
-    attr: { "aria-label": "Use this colour", title: "Use this colour" },
+    attr: { "aria-label": "Save color", title: "Save color" },
   });
   const preview = use.createSpan({ cls: "goodobsidian-color-preview" });
-  setIcon(use, "circle-plus");
-  // setIcon replaces the button's content; the preview goes back under the icon.
-  use.prepend(preview);
+  use.addClass("mod-cta");
+  use.createSpan({ text: "Save color" });
 
   const sync = (): void => {
     const hex = rgbToHex(hsvToRgb(hsv));
