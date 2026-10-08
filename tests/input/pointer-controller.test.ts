@@ -10,7 +10,7 @@
  * throws, as it can on the device once WebKit has forgotten the pointer.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isWholePixel,
   PointerController,
@@ -124,7 +124,7 @@ class Rig {
   /** Space held down (FineNotes#7). */
   readonly hand = { held: false };
 
-  constructor(only?: "required") {
+  constructor(only?: "required", extra: Partial<PointerControllerCallbacks> = {}) {
     const log = this.log;
     const required: PointerControllerCallbacks = {
       onStart: (s) => {
@@ -160,7 +160,7 @@ class Rig {
     this.controller = new PointerController(
       this.el as unknown as HTMLElement,
       toSurface,
-      callbacks,
+      { ...callbacks, ...extra },
       () => this.hand.held,
     );
     this.controller.attach();
@@ -194,6 +194,7 @@ describe("attaching", () => {
   it("listens for the four pointer events, and detach stops listening", () => {
     const rig = new Rig();
     expect([...rig.el.listeners.keys()].sort()).toEqual([
+      "lostpointercapture",
       "pointercancel",
       "pointerdown",
       "pointermove",
@@ -769,5 +770,87 @@ describe("mouse context-button safety", () => {
     expect(rig.log).toEqual([]);
     expect(rig.el.captured.size).toBe(0);
     rig.controller.detach();
+  });
+});
+
+
+describe("finger constraints", () => {
+  afterEach(() => vi.useRealTimers());
+  function fixture() {
+    vi.useFakeTimers();
+    let eligible = true;
+    const changes: boolean[] = [];
+    const committed: boolean[] = [];
+    let active = false;
+    const rig = new Rig(undefined, {
+      canConstrainShape: () => eligible,
+      onShapeConstraint: value => { active = value; changes.push(value); },
+      onEnd: () => committed.push(active),
+    });
+    return { rig, changes, committed, disable: () => { eligible = false; rig.controller.cancelShapeConstraint(); } };
+  }
+  it("requires an active real Pencil shape and a stationary hold", () => {
+    const { rig, changes } = fixture();
+    rig.pen("pointerdown", 1, { x: 10, y: 10 });
+    rig.finger("pointerdown", 2, 90, 90, 1);
+    vi.advanceTimersByTime(139); expect(changes).toEqual([]);
+    vi.advanceTimersByTime(1); expect(changes).toEqual([true]);
+    rig.finger("pointerup", 2, 90, 90, 200);
+    expect(changes).toEqual([true, false]);
+    expect(rig.controller.hasModifierContact).toBe(false);
+    expect(rig.take().some(x => /pan|pinch/.test(x))).toBe(false);
+  });
+  it("commits while constrained and swallows the remaining finger", () => {
+    const { rig, changes, committed } = fixture();
+    rig.pen("pointerdown", 1, { x: 10, y: 10 });
+    rig.finger("pointerdown", 2, 90, 90, 1); vi.advanceTimersByTime(140);
+    rig.pen("pointerup", 1, { x: 30, y: 20 });
+    expect(committed).toEqual([true]); expect(changes).toEqual([true, false]);
+    expect(rig.controller.hasModifierContact).toBe(true);
+    rig.finger("pointermove", 2, 120, 120, 200);
+    rig.finger("pointerup", 2, 120, 120, 210);
+    expect(rig.take().some(x => /pan|pinch/.test(x))).toBe(false);
+  });
+  it("never promotes a finger that arrived before the Pencil or another touch", () => {
+    const { rig, changes } = fixture();
+    rig.finger("pointerdown", 2, 90, 90, 0);
+    rig.pen("pointerdown", 1, { x: 10, y: 10 });
+    rig.finger("pointermove", 2, 90, 90, 1); vi.advanceTimersByTime(200);
+    expect(changes).toEqual([]);
+    rig.finger("pointerdown", 3, 80, 80, 2); vi.advanceTimersByTime(140);
+    rig.finger("pointerdown", 4, 70, 70, 3); vi.advanceTimersByTime(140);
+    expect(changes).toEqual([true]);
+  });
+  it("disabled/ordinary handwriting, mouse input, large palms and moving contacts cannot activate", () => {
+    for (const scenario of ["disabled", "mouse", "palm", "moving"]) {
+      const { rig, changes, disable } = fixture();
+      if (scenario === "disabled") disable();
+      rig.fire("pointerdown", 1, scenario === "mouse" ? "mouse" : "pen", { x: 10, y: 10 });
+      rig.fire("pointerdown", 2, "touch", { x: 90, y: 90, width: scenario === "palm" ? 40 : 1 });
+      if (scenario === "moving") rig.finger("pointermove", 2, 110, 90, 2);
+      vi.advanceTimersByTime(200); expect(changes).toEqual([]);
+      rig.controller.detach();
+    }
+  });
+  it("clears activation on cancel, tool/page cancellation, setting disable and detach", () => {
+    for (const scenario of ["cancel", "tool/page", "disable", "detach"]) {
+      const { rig, changes, disable } = fixture();
+      rig.pen("pointerdown", 1, { x: 10, y: 10 });
+      rig.finger("pointerdown", 2, 90, 90, 1); vi.advanceTimersByTime(140);
+      if (scenario === "cancel") rig.pen("pointercancel", 1, { x: 20, y: 10 });
+      else if (scenario === "tool/page") rig.controller.cancelDrawing();
+      else if (scenario === "disable") disable();
+      else rig.controller.detach();
+      expect(changes).toEqual([true, false]);
+      vi.advanceTimersByTime(500); expect(changes).toEqual([true, false]);
+    }
+  });
+  it("does not retroactively claim an ignored handwriting touch when recognition becomes eligible", () => {
+    vi.useFakeTimers(); let eligible = false; const changes: boolean[] = [];
+    const rig = new Rig(undefined, { canConstrainShape: () => eligible, onShapeConstraint: on => changes.push(on) });
+    rig.pen("pointerdown", 1, { x: 10, y: 10 });
+    rig.finger("pointerdown", 2, 90, 90, 1); eligible = true;
+    rig.finger("pointermove", 2, 90, 90, 2); vi.advanceTimersByTime(500);
+    expect(changes).toEqual([]);
   });
 });

@@ -838,24 +838,24 @@ export class Toolbar {
     if (this.state.tool === "pen") {
       const style = lineStyleOf(this.state.lineStyle);
       const button = this.optionsEl.createEl("button", {
-        cls: "clickable-icon",
-        text: style === "solid" ? "━" : style === "dashed" ? "╍" : "•••",
+        cls: "goodobsidian-line-style-anchor clickable-icon",
         attr: { "aria-label": `Line style: ${style}`, title: `Line style: ${style}` },
       });
+      button.append(createStrokePreview({ ...this.previewOptions(), type: "ball", lineStyle: style, compact: true }, this.host.ownerDocument));
       button.addEventListener("click", () => {
+        if (this.popoverKind === "line-style" && this.popoverAnchor === button) { this.closePopover(); return; }
         const body = this.openPopover("line-style", button);
+        this.popover?.addClass("has-line-styles");
         for (const value of ["solid", "dashed", "dotted"] as const) {
           const option = body.createEl("button", {
-            cls: "goodobsidian-wide clickable-icon",
-            text: value[0].toUpperCase() + value.slice(1),
+            cls: "goodobsidian-line-style-choice clickable-icon",
             attr: { "aria-pressed": String(value === style) },
           });
-          option.prepend(
-            createStrokePreview(
-              { ...this.previewOptions(), lineStyle: value, compact: true },
-              this.host.ownerDocument,
-            ),
-          );
+          option.append(createStrokePreview({ ...this.previewOptions(), type: "ball", lineStyle: value, compact: true }, this.host.ownerDocument));
+          option.createSpan({ text: value[0].toUpperCase() + value.slice(1) });
+          const check = option.createSpan({ cls: "goodobsidian-line-style-check" });
+          setIcon(check, "check");
+          check.style.visibility = value === style ? "visible" : "hidden";
           option.toggleClass("is-active", value === style);
           option.addEventListener("click", () => {
             this.state.lineStyle = value;
@@ -2111,6 +2111,12 @@ export class Toolbar {
       cls: "goodobsidian-popover-hint",
       text: "Erase handwriting and drawings by scribbling over them.",
     });
+
+    const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
+    this.switchRow(constraints, "Constrain shapes with finger", gestures.constrainWithFinger === true, (on) =>
+      set({ constrainWithFinger: on }),
+    );
+    body.createDiv({ cls: "goodobsidian-popover-hint", text: "While holding a recognized shape with Apple Pencil, hold one finger on the page to constrain its angle or proportions." });
 
     const lasso = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(lasso, "Circle to lasso", gestures.circleLasso, (on) =>

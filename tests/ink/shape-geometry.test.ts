@@ -1,3 +1,4 @@
+import { constrainShape } from "../../src/ink/shape-constraint";
 /**
  * Tests for `src/ink/shape-geometry.ts`: the Shape tool's presets, the
  * hold-and-adjust transform, and how a clean shape is drawn (its exact
@@ -312,5 +313,49 @@ describe("shape rendering", () => {
     expect(peak).toBeGreaterThan(1.4);
     expect(peak).toBeLessThanOrEqual(1.5);
     expect(inkRuns([], penOptions(3, true))).toEqual([]);
+  });
+});
+
+
+describe("finger constraints", () => {
+  it("snaps a line to 15-degree increments with a fixed anchor, length and hysteresis", () => {
+    const angle = 20 * Math.PI / 180, length = 100;
+    const original = [10, 20, .5, 10 + length * Math.cos(angle), 20 + length * Math.sin(angle), .5];
+    const first = constrainShape("line", original);
+    expect(first.pts.slice(0, 3)).toEqual(original.slice(0, 3));
+    expect(Math.hypot(first.pts[3] - 10, first.pts[4] - 20)).toBeCloseTo(length);
+    expect(first.angle).toBeCloseTo(Math.PI / 12);
+    const slightlyAcrossBoundary = [0, 0, .5, 100 * Math.cos(24 * Math.PI / 180), 100 * Math.sin(24 * Math.PI / 180), .5];
+    expect(constrainShape("line", slightlyAcrossBoundary, first.angle).angle).toBe(first.angle);
+    expect(original[3]).toBeCloseTo(10 + length * Math.cos(angle));
+  });
+  it("rotates arrowhead and shaft together without changing head dimensions", () => {
+    const pts = presetGeometry("arrow", { x: 10, y: 20 }, { x: 100, y: 50 }, .5);
+    const constrained = constrainShape("arrow", pts).pts;
+    for (let i = 3; i < pts.length; i += 3) expect(Math.hypot(constrained[i] - constrained[3], constrained[i + 1] - constrained[4])).toBeCloseTo(Math.hypot(pts[i] - pts[3], pts[i + 1] - pts[4]));
+  });
+  it("makes rotated rectangles square in local axes, preserving their center", () => {
+    const base = presetGeometry("rect", { x: -80, y: -30 }, { x: 80, y: 30 }, .5);
+    const rotated = transformShape(base, { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 70.71, y: 70.71 });
+    const square = constrainShape("rect", rotated).pts;
+    expect(Math.hypot(square[3] - square[0], square[4] - square[1])).toBeCloseTo(Math.hypot(square[6] - square[3], square[7] - square[4]));
+    expect(shapePivot("rect", square)).toEqual({ x: 0, y: 0 });
+    expect(Math.atan2(square[4] - square[1], square[3] - square[0])).toBeCloseTo(Math.PI / 4);
+  });
+  it("makes rotated ellipses true circles and rounded rectangles equal-sided", () => {
+    const ellipse = transformShape(presetGeometry("ellipse", { x: 0, y: 0 }, { x: 160, y: 60 }, .5), { x: 80, y: 30 }, { x: 180, y: 30 }, { x: 140, y: 110 });
+    const circle = constrainShape("ellipse", ellipse).pts;
+    const radii = xy(circle).map(p => Math.hypot(p.x - 80, p.y - 30));
+    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(1e-6);
+    const square = constrainShape("roundrect", presetGeometry("roundrect", { x: 0, y: 0 }, { x: 160, y: 60 }, .5)).pts;
+    const b = bounds(square); expect(b.maxX - b.minX).toBeCloseTo(b.maxY - b.minY);
+    expect(square.length).toBeGreaterThan(15);
+  });
+  it("keeps tiny geometry finite and leaves other shapes alone", () => {
+    for (const kind of ["line", "arrow", "rect", "ellipse", "roundrect"] as const) {
+      expect(constrainShape(kind, presetGeometry(kind, { x: 0, y: 0 }, { x: 1e-9, y: 1e-9 }, .5)).pts.every(Number.isFinite)).toBe(true);
+    }
+    const triangle = presetGeometry("triangle", { x: 0, y: 0 }, { x: 100, y: 50 }, .5);
+    expect(constrainShape("triangle", triangle).pts).toEqual(triangle);
   });
 });

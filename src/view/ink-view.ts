@@ -553,6 +553,11 @@ export class InkView extends TextFileView {
   }
 
   /** The pressure setting changed: the pen in hand widens with pressure if it is a pressure pen. */
+  setPenGestures(gestures: unknown): void {
+    this.toolState.penGestures = penGesturesOf(gestures);
+    this.surface?.setPenGestures(gestures);
+  }
+
   setPressureWidth(enabled: boolean): void {
     this.surface?.setPressure(enabled && penTypeFor(this.toolState).pressure);
     this.updateSidebarRendering();

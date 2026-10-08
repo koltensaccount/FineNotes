@@ -692,6 +692,7 @@ export default class GoodObsidianPlugin extends Plugin {
   /** Remember which pen gestures are on, for the next session. */
   savePenGestures(gestures: PenGestures): void {
     this.settings.penGestures = penGesturesOf(gestures);
+    for (const view of this.openNotebooks()) view.setPenGestures(this.settings.penGestures);
     void this.saveSettings();
   }
 

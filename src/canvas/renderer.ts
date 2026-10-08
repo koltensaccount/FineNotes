@@ -1,3 +1,4 @@
+import { highlighterPolygons } from "../ink/highlighter";
 import { lineStyleOf, patternedRuns } from "../ink/line-style";
 import type { LineStyle } from "../model/document";
 /**
@@ -1027,7 +1028,7 @@ export class Renderer {
         bounds = { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad };
       }
     }
-    const entry: PathEntry = { fingerprint, runs, paths: runs.map(pathOf), bounds };
+    const entry: PathEntry = { fingerprint, runs, paths: stroke.tool === "highlighter" ? [] : runs.map(pathOf), bounds };
     this.paths.set(stroke, entry);
     return entry;
   }
@@ -1261,7 +1262,7 @@ export function styleOf(stroke: Stroke, pressure: boolean): StrokeStyle {
  */
 function paintStroke(
   ctx: CanvasRenderingContext2D,
-  ink: { runs: readonly InkRun[]; paths?: readonly Path2D[] },
+  ink: { runs: readonly InkRun[]; paths?: readonly Path2D[]; highlighterPath?: Path2D },
   style: { color: string; tool: Tool; size: number; lineStyle?: LineStyle; dashOffset?: number },
   highlighterAlpha: number,
 ): void {
@@ -1277,13 +1278,16 @@ function paintStroke(
   ctx.fillStyle = style.color;
   const styled = style.tool === "pen" && lineStyleOf(style.lineStyle) !== "solid" && !ink.paths;
   if (highlighter) {
-    const path = new Path2D();
-    for (const run of ink.runs) traceRun(path, run);
-    ctx.strokeStyle = style.color;
-    ctx.lineWidth = style.size;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.stroke(path);
+    if (!ink.highlighterPath) {
+      const path = new Path2D();
+      for (const polygon of highlighterPolygons(ink.runs, style.size)) {
+        path.moveTo(polygon[0], polygon[1]);
+        for (let i = 2; i < polygon.length; i += 2) path.lineTo(polygon[i], polygon[i + 1]);
+        path.closePath();
+      }
+      ink.highlighterPath = path;
+    }
+    ctx.fill(ink.highlighterPath);
   } else paintInk(
     ctx,
     styled

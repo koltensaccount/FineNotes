@@ -1,3 +1,4 @@
+import { claimTransient } from "./transient-popover";
 /**
  * The page sidebar: GoodNotes' thumbnail panel, opened from the leftmost
  * toolbar button.
@@ -166,6 +167,8 @@ export class PageSidebar {
   private selecting = false;
   private selected = new Set<string>();
   private readonly selectionBar: HTMLElement;
+  private readonly pagesHeader: HTMLElement;
+  private nativeMenu: Menu | null = null;
   private readonly bulkBar: HTMLElement;
   private doc: InkDocument | null = null;
   private current = 0;
@@ -209,12 +212,14 @@ export class PageSidebar {
         cls: "goodobsidian-pagesidebar-tab clickable-icon",
         attr: { role: "tab", "aria-label": label, title: label },
       });
-      setIcon(button, icon);
+      setIcon(button.createSpan(), icon);
+      button.createSpan({ text: label });
       button.addEventListener("click", () => this.showTab(tab));
       this.tabButtons.set(tab, button);
     }
     this.pagesEl = this.el.createDiv({ cls: "goodobsidian-pagesidebar-pages" });
-    this.filterChip = this.pagesEl.createEl("button", {
+    this.pagesHeader = top.createDiv({ cls: "goodobsidian-pages-header" });
+    this.filterChip = this.pagesHeader.createEl("button", {
       cls: "goodobsidian-pagesidebar-filter clickable-icon",
       attr: { "aria-haspopup": "menu" },
     });
@@ -224,7 +229,7 @@ export class PageSidebar {
       "chevron-down",
     );
     this.filterChip.addEventListener("click", () => this.showFilterMenu());
-    this.selectionBar = this.pagesEl.createDiv({ cls: "goodobsidian-page-selection-controls" });
+    this.selectionBar = this.pagesHeader.createDiv({ cls: "goodobsidian-page-selection-controls" });
     this.bulkBar = this.pagesEl.createDiv({ cls: "goodobsidian-page-bulk-actions" });
     this.renderSelection();
     this.grid = this.pagesEl.createDiv({ cls: "goodobsidian-pagesidebar-grid" });
@@ -286,6 +291,7 @@ export class PageSidebar {
   setOpen(open: boolean, animate = false): void {
     if (open === this.open) return;
     this.open = open;
+    if (!open) this.nativeMenu?.hide();
     if (!open) this.thumbs.forEach((view) => view.drag?.cancel());
     this.slide?.cancel();
     this.slide = null;
@@ -327,8 +333,10 @@ export class PageSidebar {
 
   /** Show the page thumbnails or the recordings. */
   showTab(tab: SidebarTab): void {
+    this.nativeMenu?.hide();
     this.thumbs.forEach((view) => view.drag?.cancel());
     this.tab = tab;
+    this.pagesHeader.toggleClass("is-hidden", tab !== "pages");
     this.pagesEl.toggleClass("is-hidden", tab !== "pages");
     this.contentsEl.toggleClass("is-hidden", tab !== "contents");
     this.audioEl.toggleClass("is-hidden", tab !== "audio");
@@ -354,7 +362,11 @@ export class PageSidebar {
   /** Show every page, or only the bookmarked ones. */
   setFilter(filter: PageFilter): void {
     this.filter = filter;
-    this.applyFilter();
+    if (this.selecting && filter === "bookmarks") {
+      this.selected = new Set([...this.selected].filter(id => this.doc?.pages.some(page => page.id === id && page.bookmarked)));
+      this.renderSelection();
+      this.sync();
+    } else this.applyFilter();
   }
 
   /**
@@ -373,6 +385,7 @@ export class PageSidebar {
   }
 
   private renderSelection(): void {
+    this.pagesHeader.toggleClass("is-selecting", this.selecting);
     this.selectionBar.empty();
     this.bulkBar.empty();
     const button = (parent: HTMLElement, label: string, run: () => void) => {
@@ -386,7 +399,7 @@ export class PageSidebar {
         for (const thumb of this.thumbs) thumb.drag?.cancel();
         this.renderSelection();
         this.sync();
-      }).addClass("mod-cta");
+      });
     else {
       button(this.selectionBar, "Cancel", () => {
         this.selecting = false;
@@ -396,11 +409,11 @@ export class PageSidebar {
         this.sync();
       });
       button(this.selectionBar, "Select All", () => {
-        this.selected = new Set(this.doc?.pages.map((page) => page.id));
+        this.selected = new Set(this.doc?.pages.filter((page) => this.filter === "all" || page.bookmarked).map((page) => page.id));
         this.renderSelection();
         this.sync();
       });
-      this.selectionBar.createSpan({ text: `${this.selected.size} selected` });
+      this.selectionBar.createSpan({ text: `${this.selected.size} selected`, attr: { "aria-live": "polite" } });
     }
     this.bulkBar.toggleClass("is-hidden", !this.selecting || this.selected.size === 0);
     if (!this.selecting || !this.selected.size) return;
@@ -417,6 +430,7 @@ export class PageSidebar {
     }
     const more = button(this.bulkBar, "•••", () => {
       const menu = new Menu();
+    this.ownMenu(menu);
       for (const [label, action] of [
         ["Export selected pages", "export"],
         ["Bookmark", "bookmark"],
@@ -430,13 +444,22 @@ export class PageSidebar {
             .onClick(() => this.callbacks.onBulkAction?.(action, [...this.selected], more)),
         );
       const box = more.getBoundingClientRect();
-      menu.showAtPosition({ x: box.left, y: box.bottom });
+      menu.showAtPosition({ x: box.left, y: box.bottom }, this.el.ownerDocument);
     });
+    setIcon(more, "ellipsis");
     more.setAttribute("aria-label", "More page actions");
+  }
+
+  private ownMenu(menu: Menu): void {
+    this.nativeMenu?.hide();
+    this.nativeMenu = menu;
+    const release = claimTransient(this.el.ownerDocument, menu, () => menu.hide());
+    menu.onHide(() => { release(); if (this.nativeMenu === menu) this.nativeMenu = null; });
   }
 
   private showFilterMenu(): void {
     const menu = new Menu();
+    this.ownMenu(menu);
     for (const filter of ["all", "bookmarks"] as const) {
       menu.addItem((item) =>
         item
@@ -447,7 +470,7 @@ export class PageSidebar {
       );
     }
     const r = this.filterChip.getBoundingClientRect();
-    menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
+    menu.showAtPosition({ x: r.left, y: r.bottom + 4 }, this.el.ownerDocument);
   }
 
   /**
@@ -481,6 +504,7 @@ export class PageSidebar {
   /** The document (or its page list) changed. Cheap: repaint is debounced. */
   setDocument(doc: InkDocument): void {
     if (this.doc && this.doc !== doc) {
+      this.nativeMenu?.hide();
       this.thumbs.forEach((view) => view.drag?.cancel());
       this.selected.clear();
       this.selecting = false;
@@ -545,6 +569,7 @@ export class PageSidebar {
   }
 
   destroy(): void {
+    this.nativeMenu?.hide();
     window.clearTimeout(this.refreshTimer);
     window.cancelAnimationFrame(this.paintFrame);
     this.slide?.cancel();
@@ -571,7 +596,7 @@ export class PageSidebar {
     this.thumbs.forEach((view, index) => {
       view.root.dataset.pageId = pages[index].id;
       view.check.toggleClass("is-hidden", !this.selecting);
-      view.check.setText(this.selected.has(pages[index].id) ? "✓" : "○");
+      setIcon(view.check, this.selected.has(pages[index].id) ? "check" : "circle");
       view.root.toggleClass("is-page-selected", this.selected.has(pages[index].id));
       view.root
         .querySelector(".goodobsidian-thumb-frame")
@@ -625,6 +650,7 @@ export class PageSidebar {
   private showContentsMenu(index: number, event: MouseEvent, anchor: HTMLElement): void {
     const act = (action: PageAction) => () => this.callbacks.onPageAction(action, index, anchor);
     const menu = new Menu();
+    this.ownMenu(menu);
     menu.addItem((item) => item.setTitle("Rename").setIcon("pencil").onClick(act("contents")));
     menu.addItem((item) =>
       item.setTitle("Remove from contents").setIcon("list-x").onClick(act("contents-remove")),
@@ -761,6 +787,7 @@ export class PageSidebar {
     const cover = !!backdrop && backdrop.kind !== "pdf" && isCoverRuling(backdrop.kind);
     const act = (action: PageAction) => () => this.callbacks.onPageAction(action, index, anchor);
     const menu = new Menu();
+    this.ownMenu(menu);
     const marked = this.doc?.pages[index]?.bookmarked === true;
     menu.addItem((item) =>
       item

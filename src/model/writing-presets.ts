@@ -44,8 +44,9 @@ export function selectColor(presets: WritingPresets, tool: WritingTool, color: s
     saveColor(presets, tool, normalized);
   if (preset) presets.selectedIds[tool] = preset.id;
 }
-const DEFAULT_PEN_COLORS = [PALETTE[0], PALETTE[2], PALETTE[3]];
-const DEFAULT_HIGHLIGHTER_COLORS = HIGHLIGHTER_COLORS.slice(0, 3);
+const DEFAULT_PEN_COLORS = PALETTE;
+const DEFAULT_PEN_WIDTHS = [SIZES[0], SIZES[2], SIZES[3]];
+const DEFAULT_HIGHLIGHTER_COLORS = HIGHLIGHTER_COLORS;
 const STOPS = widthStops(SIZES, true);
 export function normalizeWidth(width: number): number {
   return STOPS[nearestStop(STOPS, Number.isFinite(width) ? width : SIZES[1])];
@@ -124,9 +125,9 @@ export function removeWidth(
 }
 export function restoreWidths(presets: WritingPresets, tool: WritingTool): void {
   if (tool === "highlighter") presets.highlighterWidths = [...HIGHLIGHTER_SIZES];
-  else presets.widths = [...SIZES];
+  else presets.widths = [...DEFAULT_PEN_WIDTHS];
   presets.widthIds[tool] = [];
-  selectWidth(presets, tool, tool === "highlighter" ? HIGHLIGHTER_SIZES[1] : SIZES[1]);
+  selectWidth(presets, tool, tool === "highlighter" ? HIGHLIGHTER_SIZES[1] : DEFAULT_PEN_WIDTHS[1]);
 }
 export function colorList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -221,11 +222,11 @@ export function migrateWritingPresets(
         : 1,
     widths: Array.isArray(saved.widths)
       ? orderedWidths(saved.widths.filter((v): v is number => typeof v === "number"))
-      : [...SIZES],
+      : [...DEFAULT_PEN_WIDTHS],
     selectedWidth:
       typeof saved.selectedWidth === "number" && Number.isFinite(saved.selectedWidth)
         ? saved.selectedWidth
-        : settings.defaultSize,
+        : initializeDefaults ? DEFAULT_PEN_WIDTHS[1] : settings.defaultSize,
     highlighterWidths: Array.isArray(saved.highlighterWidths)
       ? orderedWidths(saved.highlighterWidths.filter((v): v is number => typeof v === "number"))
       : initializeDefaults

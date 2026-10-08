@@ -20,6 +20,7 @@ export interface PenGestures {
   /** "Erase shapes and highlighter": only while {@link scribbleErase} is on. */
   scribbleErasesAll: boolean;
   circleLasso: boolean;
+  constrainWithFinger?: boolean;
 }
 
 /** GoodNotes' defaults, less the extra reach of the scribble: handwriting only. */
@@ -27,6 +28,7 @@ export const DEFAULT_PEN_GESTURES: Readonly<PenGestures> = {
   scribbleErase: true,
   scribbleErasesAll: false,
   circleLasso: true,
+  constrainWithFinger: false,
 };
 
 /** The switches from anything read off disk; a missing or bad one is its default. */
@@ -34,12 +36,13 @@ export function penGesturesOf(raw: unknown): PenGestures {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const flag = (key: keyof PenGestures): boolean => {
     const value = o[key];
-    return typeof value === "boolean" ? value : DEFAULT_PEN_GESTURES[key];
+    return typeof value === "boolean" ? value : DEFAULT_PEN_GESTURES[key] === true;
   };
   return {
     scribbleErase: flag("scribbleErase"),
     scribbleErasesAll: flag("scribbleErasesAll"),
     circleLasso: flag("circleLasso"),
+    constrainWithFinger: flag("constrainWithFinger"),
   };
 }
 

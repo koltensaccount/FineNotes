@@ -1,3 +1,5 @@
+import { highlighterWetRuns } from "../ink/highlighter";
+import { constrainShape, CONSTRAINABLE_SHAPES } from "../ink/shape-constraint";
 import { lineStyleOf } from "../ink/line-style";
 import { bindContextInput, bindPressDismissal } from "./context-input";
 import {
@@ -953,7 +955,7 @@ export class InkSurface {
    * it: `base` is the snapped geometry, and moving the pen from `from` scales
    * and rotates it about `pivot` (GoodNotes' "adjust while holding").
    */
-  private snap: { kind: ShapeKind; base: number[]; pivot: Pt; from: Pt; pts: number[] } | null =
+  private snap: { kind: ShapeKind; base: number[]; pivot: Pt; from: Pt; to: Pt; pts: number[] } | null =
     null;
   /**
    * The Shape tool's preset being dragged out — corner to corner, a
@@ -963,6 +965,8 @@ export class InkSurface {
    * The Shape tool's preset being dragged out. `moved` sticks once the pen
    * has left the tap slop: dragging back to the start is still a drag.
    */
+  private shapeConstrained = false;
+  private constraintAngle: number | undefined;
   private shapeDrag: {
     preset: ShapePreset | "table";
     origin: Pt;
@@ -1280,6 +1284,9 @@ export class InkSurface {
       undo: () => this.undo(),
       redo: () => this.redo(),
       blocked: () =>
+        this.pointerInput?.hasModifierContact === true ||
+        this.pointerInput?.isPenDrawing === true ||
+        !!this.shapeDrag ||
         this.handHeld ||
         !!this.builder ||
         !!this.lasso ||
@@ -1435,6 +1442,7 @@ export class InkSurface {
    * host's to remove.
    */
   destroy(): void {
+    this.cancelShapeDraft();
     this.pasteGate.cancel();
     this.pasteRequest = null;
     window.clearTimeout(this.wheelSnapTimer);
@@ -1483,6 +1491,7 @@ export class InkSurface {
    * history starts empty, and new ids count on from the ones `doc` holds.
    */
   setDocument(doc: InkDocument): void {
+    this.cancelShapeDraft();
     this.pasteGate.cancel();
     this.pasteRequest = null;
     this.lastPastePoint = {};
@@ -1700,6 +1709,7 @@ export class InkSurface {
    * time (`GLIDE_MS`), however far away the page is, as GoodNotes does.
    */
   goToPage(index: number, animate = false): void {
+    this.cancelShapeDraft();
     const clamped = Math.max(0, Math.min(this.doc.pages.length - 1, index));
     const row = this.direction === "horizontal";
     if (row && !this.turnsPages && clamped !== this.pageIndex) {
@@ -1763,6 +1773,7 @@ export class InkSurface {
   }
 
   setTool(tool: ActiveTool): void {
+    this.cancelShapeDraft();
     this.resetMultiTouch();
     this.dismissPressMenu();
     // The toolbar shares `toolState` and has already written the new tool
@@ -3186,7 +3197,58 @@ export class InkSurface {
     return { x: sample.x - box.x, y: sample.y - box.y };
   }
 
+  setPenGestures(gestures: unknown): void {
+    this.toolState.penGestures = penGesturesOf(gestures);
+    if (!this.toolState.penGestures.constrainWithFinger) this.pointerInput?.cancelShapeConstraint();
+  }
+
+  private canConstrainShape(sample: PointerSample): boolean {
+    if (!penGesturesOf(this.toolState.penGestures).constrainWithFinger || !this.activePage) return false;
+    if (boxAtPoint(this.pageLayout, sample.x, sample.y)?.index !== this.activePage.index) return false;
+    const kind = this.snap?.kind ?? this.shapeDrag?.preset;
+    return !!kind && kind !== "table" && CONSTRAINABLE_SHAPES.includes(kind);
+  }
+
+  private updateConstrainedSnap(): void {
+    const snap = this.snap;
+    if (!snap) return;
+    const raw = transformShape(snap.base, snap.pivot, snap.from, snap.to);
+    if (this.shapeConstrained) {
+      const constrained = constrainShape(snap.kind, raw, this.constraintAngle);
+      snap.pts = constrained.pts;
+      this.constraintAngle = constrained.angle;
+    } else snap.pts = raw;
+    this.scheduleWet();
+  }
+
+  private constraintGeometry(kind: ShapeKind, pts: number[]): number[] {
+    if (!this.shapeConstrained) return pts;
+    const constrained = constrainShape(kind, pts, this.constraintAngle);
+    this.constraintAngle = constrained.angle;
+    return constrained.pts;
+  }
+
+  private cancelShapeDraft(): void {
+    const owned = this.shapeConstrained || this.pointerInput?.hasModifierContact === true;
+    this.pointerInput?.cancelShapeConstraint();
+    this.shapeConstrained = false;
+    this.constraintAngle = undefined;
+    if (owned && (this.snap || this.shapeDrag)) {
+      this.shapeDrag = null;
+      this.endWetStroke();
+      this.activePage = null;
+      this.pointerInput?.cancelDrawing();
+    }
+  }
+
   private readonly pointerCallbacks: PointerControllerCallbacks = {
+    canConstrainShape: (sample) => this.canConstrainShape(sample),
+    onShapeConstraint: (active) => {
+      this.shapeConstrained = active;
+      if (!active) this.constraintAngle = undefined;
+      if (this.snap) this.updateConstrainedSnap();
+      else if (this.shapeDrag && this.activePage) this.showShapeDraft(this.activePage);
+    },
     onStart: (sample) => {
       this.callbacks.onPen?.(true);
       this.penDown(sample);
@@ -3565,7 +3627,8 @@ export class InkSurface {
     const snap = this.snap;
     if (snap) {
       // Snapped and still held: the shape follows the pen.
-      if (last) snap.pts = transformShape(snap.base, snap.pivot, snap.from, this.toPage(box, last));
+      if (last) snap.to = this.toPage(box, last);
+      this.updateConstrainedSnap();
       this.scheduleWet();
       return;
     }
@@ -3683,6 +3746,7 @@ export class InkSurface {
       base: result.pts,
       pivot,
       from: { x: anchor.x, y: anchor.y },
+      to: { x: anchor.x, y: anchor.y },
       pts: result.pts,
     };
     this.scheduleWet();
@@ -3919,6 +3983,10 @@ export class InkSurface {
       return;
     }
     const style = this.currentStyle();
+    if (style.tool === "highlighter") {
+      this.renderer?.renderWetRuns(box.index, highlighterWetRuns(builder, style.size), style);
+      return;
+    }
     const pts = builder.view;
     let tracer = this.wetTracer;
     if (!tracer || builder.revision !== this.wetRevision) {
@@ -4223,7 +4291,7 @@ export class InkSurface {
       origin = { x: cx - halfW, y: cy - halfH };
       to = { x: cx + halfW, y: cy + halfH };
     }
-    return presetGeometry(preset, origin, to, FALLBACK_PRESSURE);
+    return this.constraintGeometry(preset, presetGeometry(preset, origin, to, FALLBACK_PRESSURE));
   }
 
   /**
@@ -4253,7 +4321,7 @@ export class InkSurface {
     }
     // While dragging, preview the real size — even a tiny one; the tap
     // default only applies if the pen lifts without having moved.
-    const pts = presetGeometry(drag.preset, drag.origin, drag.to, FALLBACK_PRESSURE);
+    const pts = this.constraintGeometry(drag.preset, presetGeometry(drag.preset, drag.origin, drag.to, FALLBACK_PRESSURE));
     if (pts.length === 0) {
       this.renderer?.clearWet();
       return;

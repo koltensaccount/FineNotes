@@ -1,3 +1,5 @@
+import { presetGeometry, transformShape } from "../../src/ink/shape-geometry";
+import { constrainShape } from "../../src/ink/shape-constraint";
 /**
  * `src/view/ink-surface.ts` — characterisation of the parts of the surface
  * that can run without a DOM: the keyboard shortcuts, the pointer lines of
@@ -1270,5 +1272,69 @@ describe("Pencil Circle-to-Lasso hold ownership", () => {
     expect(ids(w.doc.pages[0])).toEqual(["s1"]);
     expect(paste).not.toHaveBeenCalled();
     vi.useRealTimers();
+  });
+});
+
+
+describe("finger constraints surface lifecycle", () => {
+  it("derives constrained and released previews from the original base, without compound transforms", () => {
+    const base = presetGeometry("line", { x: 10, y: 20 }, { x: 110, y: 50 }, .5);
+    const snap = { kind: "line", base, pivot: { x: 10, y: 20 }, from: { x: 110, y: 50 }, to: { x: 150, y: 90 }, pts: base };
+    const surface = surfaceWith({ snap, shapeConstrained: true, constraintAngle: undefined, scheduleWet: vi.fn() });
+    const raw = transformShape(base, snap.pivot, snap.from, snap.to);
+    run(surface, "updateConstrainedSnap");
+    expect(snap.pts).toEqual(constrainShape("line", raw).pts);
+    snap.to = { x: 180, y: 70 };
+    run(surface, "updateConstrainedSnap");
+    surface.shapeConstrained = false; surface.constraintAngle = undefined;
+    run(surface, "updateConstrainedSnap");
+    expect(snap.pts).toEqual(transformShape(base, snap.pivot, snap.from, snap.to));
+    expect(snap.base).toBe(base);
+  });
+  it("clears recognized shape state, modifier ownership and pending wet ink on tool/page cancellation", () => {
+    const input = { cancelShapeConstraint: vi.fn(), cancelDrawing: vi.fn() };
+    const endWetStroke = vi.fn(function(this: State) { this.snap = null; this.builder = null; });
+    const surface = surfaceWith({ pointerInput: input, snap: {}, shapeDrag: null, shapeConstrained: true, constraintAngle: 1, activePage: {}, builder: {}, endWetStroke });
+    run(surface, "cancelShapeDraft");
+    expect(surface.shapeConstrained).toBe(false); expect(surface.constraintAngle).toBeUndefined();
+    expect(surface.activePage).toBeNull(); expect(surface.snap).toBeNull(); expect(surface.builder).toBeNull();
+    expect(input.cancelShapeConstraint).toHaveBeenCalledOnce(); expect(input.cancelDrawing).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe("finger constraints eligibility and commit", () => {
+  it("requires enabled shape manipulation on the same page, excluding handwriting and tables", () => {
+    const box = { index: 0, id: "p1", x: 0, y: 0, width: 800, height: 1000 };
+    const surface = surfaceWith({ toolState: { penGestures: { constrainWithFinger: true } }, activePage: box, pageLayout: { boxes: [box], width: 800, height: 1000 }, snap: null, shapeDrag: null });
+    const sample = { x: 100, y: 100 };
+    expect(run(surface, "canConstrainShape", sample)).toBe(false);
+    surface.snap = { kind: "line" };
+    expect(run(surface, "canConstrainShape", sample)).toBe(true);
+    expect(run(surface, "canConstrainShape", { x: 900, y: 100 })).toBe(false);
+    surface.snap = null; surface.shapeDrag = { preset: "table" };
+    expect(run(surface, "canConstrainShape", sample)).toBe(false);
+    surface.shapeDrag = { preset: "ellipse" };
+    expect(run(surface, "canConstrainShape", sample)).toBe(true);
+    surface.toolState = { penGestures: { constrainWithFinger: false } };
+    expect(run(surface, "canConstrainShape", sample)).toBe(false);
+  });
+  it("commits the constrained preset geometry displayed immediately before Pencil lift", () => {
+    const box = { index: 0, id: "p1", width: 800, height: 1000 };
+    const committed = vi.fn();
+    const renderer = { renderWet: vi.fn(), clearWet: vi.fn() };
+    const surface = surfaceWith({ shapeDrag: { preset: "rect", origin: { x: 10, y: 20 }, to: { x: 110, y: 60 }, moved: true }, shapeConstrained: true, constraintAngle: undefined, renderer, currentStyle: () => ({ color: "#000000", size: 5, tool: "pen" }), tableDragStrokes: () => [], pageAt: () => ({}), strokeIds: { next: () => "s1" }, strokeColor: () => "#000000", strokeSize: () => 5, commitStroke: committed });
+    run(surface, "showShapeDraft", box);
+    const displayed = renderer.renderWet.mock.calls[0][1];
+    run(surface, "finishShapeDrag", box);
+    expect(committed.mock.calls[0][2].pts).toEqual(displayed);
+    expect(committed.mock.calls[0][2].shape).toBe("rect");
+    expect(surface.shapeDrag).toBeNull(); expect(surface.activePage).toBeNull();
+  });
+  it("leaves ordinary unmodified shape handling unchanged", () => {
+    const snap = {};
+    const surface = surfaceWith({ shapeConstrained: false, constraintAngle: undefined, snap, shapeDrag: null, pointerInput: { hasModifierContact: false, cancelShapeConstraint: vi.fn(), cancelDrawing: vi.fn() }, endWetStroke: vi.fn() });
+    run(surface, "cancelShapeDraft");
+    expect(surface.snap).toBe(snap); expect(surface.endWetStroke).not.toHaveBeenCalled();
   });
 });
