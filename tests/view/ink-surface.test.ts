@@ -1,4 +1,5 @@
 import { presetGeometry, transformShape } from "../../src/ink/shape-geometry";
+import { resizeHeldShape } from "../../src/ink/shape-edit";
 import { constrainShape } from "../../src/ink/shape-constraint";
 /**
  * `src/view/ink-surface.ts` — characterisation of the parts of the surface
@@ -1288,7 +1289,7 @@ describe("finger constraints surface lifecycle", () => {
     run(surface, "updateConstrainedSnap");
     surface.shapeConstrained = false; surface.constraintAngle = undefined;
     run(surface, "updateConstrainedSnap");
-    expect(snap.pts).toEqual(transformShape(base, snap.pivot, snap.from, snap.to));
+    expect(snap.pts).toEqual(resizeHeldShape(base, snap.pivot, snap.from, snap.to));
     expect(snap.base).toBe(base);
   });
   it("clears recognized shape state, modifier ownership and pending wet ink on tool/page cancellation", () => {
@@ -1304,14 +1305,15 @@ describe("finger constraints surface lifecycle", () => {
 
 
 describe("finger constraints eligibility and commit", () => {
-  it("requires enabled shape manipulation on the same page, excluding handwriting and tables", () => {
+  it("requires enabled shape manipulation, allowing a finger anywhere on the canvas but excluding handwriting and tables", () => {
     const box = { index: 0, id: "p1", x: 0, y: 0, width: 800, height: 1000 };
     const surface = surfaceWith({ toolState: { penGestures: { constrainWithFinger: true } }, activePage: box, pageLayout: { boxes: [box], width: 800, height: 1000 }, snap: null, shapeDrag: null });
     const sample = { x: 100, y: 100 };
     expect(run(surface, "canConstrainShape", sample)).toBe(false);
     surface.snap = { kind: "line" };
     expect(run(surface, "canConstrainShape", sample)).toBe(true);
-    expect(run(surface, "canConstrainShape", { x: 900, y: 100 })).toBe(false);
+    expect(run(surface, "canConstrainShape", { x: 900, y: 100 })).toBe(true);
+    expect(run(surface, "canConstrainShape", { x: NaN, y: 100 })).toBe(false);
     surface.snap = null; surface.shapeDrag = { preset: "table" };
     expect(run(surface, "canConstrainShape", sample)).toBe(false);
     surface.shapeDrag = { preset: "ellipse" };
@@ -1352,5 +1354,71 @@ describe("eraser size and mode routing", () => {
     state.eraserSize = 31.5; state.eraserMode = "stroke"; state.eraserFilter = "highlighter";
     run(surface, "eraseAt", box, at);
     expect(whole).toHaveBeenLastCalledWith(page, at, 15.75, "highlighter"); expect(cursor.mock.calls[1][0].width).toBe("32px");
+  });
+});
+
+describe("individual shape editing", () => {
+  function fixture() {
+    const doc = { pages: [{ id: "p1", strokes: [], images: [], textBoxes: [] }] } as unknown as InkDocument;
+    const stroke: Stroke = { id: "s1", color: "#000000", size: 3, tool: "pen", shape: "rect", pts: presetGeometry("rect", { x: 100, y: 100 }, { x: 300, y: 200 }, .5) };
+    doc.pages[0].strokes.push(stroke);
+    const selection = { pageId: "p1", strokes: [stroke], images: [], textBoxes: [] };
+    const history = new History(), strokeIndex = new StrokeIndex(); strokeIndex.rebuild(doc.pages);
+    const frame = { removeEventListener: vi.fn(), hasPointerCapture: () => false };
+    const renderer = { setHiddenStrokes: vi.fn(), setHiddenImages: vi.fn(), clearWet: vi.fn(), invalidateRegion: vi.fn(), renderSelectionDraft: vi.fn() };
+    const surface = surfaceWith({ doc, selection, history, strokeIndex, callbacks: {}, renderer, selectionFrameEl: frame, selectedShapeFrame: null, shapeMode: "resize", renderDry: vi.fn(), syncTextBoxes: vi.fn(), syncSelectionOverlay: vi.fn(), changed: vi.fn(), boxForPage: () => ({ index: 0, width: 800, height: 1000 }), atFitZoom: (n: number) => n, toolState: { pressureEnabled: true }, groupDrag: null });
+    return { surface, stroke, selection, history, doc, renderer, strokeIndex };
+  }
+  it("exposes shape editing only for a lone shape, excluding mixed selections and table components", () => {
+    const { surface, stroke, selection, doc } = fixture();
+    expect(run(surface, "editableShape", selection)).toBe(stroke);
+    expect(run(surface, "editableShape", { ...selection, textBoxes: [{}] })).toBeNull();
+    expect(run(surface, "editableShape", { ...selection, strokes: [stroke, stroke] })).toBeNull();
+    doc.pages[0].strokes.push({ ...stroke, id: "s2", shape: "line", pts: [100, 150, .5, 300, 150, .5] });
+    expect(run(surface, "editableShape", selection)).toBeNull();
+  });
+  it("previews geometry without mutating stored ink, cancels exactly, and commits once with index invalidation", () => {
+    const { surface, stroke, selection, history, doc, renderer, strokeIndex } = fixture();
+    const original = stroke.pts.slice();
+    const drag = { pointerId: 1, selection, bounds: { minX: 98, minY: 98, maxX: 302, maxY: 202 }, from: { x: 300, y: 150 }, clientX: 300, clientY: 150, dx: 0, dy: 0, lifted: true, shape: { stroke, frame: { cx: 200, cy: 150, w: 200, h: 100, angle: 0 }, handle: "e", mode: "resize", pts: original.slice(), angle: 0 } };
+    surface.groupDrag = drag;
+    run(surface, "moveShapeHandle", drag, { index: 0, width: 800, height: 1000 }, { x: 350, y: 150 });
+    expect(stroke.pts).toEqual(original); expect(renderer.renderSelectionDraft).toHaveBeenCalled();
+    run(surface, "endGroupDrag", false); expect(stroke.pts).toEqual(original); expect(history.undo(doc)).toBeNull();
+    surface.groupDrag = drag; run(surface, "endGroupDrag", true);
+    expect(stroke.pts[3]).toBe(350); expect(stroke.size).toBe(3); expect(strokeIndex.get("s1")).toBe(stroke); expect(renderer.invalidateRegion).toHaveBeenCalled(); expect(surface.changed).toHaveBeenCalledTimes(1);
+    history.undo(doc); expect(stroke.pts).toEqual(original); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(stroke.pts[3]).toBe(350);
+  });
+  it("explicit cancellation restores an unfinished shape transform", () => {
+    const { surface, selection } = fixture();
+    const end = vi.fn(); surface.endGroupDrag = end;
+    surface.groupDrag = { pointerId: 1, selection, shape: {} };
+
+    run(surface, "cancelGroupDrag"); expect(end).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("shape tap and completed smoothing integration", () => {
+  it("Shape tool can hit closed interiors while normal handwriting retains its own hit", () => {
+    const shape: Stroke = { id: "s1", color: "#000000", size: 3, tool: "pen", shape: "rect", pts: presetGeometry("rect", { x: 100, y: 100 }, { x: 300, y: 200 }, .5) };
+    const page = { id: "p1", strokes: [shape] } as Page;
+    const index = new StrokeIndex(); index.rebuild([page]);
+    const surface = surfaceWith({ strokeIndex: index });
+    expect(run(surface, "shapeAt", page, { x: 200, y: 150 }, 5)).toBe(shape);
+    expect(run(surface, "shapeAt", page, { x: 350, y: 150 }, 5)).toBeNull();
+    const ink = { ...shape, id: "s2", shape: undefined, pts: [150, 150, .5, 250, 150, .5] }; page.strokes.push(ink); index.rebuild([page]);
+    expect(run(surface, "shapeAt", page, { x: 200, y: 150 }, 5)).toBeNull();
+  });
+  it("finishes recognition on raw geometry, filters only freehand pen, and retains the raw rejoin builder", () => {
+    for (const tool of ["pen", "highlighter"]) {
+      const builder = new StrokeBuilder({ minDistance: 0, smoothing: "off", pressureEnabled: true });
+      for (let i = 0; i < 40; i++) builder.add({ x: i * 2, y: Math.sin(i / 8) * 10 + (i % 2 ? .3 : -.3), pressure: .5 });
+      const page = { id: "p1", strokes: [] }, committed = vi.fn(), gestures = vi.fn();
+      const surface = surfaceWith({ toolState: { tool, penGestures: { strokeSmoothing: 8 } }, snap: null, holdAnchor: null, strokeSmoothing: 8, endWetStroke: () => builder, pageAt: () => page, scribbleErase: vi.fn(() => false), recordDiagnostic: vi.fn(), currentStyle: () => ({ color: "#000000", size: 3, tool }), strokeIds: { next: () => "s1" }, commitStroke: committed, noteCircleLoop: gestures, noteOffPage: vi.fn(), debug: false });
+      run(surface, "finishStroke", { index: 0 }, { x: 80, y: Math.sin(5) * 10, pressure: .5 });
+      const saved = committed.mock.calls[0][2] as Stroke, raw = builder.points();
+      if (tool === "pen") expect(saved.pts).not.toEqual(raw); else expect(saved.pts).toEqual(raw);
+      expect(gestures.mock.calls[0][3]).toEqual(raw); expect((surface.lastLift as { builder: StrokeBuilder; smoothing: number }).builder).toBe(builder); expect((surface.lastLift as { smoothing: number }).smoothing).toBe(8);
+    }
   });
 });

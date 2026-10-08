@@ -6077,3 +6077,27 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   .goodobsidian-thickness-choice > .goodobsidian-stroke-preview { flex-basis: 28px; width: 28px; }
   .goodobsidian-thickness-choice { gap: 4px; }
 }
+
+/* Vector-shape controls share the existing selection frame and action menu. */
+.goodobsidian-selection-frame.is-shape { border-style: solid; border-radius: 0; }
+.goodobsidian-shape-handle { position: absolute; padding: 0; width: 44px; height: 44px; min-width: 0; min-height: 0; margin: -22px 0 0 -22px; border: 0; background: transparent !important; box-shadow: none !important; touch-action: none; cursor: nwse-resize; }
+.goodobsidian-selection-frame:not(.is-shape) .goodobsidian-shape-handle,
+.goodobsidian-shape-handle.is-hidden { display: none; }
+.goodobsidian-shape-handle::after { content: ""; position: absolute; inset: 16px; border: 1.5px solid var(--interactive-accent); border-radius: 3px; background: var(--background-primary); }
+.goodobsidian-shape-handle.is-nw { left: 0; top: 0; }
+.goodobsidian-shape-handle.is-ne { left: 100%; top: 0; }
+.goodobsidian-shape-handle.is-sw { left: 0; top: 100%; }
+.goodobsidian-shape-handle.is-se { left: 100%; top: 100%; }
+.goodobsidian-shape-handle.is-n { left: 50%; top: 0; cursor: ns-resize; }
+.goodobsidian-shape-handle.is-s { left: 50%; top: 100%; cursor: ns-resize; }
+.goodobsidian-shape-handle.is-w, .goodobsidian-shape-handle.is-start { left: 0; top: 50%; cursor: ew-resize; }
+.goodobsidian-shape-handle.is-e, .goodobsidian-shape-handle.is-end { left: 100%; top: 50%; cursor: ew-resize; }
+.goodobsidian-shape-handle.is-rotate { left: 50%; top: -30px; display: flex; align-items: center; justify-content: center; color: var(--interactive-accent); cursor: grab; }
+.goodobsidian-shape-handle.is-rotate::after { display: none; }
+.goodobsidian-shape-handle.is-rotate.is-hidden { display: none; }
+.goodobsidian-shape-handle:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -6px; }
+.goodobsidian-shape-fields { display: grid; gap: 8px; padding: 12px; background: var(--background-primary); color: var(--text-normal); }
+.goodobsidian-shape-fields label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--font-ui-small); }
+.goodobsidian-shape-fields input { width: 94px; min-height: 36px; color: var(--text-normal); background: var(--background-modifier-form-field); }
+.goodobsidian-smoothing-control { display: grid; gap: 8px; padding: 12px 8px; color: var(--text-normal); }
+.goodobsidian-smoothing-control input { width: 100%; }

@@ -247,6 +247,33 @@ export class SelectionActionBar {
         continue;
       }
       const { action } = row;
+      if (action.fields) {
+        const fields = action.fields;
+        const block = menu.createDiv({ cls: "goodobsidian-shape-fields" });
+        block.createDiv({ cls: "goodobsidian-selection-row-label", text: action.label });
+        const inputs = new Map<string, HTMLInputElement>();
+        for (const spec of fields.values) {
+          const label = block.createEl("label", { text: spec.label });
+          const input = label.createEl("input", { type: "number" });
+          input.value = String(Math.round(spec.value * 100) / 100); input.min = String(spec.min); input.max = String(spec.max); input.step = "0.01";
+          input.setAttribute("aria-label", spec.label);
+          input.addEventListener("pointerdown", event => event.stopPropagation());
+          inputs.set(spec.key, input);
+        }
+        const apply = this.button(block, "mod-cta", "Apply shape values");
+        apply.textContent = "Apply";
+        onTap(apply, () => {
+          const values: Record<string, number> = {};
+          for (const spec of fields.values) {
+            const input = inputs.get(spec.key)!; const value = Number(input.value);
+            if (!input.value.trim() || !Number.isFinite(value) || value < spec.min || value > spec.max) { input.focus(); input.reportValidity(); return; }
+            values[spec.key] = value;
+          }
+          const latest = this.actions.find(a => a.id === action.id);
+          if (latest?.fields) { this.closeMenu(); latest.fields.apply(values); }
+        });
+        continue;
+      }
       if (action.swatches) {
         this.renderSwatches(menu, action);
         continue;

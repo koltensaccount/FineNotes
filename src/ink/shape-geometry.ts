@@ -403,8 +403,8 @@ function boxedStar(x0: number, y0: number, w: number, h: number): Pt[] {
   }));
 }
 
-function roundRectPoints(x0: number, y0: number, x1: number, y1: number): Pt[] {
-  const r = Math.min(x1 - x0, y1 - y0) * ROUNDRECT_RADIUS_FRACTION;
+export function roundRectPoints(x0: number, y0: number, x1: number, y1: number, radius?: number): Pt[] {
+  const r = Math.min(Math.min(x1 - x0, y1 - y0) / 2, radius ?? Math.min(x1 - x0, y1 - y0) * ROUNDRECT_RADIUS_FRACTION);
   // Corner centres and the angle each quarter-arc starts at, clockwise on
   // screen (y grows downward) from the top-right corner.
   const arcs: Array<[number, number, number]> = [

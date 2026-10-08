@@ -73,7 +73,7 @@ export const CENTRED_HALF = 3;
  * 2 and 3. A sample near either end of the stroke uses the widest window
  * that fits, so the stroke starts and ends exactly where the pen did.
  */
-const CENTRED_WEIGHTS: readonly (readonly number[])[] = [
+export const CENTRED_WEIGHTS: readonly (readonly number[])[] = [
   [1],
   [1, 1, 1],
   [-3, 12, 17, 12, -3],
@@ -131,6 +131,8 @@ export class StrokeBuilder {
   constructor(overrides: Partial<StrokeBuilderOptions> = {}) {
     this.options = { ...DEFAULTS, ...overrides };
   }
+
+  get isCentred(): boolean { return this.options.smoothing === "centred"; }
 
   /** Offer a sample; true if it was kept. */
   add(next: InputSample): boolean {

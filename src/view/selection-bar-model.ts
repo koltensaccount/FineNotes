@@ -64,6 +64,7 @@ export interface SelectionAction {
   menu?: "row" | "tile" | "none";
   /** Draw a row of colour swatches instead of a button (menu only). */
   swatches?: ActionSwatches;
+  fields?: { values: { key: string; label: string; value: number; min: number; max: number }[]; apply: (values: Record<string, number>) => void };
   run?: () => void;
 }
 
@@ -126,7 +127,7 @@ export function barItems(actions: readonly SelectionAction[]): BarItem[] {
   const items = grouped<BarItem>(
     actions,
     barGroup,
-    (a) => a.bar === true && !a.swatches,
+    (a) => a.bar === true && !a.swatches && !a.fields,
     (action) => ({ kind: "action", action }),
     { kind: "divider" },
   );
@@ -168,6 +169,7 @@ export function actionsKey(actions: readonly SelectionAction[]): string {
       a.showLabel === true,
       menuPlacement(a),
       a.swatches ? [a.swatches.colors, a.swatches.current] : null,
+      a.fields?.values ?? null,
     ]),
   );
 }

@@ -558,7 +558,9 @@ export class InkView extends TextFileView {
   }
 
   setPressureWidth(enabled: boolean): void {
-    this.surface?.setPressure(enabled && penTypeFor(this.toolState).pressure);
+    this.toolState.pressureEnabled = enabled && penTypeFor(this.toolState).pressure;
+    this.surface?.setPressure(this.toolState.pressureEnabled);
+    this.toolbar?.refreshPressurePreference();
     this.updateSidebarRendering();
   }
 
@@ -1002,6 +1004,7 @@ export class InkView extends TextFileView {
         onSizeChange: ignore,
         onPressureToggle: () => this.updateSidebarRendering(),
         pressureAllowed: () => this.settings.pressureWidth,
+        onPressurePreferenceChange: (enabled) => { void this.plugin.setPressureWidth(enabled); },
         onUndo: () => this.surface?.undo(),
         onRedo: () => this.surface?.redo(),
         onClear: () => void this.clearPage(),

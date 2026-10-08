@@ -271,3 +271,23 @@ export class SnapStrokeToShape implements Command {
     this.previous = null;
   }
 }
+
+/** A single vector-shape edit, retaining the stroke object, ID and all metadata. */
+export class TransformStroke implements Command {
+  private previous: { pts: number[]; size: number } | null = null;
+  private readonly points: number[];
+  constructor(readonly pageId: string, private readonly strokeId: string, pts: readonly number[], private readonly size?: number, readonly label = "Resize shape") { this.points = pts.slice(); }
+  apply(doc: InkDocument): void {
+    const stroke = strokeById(doc, this.pageId, this.strokeId);
+    if (!stroke) return;
+    this.previous = { pts: stroke.pts.slice(), size: stroke.size };
+    stroke.pts = this.points.slice();
+    if (this.size !== undefined) stroke.size = this.size;
+  }
+  invert(doc: InkDocument): void {
+    const stroke = strokeById(doc, this.pageId, this.strokeId);
+    if (!stroke || !this.previous) return;
+    stroke.pts = this.previous.pts.slice(); stroke.size = this.previous.size;
+    this.previous = null;
+  }
+}

@@ -179,3 +179,31 @@ it("eraser filter choices expose All ink/Highlighter/Pen without resetting mode 
   expect(state.eraserFilter).toBe("pen"); expect(changed).toHaveBeenCalledWith("pen");
   expect(state.eraserMode).toBe("stroke"); expect(state.eraserSize).toBe(17.5);
 });
+
+describe("pen gesture pressure and smoothing", () => {
+  it("switching pen types reads the shared preference without overwriting it", () => {
+    const s = setup(); const preference = vi.fn();
+    const t = s.toolbar as unknown as { callbacks: Record<string, unknown> };
+    t.callbacks.pressureAllowed = () => true; t.callbacks.onPressurePreferenceChange = preference;
+    for (const spec of PEN_TYPES) {
+      s.toolbar.choosePenType(spec);
+      expect((s.state as unknown as { pressureEnabled: boolean }).pressureEnabled).toBe(spec.pressure);
+    }
+    expect(preference).not.toHaveBeenCalled();
+  });
+  it("pressure writes the shared preference and smoothing saves without rebuilding its active slider", () => {
+    const inputs: { value: string; listeners: Record<string, () => void> }[] = [];
+    const node = (): any => ({ querySelector: () => ({ childElementCount: 1 }), createDiv: () => node(), createSpan: () => node(), setAttribute: () => {}, addEventListener: () => {}, createEl: (tag: string, options: { type?: string }) => {
+      const child = node(); child.value = ""; child.listeners = {}; child.addEventListener = (name: string, fn: () => void) => { child.listeners[name] = fn; };
+      if (tag === "input" && options.type === "range") inputs.push(child);
+      return child;
+    } });
+    const switches = new Map<string, (on: boolean) => void>(), preference = vi.fn(), saved = vi.fn(), rerender = vi.fn();
+    const state = { penGestures: { strokeSmoothing: 0 } };
+    const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, callbacks: { pressureAllowed: () => true, onPressurePreferenceChange: preference, onPenGesturesChange: saved }, popoverRender: rerender, switchRow: (_body: unknown, label: string, _enabled: boolean, on: (enabled: boolean) => void) => { switches.set(label, on); return {}; } });
+    toolbar.renderPenGestures(node(), () => {});
+    switches.get("Pressure sensitivity")!(false); expect(preference).toHaveBeenCalledWith(false);
+    inputs[0].value = "6"; inputs[0].listeners.input();
+    expect(saved).toHaveBeenCalledWith(expect.objectContaining({ strokeSmoothing: 6 })); expect(rerender).not.toHaveBeenCalled();
+  });
+});

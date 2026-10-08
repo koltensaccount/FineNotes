@@ -854,3 +854,39 @@ describe("finger constraints", () => {
     expect(changes).toEqual([]);
   });
 });
+
+describe("modifier routing diagnostics", () => {
+  afterEach(() => vi.useRealTimers());
+  it("accepts realistic stationary finger contacts while keeping wide palms rejected", () => {
+    vi.useFakeTimers(); const changes = vi.fn(), diagnostic = vi.fn();
+    const rig = new Rig(undefined, { canConstrainShape: () => true, onShapeConstraint: changes, onModifierDebug: diagnostic });
+    rig.pen("pointerdown", 1, { x: 10, y: 10 });
+    rig.fire("pointerdown", 2, "touch", { x: 100, y: 100, width: 36, height: 40 });
+    rig.finger("pointermove", 2, 110, 100, 1); vi.advanceTimersByTime(140);
+    expect(changes).toHaveBeenCalledWith(true); expect(diagnostic).toHaveBeenCalledWith("activated");
+    rig.finger("pointerup", 2, 110, 100, 200);
+    rig.fire("pointerdown", 3, "touch", { x: 100, y: 100, width: 70, height: 90 }); vi.advanceTimersByTime(140);
+    expect(diagnostic).toHaveBeenCalledWith("palm contact rejected"); expect(changes.mock.calls).toEqual([[true], [false]]);
+  });
+  it("claims eligible touches in capture phase before child bubbling handlers", () => {
+    vi.useFakeTimers(); const changes = vi.fn(); const captures: Record<string, (event: PointerEvent) => void> = {};
+    const rig = new Rig(undefined, { canConstrainShape: () => true, onShapeConstraint: changes });
+    const element = rig.el as unknown as HTMLElement;
+    const original = element.addEventListener.bind(element);
+    element.addEventListener = ((type: string, listener: (event: PointerEvent) => void, capture?: boolean) => { if (capture) captures[type] = listener; else original(type, listener as EventListener); }) as typeof element.addEventListener;
+    rig.controller.detach(); rig.controller.attach();
+    rig.pen("pointerdown", 1, { x: 10, y: 10 });
+    const stopped = vi.fn(), event = Object.assign(eventFor(2, "touch", { x: 100, y: 100 }), { stopPropagation: stopped, target: { closest: () => null } });
+    captures.pointerdown(event as unknown as PointerEvent); vi.advanceTimersByTime(140);
+    expect(stopped).toHaveBeenCalledOnce(); expect(changes).toHaveBeenCalledWith(true); expect(rig.controller.hasModifierContact).toBe(true);
+    rig.controller.detach();
+  });
+  it("lost Pencil capture deactivates the modifier without allowing pan or pinch", () => {
+    vi.useFakeTimers(); const changes = vi.fn();
+    const rig = new Rig(undefined, { canConstrainShape: () => true, onShapeConstraint: changes });
+    rig.pen("pointerdown", 1, { x: 10, y: 10 }); rig.finger("pointerdown", 2, 100, 100, 0); vi.advanceTimersByTime(140);
+    rig.el.listeners.get("lostpointercapture")?.(eventFor(1, "pen", { x: 10, y: 10 }));
+    expect(changes.mock.calls).toEqual([[true], [false]]);
+    rig.finger("pointermove", 2, 130, 130, 150); expect(rig.take().some(x => /panStart|pinchStart/.test(x))).toBe(false);
+  });
+});

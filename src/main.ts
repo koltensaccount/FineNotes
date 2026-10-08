@@ -875,8 +875,8 @@ export default class GoodObsidianPlugin extends Plugin {
   /** Pressure-sensitive pens, on or off, in every open notebook (the setting). */
   async setPressureWidth(enabled: boolean): Promise<void> {
     this.settings.pressureWidth = enabled;
-    await this.saveSettings();
     for (const view of this.openNotebooks()) view.setPressureWidth(enabled);
+    await this.saveSettings();
   }
 
   /** Every notebook view open in the workspace. */

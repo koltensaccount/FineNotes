@@ -81,6 +81,7 @@ export interface PointerControllerCallbacks {
   onStart(sample: PointerSample): void;
   canConstrainShape?(sample: PointerSample): boolean;
   onShapeConstraint?(active: boolean): void;
+  onModifierDebug?(state: string): void;
   /** The samples since the last move. */
   onMove(coalesced: PointerSample[]): void;
   onEnd(sample: PointerSample): void;
@@ -109,7 +110,8 @@ export class PointerController {
   /** The pointer drawing the open stroke; null between strokes. */
   private stroke: number | null = null;
   private penStroke = false;
-  private modifier: { id: number; x: number; y: number; sample: PointerSample; active: boolean; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  private penCaptureLost = false;
+  private modifier: { id: number; x: number; y: number; sample: PointerSample; active: boolean; slop: number; timer: ReturnType<typeof setTimeout> | null } | null = null;
   /** Reserved contacts never enter pan, pinch or history, even after Pencil lift. */
   get hasModifierContact(): boolean { return this.modifier !== null; }
   get isPenDrawing(): boolean { return this.stroke !== null && this.penStroke; }
@@ -153,6 +155,7 @@ export class PointerController {
   }
 
   private readonly lostModifier = (event: PointerEvent): void => {
+    if (event.pointerId === this.stroke) { this.penCaptureLost = true; this.cancelShapeConstraint(); this.listener.onModifierDebug?.("Pencil capture lost"); return; }
     if (event.pointerId !== this.modifier?.id) return;
     this.cancelShapeConstraint();
     this.modifier = null;
@@ -167,7 +170,35 @@ export class PointerController {
   private readonly modifierVisibility = (): void => {
     if (this.element.ownerDocument?.visibilityState === "hidden") this.modifierBlur();
   };
+  // Only modifier touches are intercepted in capture phase; ordinary input keeps its routing.
+  private readonly modifierDown = (event: PointerEvent): void => {
+    if (this.tryModifier(event)) event.stopPropagation();
+  };
+  private tryModifier(event: PointerEvent): boolean {
+    if (event.pointerType !== "touch" || !this.isPenDrawing || this.penCaptureLost || this.modifier) return false;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.("button, input, textarea, [contenteditable=true], .goodobsidian-selection-ui, .goodobsidian-image-ui, .goodobsidian-textboxes")) return false;
+    const sample = this.sample(event);
+    if (!this.listener.canConstrainShape?.(sample)) { this.listener.onModifierDebug?.("ineligible shape or disabled"); return false; }
+    const w = Math.max(1, event.width ?? 1), h = Math.max(1, event.height ?? 1);
+    if (w > 56 || h > 56 || w * h > 2500 || Math.max(w / h, h / w) > 2.5) { this.listener.onModifierDebug?.("palm contact rejected"); return false; }
+    const modifier = { id: event.pointerId, x: event.clientX, y: event.clientY, sample, active: false, slop: Math.max(8, Math.min(16, Math.max(w, h) * 0.4)), timer: null as ReturnType<typeof setTimeout> | null };
+    this.modifier = modifier;
+    try { this.element.setPointerCapture(event.pointerId); } catch { /* Capture may be unavailable during teardown. */ }
+    event.preventDefault();
+    this.listener.onModifierDebug?.("eligible contact; waiting");
+    modifier.timer = setTimeout(() => {
+      modifier.timer = null;
+      if (this.modifier === modifier && this.isPenDrawing && this.listener.canConstrainShape?.(modifier.sample)) {
+        modifier.active = true;
+        this.listener.onModifierDebug?.("activated");
+        this.listener.onShapeConstraint?.(true);
+      } else this.listener.onModifierDebug?.("eligibility lost before hold");
+    }, 140);
+    return true;
+  }
   attach(): void {
+    this.element.addEventListener("pointerdown", this.modifierDown, true);
     this.element.addEventListener("lostpointercapture", this.lostModifier);
     this.element.ownerDocument?.addEventListener("visibilitychange", this.modifierVisibility);
     this.element.ownerDocument?.defaultView?.addEventListener("blur", this.modifierBlur);
@@ -175,6 +206,7 @@ export class PointerController {
   }
 
   detach(): void {
+    this.element.removeEventListener("pointerdown", this.modifierDown, true);
     this.element.removeEventListener("lostpointercapture", this.lostModifier);
     this.element.ownerDocument?.removeEventListener("visibilitychange", this.modifierVisibility);
     this.element.ownerDocument?.defaultView?.removeEventListener("blur", this.modifierBlur);
@@ -203,22 +235,7 @@ export class PointerController {
     if (event.pointerType === "mouse" && event.button != null && event.button !== 0) return;
     const { pointerId, clientX, clientY, timeStamp } = event;
     const role = roleOf(event.pointerType, this.stroke !== null);
-    if (event.pointerType === "touch" && this.isPenDrawing && !this.modifier &&
-      (event.width ?? 1) <= 28 && (event.height ?? 1) <= 28 &&
-      this.listener.canConstrainShape?.(this.sample(event))) {
-      const modifier = { id: pointerId, x: clientX, y: clientY, sample: this.sample(event), active: false, timer: null as ReturnType<typeof setTimeout> | null };
-      this.modifier = modifier;
-      this.element.setPointerCapture(pointerId);
-      event.preventDefault();
-      modifier.timer = setTimeout(() => {
-        modifier.timer = null;
-        if (this.modifier === modifier && this.isPenDrawing && this.listener.canConstrainShape?.(modifier.sample)) {
-          modifier.active = true;
-          this.listener.onShapeConstraint?.(true);
-        }
-      }, 140);
-      return;
-    }
+    if (event.pointerId === this.modifier?.id || this.tryModifier(event)) return;
     if (role === "draw" && this.stroke === null && this.handHeld()) {
       // A stroke already under way is left to finish; only a new one pans.
       event.preventDefault();
@@ -242,6 +259,7 @@ export class PointerController {
       this.stroke = null;
       this.listener.onCancel();
     }
+    this.penCaptureLost = false;
     this.stroke = event.pointerId;
     this.element.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -256,7 +274,7 @@ export class PointerController {
   private moved(event: PointerEvent): void {
     if (event.pointerId === this.modifier?.id) {
       event.preventDefault();
-      if (Math.hypot(event.clientX - this.modifier.x, event.clientY - this.modifier.y) > 8) this.cancelShapeConstraint();
+      if (Math.hypot(event.clientX - this.modifier.x, event.clientY - this.modifier.y) > this.modifier.slop) { this.listener.onModifierDebug?.("contact moved"); this.cancelShapeConstraint(); }
       return;
     }
     if (this.modifier?.active && !this.listener.canConstrainShape?.(this.modifier.sample)) this.cancelShapeConstraint();
@@ -281,15 +299,16 @@ export class PointerController {
       this.cancelShapeConstraint();
       this.releaseCapture(id);
       this.modifier = null;
+      this.listener.onModifierDebug?.(cancelled ? "contact cancelled" : "contact released");
       return;
     }
     if (id !== this.stroke) {
       if (this.fingers.lift(id, event.timeStamp)) this.releaseCapture(id);
       return;
     }
-    this.releaseCapture(id);
     this.stroke = null;
     this.penStroke = false;
+    this.releaseCapture(id);
     if (cancelled) {
       this.debug("cancel", event, 0);
       this.cancelShapeConstraint();

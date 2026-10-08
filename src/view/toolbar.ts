@@ -331,6 +331,7 @@ export interface ToolbarCallbacks {
   onPressureToggle: (enabled: boolean) => void;
   /** Whether pressure pens may widen with pressure (the advanced setting); off when absent. */
   pressureAllowed?: () => boolean;
+  onPressurePreferenceChange?: (enabled: boolean) => void;
   onUndo: () => void;
   onRedo: () => void;
   onClear: () => void;
@@ -2112,6 +2113,8 @@ export class Toolbar {
    * shapes and highlighter too), and Circle to lasso. The second switch is
    * greyed while the first is off, as GoodNotes has it.
    */
+  refreshPressurePreference(): void { if (this.popoverKind === "pens") this.popoverRender?.(); }
+
   private renderPenGestures(body: HTMLElement, back: () => void): void {
     const head = body.createDiv({ cls: "goodobsidian-popover-head" });
     const backButton = head.createEl("button", {
@@ -2128,6 +2131,24 @@ export class Toolbar {
       this.callbacks.onPenGesturesChange?.(this.state.penGestures);
       this.popoverRender?.();
     };
+
+    const pressure = body.createDiv({ cls: "goodobsidian-switch-list" });
+    this.switchRow(pressure, "Pressure sensitivity", this.callbacks.pressureAllowed?.() === true, (on) => {
+      this.callbacks.onPressurePreferenceChange?.(on);
+    });
+    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Vary stroke thickness with Apple Pencil pressure when using Fountain Pen or Brush Pen." });
+    const smoothing = body.createDiv({ cls: "goodobsidian-smoothing-control" });
+    const readout = smoothing.createEl("label", { text: `Stroke smoothing · ${gestures.strokeSmoothing ?? 0}/10` });
+    const slider = smoothing.createEl("input", { type: "range" });
+    slider.min = "0"; slider.max = "10"; slider.step = "1"; slider.value = String(gestures.strokeSmoothing ?? 0);
+    slider.setAttribute("aria-label", "Stroke smoothing");
+    slider.addEventListener("input", () => {
+      const strength = Number(slider.value);
+      readout.textContent = `Stroke smoothing · ${strength}/10`;
+      this.state.penGestures = { ...penGesturesOf(this.state.penGestures), strokeSmoothing: strength };
+      this.callbacks.onPenGesturesChange?.(this.state.penGestures);
+    });
+    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Smooth completed handwriting strokes without adding delay while writing. 0 Off · 1–3 Light · 4–6 Medium · 7–10 Strong." });
 
     const scribble = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(scribble, "Scribble to erase", gestures.scribbleErase, (on) =>
