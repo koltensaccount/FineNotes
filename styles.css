@@ -5726,3 +5726,109 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-color-preview {
   border: 1px solid var(--background-modifier-border);
 }
+
+/* Page manager additions retain the existing sidebar chrome and touch sizing. */
+.goodobsidian-page-selection-controls,
+.goodobsidian-page-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 12px;
+  align-items: center;
+}
+.goodobsidian-page-selection-controls button,
+.goodobsidian-page-bulk-actions button,
+.goodobsidian-page-position button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.goodobsidian-page-check {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  border-radius: 50%;
+  background: var(--background-primary);
+  color: var(--interactive-accent);
+  padding: 4px;
+  pointer-events: none;
+}
+.goodobsidian-thumb.is-page-selected .goodobsidian-thumb-frame {
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+.goodobsidian-thumb-frame {
+  touch-action: none;
+}
+.goodobsidian-thumb-frame.is-page-dragging {
+  opacity: 0.55;
+}
+.goodobsidian-pagesidebar {
+  position: relative;
+}
+.goodobsidian-page-insertion-line {
+  position: absolute;
+  height: 2px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+  z-index: 5;
+}
+.goodobsidian-page-drag-ghost {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: 0 3px 12px var(--background-modifier-box-shadow);
+}
+.goodobsidian-page-destinations {
+  display: flex;
+  flex-direction: column;
+}
+.goodobsidian-page-position [aria-pressed="true"] {
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+}
+.goodobsidian-page-gaps {
+  max-height: 45vh;
+  overflow-y: auto;
+}
+.goodobsidian-page-gap {
+  display: block;
+  width: 100%;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.goodobsidian-position-page {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+}
+.goodobsidian-position-page canvas {
+  width: 96px;
+}
+.goodobsidian-page-position-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.goodobsidian-page-bulk-actions.is-hidden,
+.goodobsidian-page-check.is-hidden,
+.goodobsidian-page-gaps.is-hidden {
+  display: none;
+}
+
+.goodobsidian-pagesidebar.is-single-page .goodobsidian-thumb-frame {
+  touch-action: pan-y;
+}
+
+.goodobsidian-pagesidebar .goodobsidian-thumb-more {
+  min-height: 44px;
+  min-width: 44px;
+}
+.goodobsidian-page-gap {
+  white-space: normal;
+  text-align: left;
+}

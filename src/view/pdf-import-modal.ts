@@ -42,7 +42,7 @@ export class PdfImportModal extends Modal {
     this.titleEl.setText("Import PDF");
     this.modalEl.addClass("goodobsidian-dialog");
     this.contentEl.createEl("p", {
-      text: `${this.name} · ${this.total} pages. Added after the current page; the original PDF is preserved.`,
+      text: `${this.name} · ${this.total} pages. Added at your confirmed position; the original PDF is preserved.`,
     });
     this.keyboard = new DialogKeyboard(this.modalEl);
     new Setting(this.contentEl).setName("Pages").addDropdown((dropdown) =>

@@ -33,6 +33,7 @@
  * outlining every stroke of every page on each edit would stall an iPad.
  */
 
+import { bindPageSidebarDrag } from "./page-sidebar-drag";
 import { Menu, setIcon } from "obsidian";
 import { bookmarkedPageIndexes } from "../model/page-commands";
 import { contentsEntries, currentContentsEntry } from "../model/contents";
@@ -44,6 +45,8 @@ import { textStyleKey } from "../model/text-style";
 import { PANEL_SLIDE_MS, prefersReducedMotion } from "./motion";
 
 export type PageAction =
+  | "copy-pages"
+  | "move"
   | "add-before"
   | "add-after"
   | "change-template"
@@ -60,7 +63,20 @@ export type PageAction =
   | "contents"
   | "contents-remove";
 
+export type BulkPageAction =
+  | "copy"
+  | "duplicate"
+  | "move"
+  | "delete"
+  | "bookmark"
+  | "unbookmark"
+  | "template"
+  | "clear"
+  | "export";
+
 export interface PageSidebarCallbacks {
+  onMovePages?: (ids: string[], gap: number) => void;
+  onBulkAction?: (action: BulkPageAction, ids: string[], anchor: HTMLElement) => void;
   onSelectPage: (index: number) => void;
   /** `anchor` is the thumbnail's "…" button, for anything that opens a popover. */
   onPageAction: (action: PageAction, index: number, anchor: HTMLElement) => void;
@@ -119,6 +135,8 @@ interface ThumbView {
   /** Content signature at the last paint; empty means "never painted". */
   painted: string;
   visible: boolean;
+  check: HTMLElement;
+  drag?: ReturnType<typeof bindPageSidebarDrag>;
 }
 
 export class PageSidebar {
@@ -145,6 +163,10 @@ export class PageSidebar {
   private readonly thumbs: ThumbView[] = [];
   private readonly observer: IntersectionObserver;
 
+  private selecting = false;
+  private selected = new Set<string>();
+  private readonly selectionBar: HTMLElement;
+  private readonly bulkBar: HTMLElement;
   private doc: InkDocument | null = null;
   private current = 0;
   private open = false;
@@ -202,6 +224,9 @@ export class PageSidebar {
       "chevron-down",
     );
     this.filterChip.addEventListener("click", () => this.showFilterMenu());
+    this.selectionBar = this.pagesEl.createDiv({ cls: "goodobsidian-page-selection-controls" });
+    this.bulkBar = this.pagesEl.createDiv({ cls: "goodobsidian-page-bulk-actions" });
+    this.renderSelection();
     this.grid = this.pagesEl.createDiv({ cls: "goodobsidian-pagesidebar-grid" });
     this.emptyEl = this.pagesEl.createDiv({
       cls: "goodobsidian-pagesidebar-empty is-hidden",
@@ -261,6 +286,7 @@ export class PageSidebar {
   setOpen(open: boolean, animate = false): void {
     if (open === this.open) return;
     this.open = open;
+    if (!open) this.thumbs.forEach((view) => view.drag?.cancel());
     this.slide?.cancel();
     this.slide = null;
     this.el.removeClass("is-closing");
@@ -301,6 +327,7 @@ export class PageSidebar {
 
   /** Show the page thumbnails or the recordings. */
   showTab(tab: SidebarTab): void {
+    this.thumbs.forEach((view) => view.drag?.cancel());
     this.tab = tab;
     this.pagesEl.toggleClass("is-hidden", tab !== "pages");
     this.contentsEl.toggleClass("is-hidden", tab !== "contents");
@@ -343,6 +370,68 @@ export class PageSidebar {
       paper: this.render.paper,
       images: this.render.images,
     });
+  }
+
+  private renderSelection(): void {
+    this.selectionBar.empty();
+    this.bulkBar.empty();
+    const button = (parent: HTMLElement, label: string, run: () => void) => {
+      const el = parent.createEl("button", { cls: "clickable-icon", text: label });
+      el.addEventListener("click", run);
+      return el;
+    };
+    if (!this.selecting)
+      button(this.selectionBar, "Select", () => {
+        this.selecting = true;
+        this.renderSelection();
+        this.sync();
+      });
+    else {
+      button(this.selectionBar, "Cancel", () => {
+        this.selecting = false;
+        this.selected.clear();
+        this.thumbs.forEach((view) => view.drag?.cancel());
+        this.renderSelection();
+        this.sync();
+      });
+      button(this.selectionBar, "Select All", () => {
+        this.selected = new Set(this.doc?.pages.map((page) => page.id));
+        this.renderSelection();
+        this.sync();
+      });
+      this.selectionBar.createSpan({ text: `${this.selected.size} selected` });
+    }
+    this.bulkBar.toggleClass("is-hidden", !this.selecting || this.selected.size === 0);
+    if (!this.selecting || !this.selected.size) return;
+    for (const [label, action] of [
+      ["Copy", "copy"],
+      ["Duplicate", "duplicate"],
+      ["Move", "move"],
+      ["Delete", "delete"],
+    ] as const) {
+      const el = button(this.bulkBar, label, () =>
+        this.callbacks.onBulkAction?.(action, [...this.selected], el),
+      );
+      el.disabled = this.single && action !== "copy";
+    }
+    const more = button(this.bulkBar, "•••", () => {
+      const menu = new Menu();
+      for (const [label, action] of [
+        ["Export selected pages", "export"],
+        ["Bookmark", "bookmark"],
+        ["Unbookmark", "unbookmark"],
+        ["Change template", "template"],
+        ["Clear pages", "clear"],
+      ] as const)
+        menu.addItem((item) =>
+          item
+            .setTitle(label)
+            .onClick(() => this.callbacks.onBulkAction?.(action, [...this.selected], more)),
+        );
+      const box = more.getBoundingClientRect();
+      menu.showAtPosition({ x: box.left, y: box.bottom });
+    });
+    more.setAttribute("aria-label", "More page actions");
   }
 
   private showFilterMenu(): void {
@@ -390,7 +479,16 @@ export class PageSidebar {
 
   /** The document (or its page list) changed. Cheap: repaint is debounced. */
   setDocument(doc: InkDocument): void {
+    if (this.doc && this.doc !== doc) {
+      this.thumbs.forEach((view) => view.drag?.cancel());
+      this.selected.clear();
+      this.selecting = false;
+    }
     this.doc = doc;
+    this.selected = new Set(
+      [...this.selected].filter((id) => doc.pages.some((page) => page.id === id)),
+    );
+    this.renderSelection();
     if (!this.open) return;
     window.clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(() => this.sync(), REFRESH_DEBOUNCE_MS);
@@ -403,6 +501,7 @@ export class PageSidebar {
    */
   setSingle(single: boolean): void {
     this.single = single;
+    this.el.toggleClass("is-single-page", single);
     this.applyFilter();
   }
 
@@ -449,6 +548,7 @@ export class PageSidebar {
     window.cancelAnimationFrame(this.paintFrame);
     this.slide?.cancel();
     this.slide = null;
+    this.thumbs.forEach((view) => view.drag?.dispose());
     this.observer.disconnect();
     this.el.remove();
   }
@@ -463,10 +563,21 @@ export class PageSidebar {
     while (this.thumbs.length > pages.length) {
       const view = this.thumbs.pop();
       if (!view) break;
+      view.drag?.dispose();
       this.observer.unobserve(view.root);
       view.root.remove();
     }
     this.thumbs.forEach((view, index) => {
+      view.root.dataset.pageId = pages[index].id;
+      view.check.toggleClass("is-hidden", !this.selecting);
+      view.check.setText(this.selected.has(pages[index].id) ? "✓" : "○");
+      view.root.toggleClass("is-page-selected", this.selected.has(pages[index].id));
+      view.root
+        .querySelector(".goodobsidian-thumb-frame")
+        ?.setAttribute(
+          "aria-pressed",
+          String(this.selecting && this.selected.has(pages[index].id)),
+        );
       view.label.setText(String(index + 1));
       view.canvas.setCssStyles({ aspectRatio: aspectOf(pages[index]) });
     });
@@ -527,6 +638,7 @@ export class PageSidebar {
     const canvas = frame.createEl("canvas", { cls: "goodobsidian-thumb-canvas" });
     // GoodNotes' ribbon at the top right of every page: an outline, filled
     // red when the page is bookmarked. A tap on it toggles the bookmark.
+    const check = frame.createSpan({ cls: "goodobsidian-page-check is-hidden" });
     const ribbon = frame.createSpan({ cls: "goodobsidian-thumb-ribbon is-outline" });
     setIcon(ribbon, "bookmark");
     const footer = root.createDiv({ cls: "goodobsidian-thumb-footer" });
@@ -535,7 +647,20 @@ export class PageSidebar {
     setIcon(more, "chevron-down");
     more.setAttribute("aria-label", "Page options");
 
-    const view: ThumbView = { root, canvas, ribbon, label, painted: "", visible: false };
+    const view: ThumbView = { root, canvas, ribbon, label, check, painted: "", visible: false };
+    view.drag = bindPageSidebarDrag(frame, this.el, {
+      id: () => root.dataset.pageId,
+      selected: () => this.selected,
+      total: () => this.doc?.pages.length ?? 0,
+      rows: () =>
+        this.thumbs.map((thumb, index) => ({
+          id: thumb.root.dataset.pageId ?? "",
+          el: thumb.root,
+          index,
+        })),
+      enabled: () => !this.single && !!this.callbacks.onMovePages,
+      move: (ids, gap) => this.callbacks.onMovePages?.(ids, gap),
+    });
     frame.addEventListener("click", (event) => {
       const index = this.thumbs.indexOf(view);
       if (index < 0) return;
@@ -544,7 +669,15 @@ export class PageSidebar {
         this.callbacks.onPageAction("bookmark", index, ribbon);
         return;
       }
-      this.callbacks.onSelectPage(index);
+      if (this.selecting) {
+        const id = this.doc?.pages[index]?.id;
+        if (id) {
+          if (this.selected.has(id)) this.selected.delete(id);
+          else this.selected.add(id);
+        }
+        this.renderSelection();
+        this.sync();
+      } else this.callbacks.onSelectPage(index);
     });
     more.addEventListener("click", (event) => {
       const index = this.thumbs.indexOf(view);
@@ -649,6 +782,9 @@ export class PageSidebar {
     menu.addItem((item) =>
       item.setTitle("Copy link to page").setIcon("link").onClick(act("copy-link")),
     );
+    menu.addItem((item) => item.setTitle("Copy page").setIcon("copy").onClick(act("copy-pages")));
+    if (!this.single)
+      menu.addItem((item) => item.setTitle("Move…").setIcon("move").onClick(act("move")));
     menu.addSeparator();
     if (this.single) {
       menu.addItem((item) =>

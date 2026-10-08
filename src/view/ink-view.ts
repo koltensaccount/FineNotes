@@ -1,3 +1,13 @@
+import {
+  copiedPages,
+  deletePages,
+  insertPages,
+  MovePages,
+  reorderedPages,
+  pageClipboard,
+} from "../model/page-manager";
+import { PagePositionPicker } from "./page-position-picker";
+import type { BulkPageAction } from "./page-sidebar";
 import { migrateWritingPresets, selectedColor, selectedWidthFor } from "../model/writing-presets";
 import { lineStyleOf } from "../ink/line-style";
 import { type ClipboardTarget } from "./clipboard-read";
@@ -32,6 +42,7 @@ import { FolderSuggestModal } from "./folder-suggest";
 import { notebookKeyScope } from "./notebook-keys";
 import {
   Notice,
+  Menu,
   Platform,
   TextFileView,
   type TFile,
@@ -106,6 +117,7 @@ import { AddPage, type Command, InsertImage, RemovePage } from "../model/command
 import {
   AddTextBoxToPage,
   ClearPage,
+  CompositeCommand,
   MovePage,
   duplicatePageAfter,
   pageToInsertAfter,
@@ -1046,7 +1058,9 @@ export class InkView extends TextFileView {
         // A tapped thumbnail glides to its page, as GoodNotes does.
         onSelectPage: (index) => this.surface?.goToPage(index, true),
         onPageAction: (action, index, anchor) => this.pageAction(action, index, anchor),
-        onAddPage: (anchor) => this.openAddPage(anchor, this.doc.pages.length - 1, "last"),
+        onAddPage: (anchor) => this.openAddPage(anchor, this.surface?.currentPage ?? 0, "after"),
+        onMovePages: (ids, gap) => this.moveManagedPages(ids, gap),
+        onBulkAction: (action, ids, anchor) => void this.bulkPageAction(action, ids, anchor),
         onClose: () => {
           if (this.sidebar?.isOpen) this.toggleSidebar();
         },
@@ -1592,10 +1606,13 @@ export class InkView extends TextFileView {
    * Read-only on the note, but refused while it is protected: its pages may
    * not be the pages on disk.
    */
-  exportPdf(): void {
+  exportPdf(selectedIds?: ReadonlySet<string>): void {
     const note = this.file;
     if (this.isProtected() || !note) return;
-    const doc = this.surface?.document ?? this.doc;
+    const original = this.surface?.document ?? this.doc;
+    const doc = selectedIds
+      ? { ...original, pages: original.pages.filter((page) => selectedIds.has(page.id)) }
+      : original;
     const total = doc.pages.length;
     if (total === 0) return;
     const chosen = this.attachmentFolder("exports");
@@ -1763,6 +1780,12 @@ export class InkView extends TextFileView {
     const page = doc.pages[index];
     if (!page) return;
     switch (action) {
+      case "copy-pages":
+        void this.bulkPageAction("copy", [page.id], anchor);
+        return;
+      case "move":
+        void this.bulkPageAction("move", [page.id], anchor);
+        return;
       case "add-before":
       case "add-after":
         this.openAddPage(anchor, index, action === "add-before" ? "before" : "after");
@@ -1914,16 +1937,191 @@ export class InkView extends TextFileView {
     const at = Math.max(0, Math.min(this.doc.pages.length - 1, ref));
     const page = this.doc.pages[at];
     if (!page) return;
-    const popover = new AddPagePopover(anchor, {
-      // A cover is not paper: next to one, offer the notebook's paper.
-      current: paperTemplateFor(this.doc.pages, at),
-      geometry: page.geometry,
-      recent: this.loadRecentTemplates(),
-      position,
-      onPick: (backdrop, at) => this.addTemplatePage(backdrop, page.geometry, at, ref),
-      onMore: (at) => this.openTemplatePicker("add", ref, at),
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Add Pages").setDisabled(true));
+    menu.addItem((item) =>
+      item
+        .setTitle("Blank page")
+        .setIcon("file-plus")
+        .onClick(() => this.addTemplatePage({ kind: "blank" }, page.geometry, position, at)),
+    );
+    menu.addItem((item) =>
+      item
+        .setTitle("From template…")
+        .setIcon("layout-template")
+        .onClick(() => this.openTemplatePicker("add", at, position)),
+    );
+    menu.addItem((item) =>
+      item
+        .setTitle("Duplicate current page")
+        .setIcon("copy")
+        .onClick(() => this.pageAction("duplicate", at, anchor)),
+    );
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item
+        .setTitle("Import PDF…")
+        .setIcon("file-text")
+        .onClick(() => this.importPdf()),
+    );
+    if (pageClipboard.vault === this.app.vault && pageClipboard.pages.length) {
+      menu.addSeparator();
+      menu.addItem((item) =>
+        item
+          .setTitle(`Paste ${pageClipboard.pages.length} Pages`)
+          .setIcon("clipboard-paste")
+          .onClick(() => void this.pasteManagedPages()),
+      );
+    }
+    const box = anchor.getBoundingClientRect();
+    menu.showAtPosition({ x: box.left, y: box.bottom });
+  }
+
+  private choosePagePosition(): Promise<number | null> {
+    const surface = this.surface,
+      note = this.file;
+    if (!surface || !note || this.isProtected()) return Promise.resolve(null);
+    const pages = [...surface.document.pages];
+    return new Promise((resolve) => {
+      new PagePositionPicker(
+        this.app,
+        pages,
+        surface.currentPage,
+        (canvas, index) => this.sidebar?.paintThumbnail(canvas, index, 96),
+        (gap) => {
+          if (
+            gap === null ||
+            this.surface !== surface ||
+            this.file !== note ||
+            this.isProtected()
+          ) {
+            resolve(null);
+            return;
+          }
+          const after = pages[gap];
+          const index = after
+            ? surface.document.pages.indexOf(after)
+            : surface.document.pages.length;
+          resolve(index < 0 ? null : index);
+        },
+      ).open();
     });
-    this.addPagePopover = { popover, anchor };
+  }
+
+  private moveManagedPages(ids: string[], gap: number): void {
+    const surface = this.surface;
+    if (!surface || this.isProtected() || this.refuseSinglePage()) return;
+    const pages = surface.document.pages,
+      selected = new Set(ids);
+    const next = reorderedPages(pages, selected, gap);
+    if (next.every((page, i) => page === pages[i])) return;
+    const current = pages[surface.currentPage];
+    surface.applyCommand(new MovePages(selected, gap));
+    surface.goToPage(surface.document.pages.indexOf(current));
+    this.requestSave();
+  }
+
+  private async pasteManagedPages(): Promise<void> {
+    if (
+      pageClipboard.vault !== this.app.vault ||
+      !pageClipboard.pages.length ||
+      this.refuseSinglePage()
+    )
+      return;
+    const source = [...pageClipboard.pages],
+      surface = this.surface;
+    const gap = await this.choosePagePosition();
+    if (gap === null || !surface || surface !== this.surface || this.isProtected()) return;
+    const pages = copiedPages(surface.document, source);
+    if (!pages.length) return;
+    surface.applyCommand(insertPages(pages, gap));
+    surface.goToPage(gap, true);
+    this.requestSave();
+  }
+
+  private async bulkPageAction(
+    action: BulkPageAction,
+    ids: string[],
+    _anchor: HTMLElement,
+  ): Promise<void> {
+    const surface = this.surface;
+    if (!surface) return;
+    const doc = surface.document,
+      selected = new Set(ids),
+      pages = doc.pages.filter((page) => selected.has(page.id));
+    if (!pages.length) return;
+    if (action === "export") {
+      this.exportPdf(selected);
+      return;
+    }
+    if (action === "copy") {
+      pageClipboard.vault = this.app.vault;
+      pageClipboard.pages = copiedPages(doc, pages);
+      new Notice(`Copied ${pages.length} pages.`);
+      return;
+    }
+    if (this.isProtected()) return;
+    if (action === "move") {
+      const gap = await this.choosePagePosition();
+      if (gap !== null && this.surface === surface) this.moveManagedPages(ids, gap);
+      return;
+    }
+    if (action === "template") {
+      const templates = pages.filter(
+        (page) => page.backdrop.kind === "pdf" || !isCoverRuling(page.backdrop.kind),
+      );
+      if (!templates.length) {
+        new Notice("Use the individual page menu to change covers.");
+        return;
+      }
+      const first = templates[0],
+        initial = first.backdrop.kind === "pdf" ? { kind: "blank" as const } : first.backdrop;
+      new TemplatePickerModal(this.app, {
+        mode: "change",
+        initial,
+        geometry: first.geometry,
+        onApply: ({ backdrop, geometry }) => {
+          if (this.surface !== surface || this.isProtected()) return;
+          const current = templates.filter((page) => doc.pages.includes(page));
+          surface.applyCommand(
+            new CompositeCommand(
+              "Change page templates",
+              current.map((page) => new SetPageTemplate(page, backdrop, geometry ?? undefined)),
+            ),
+          );
+          this.rememberTemplate(backdrop);
+          this.requestSave();
+        },
+      }).open();
+      return;
+    }
+    if (action === "duplicate") {
+      if (this.refuseSinglePage()) return;
+      const gap = doc.pages.indexOf(pages[pages.length - 1]) + 1;
+      const copies = copiedPages(doc, pages);
+      surface.applyCommand(insertPages(copies, gap, "Duplicate pages"));
+      surface.goToPage(gap, true);
+    } else if (action === "delete") {
+      if (this.refuseSinglePage()) return;
+      const command = deletePages(doc, selected);
+      if (!command) return;
+      const current = doc.pages[surface.currentPage],
+        index = surface.currentPage;
+      surface.applyCommand(command);
+      const kept = doc.pages.indexOf(current);
+      surface.goToPage(kept >= 0 ? kept : Math.min(index, doc.pages.length - 1));
+      new Notice("Deleted pages. Undo brings them back; at least one page is retained.");
+    } else {
+      const commands =
+        action === "clear"
+          ? pages.filter((page) => page.strokes.length).map((page) => new ClearPage(page.id))
+          : pages.map((page) => new SetPageBookmark(page, action === "bookmark"));
+      if (commands.length)
+        surface.applyCommand(
+          new CompositeCommand(action === "clear" ? "Clear pages" : "Bookmark pages", commands),
+        );
+    }
+    this.requestSave();
   }
 
   /** The full template picker, to add a page or to change page `ref`'s template. */
@@ -2268,11 +2466,19 @@ export class InkView extends TextFileView {
       const bytes = await read();
       const pages = await measurePdfPages(bytes);
       if (this.file !== note || this.surface !== surface || this.isProtected()) return;
+      const gap = await this.choosePagePosition();
+      if (gap === null || this.file !== note || this.surface !== surface || this.isProtected())
+        return;
+      const before = surface.document.pages[gap];
       const item: ScanItem = { kind: "pdf", bytes, name, savedPath, pages: [] };
       new PdfImportModal(this.app, name, pages.length, async (indices) => {
         if (this.file !== note || this.surface !== surface || this.isProtected()) return false;
-        item.pages = indices.map((page) => ({ ...pages[page], page }));
-        return this.insertScans([item], "Import PDF");
+        item.pages = [...indices].sort((a, b) => a - b).map((page) => ({ ...pages[page], page }));
+        const destination = before
+          ? surface.document.pages.indexOf(before)
+          : surface.document.pages.length;
+        if (destination < 0) return false;
+        return this.insertScans([item], "Import PDF", { beforeId: before?.id ?? null });
       }).open();
     } catch (error) {
       new Notice(`FineNotes: couldn't import PDF — ${errorMessage(error)}`, 8000);
@@ -2312,7 +2518,11 @@ export class InkView extends TextFileView {
    * A file saved before a later one failed keeps its path, so trying Add
    * again does not save it twice.
    */
-  private async insertScans(items: ScanItem[], label?: string): Promise<boolean> {
+  private async insertScans(
+    items: ScanItem[],
+    label?: string,
+    insertion?: { beforeId: string | null },
+  ): Promise<boolean> {
     const note = this.file;
     if (!note || !this.surface || this.isProtected()) return false;
     const originalSurface = this.surface;
@@ -2348,7 +2558,19 @@ export class InkView extends TextFileView {
     const surface = this.surface;
     if (!surface || surface !== originalSurface || this.file !== note || this.isProtected())
       return false;
-    const insert = buildScanInsert(surface.document, surface.currentPage, saved, label);
+    const insertionIndex = insertion
+      ? insertion.beforeId === null
+        ? surface.document.pages.length
+        : surface.document.pages.findIndex((page) => page.id === insertion.beforeId)
+      : undefined;
+    if (insertionIndex === -1) return false;
+    const insert = buildScanInsert(
+      surface.document,
+      surface.currentPage,
+      saved,
+      label,
+      insertionIndex,
+    );
     const first = insert?.placed[0];
     if (!insert || !first) {
       if (this.isSinglePage) {

@@ -159,6 +159,7 @@ export function buildScanInsert(
   currentIndex: number,
   items: readonly SavedItem[],
   label?: string,
+  insertionIndex?: number,
 ): ScanInsert | null {
   const current = doc.pages[currentIndex];
   if (!current) return null;
@@ -168,7 +169,7 @@ export function buildScanInsert(
   // What the document will look like, for fresh ids; never mutated itself.
   const pages: Page[] = [...doc.pages];
   const preview = (): InkDocument => ({ ...doc, pages });
-  let at = currentIndex + 1;
+  let at = Math.max(0, Math.min(doc.pages.length, insertionIndex ?? currentIndex + 1));
 
   const addPage = (geometry: PageGeometry, backdrop: Backdrop): Page => {
     const page: Page = {
