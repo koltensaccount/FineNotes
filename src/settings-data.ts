@@ -1,3 +1,4 @@
+import type { PdfQuality } from "./export/pdf-quality";
 import {
   colorList,
   selectedColor,
@@ -41,6 +42,7 @@ import type { EraserMode } from "./view/toolbar";
 export type ToolId = "pen" | "highlighter" | "eraser" | "select";
 
 export interface GoodObsidianSettings {
+  pdfExportQuality: PdfQuality;
   /** Versioned user-managed toolbar preferences, upgraded explicitly on load. */
   writingPresets?: WritingPresets;
   penLineStyle?: LineStyle;
@@ -158,6 +160,7 @@ export interface GoodObsidianSettings {
 // The records are copies, so a host that edits its settings in place cannot
 // change the shared defaults.
 export const DEFAULT_SETTINGS: GoodObsidianSettings = {
+  pdfExportQuality: "high",
   drawAndHold: true,
   defaultTool: "pen",
   customColors: [],

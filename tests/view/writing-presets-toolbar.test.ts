@@ -1,3 +1,4 @@
+import { presetActivation } from "../../src/view/transient-popover";
 import { describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", () => import("./fake-obsidian"));
 const { Toolbar, PEN_TYPES } = await import("../../src/view/toolbar");
@@ -96,4 +97,26 @@ it("tap unselected selects; tap the selected ID again edits that exact record re
   expect(editor).not.toHaveBeenCalled();
   s.toolbar.activateColorPreset(anchor, red.id, red.color);
   expect(editor).toHaveBeenCalledExactlyOnceWith(anchor, { id: red.id });
+});
+
+it("color and width presets share select/edit/toggle transitions without a clock", () => {
+  expect(presetActivation("blue", "red", null)).toBe("select");
+  expect(presetActivation("red", "red", null)).toBe("open");
+  expect(presetActivation("red", "red", "red")).toBe("close");
+  expect(presetActivation("red", "blue", "red")).toBe("select");
+  expect(presetActivation("blue", "blue", null)).toBe("open");
+  expect(presetActivation("blue", "blue", "blue")).toBe("close");
+  expect(presetActivation(null, "red", "red")).toBe("select");
+});
+
+it("selected color closes its anchored editor; changing presets closes and selects without opening", () => {
+  const s = setup(), red = s.presets.palettes.pen[2], blue = s.presets.palettes.pen[3];
+  s.presets.selectedIds.pen = red.id;
+  const close = vi.fn(), editor = vi.fn();
+  Object.assign(s.toolbar, {popoverKind: "pen-color", popoverPresetId: red.id, closePopover: close, presetPopover: editor});
+  s.toolbar.activateColorPreset({} as HTMLElement, red.id, red.color);
+  expect(close).toHaveBeenCalledOnce(); expect(editor).not.toHaveBeenCalled();
+  s.toolbar.activateColorPreset({} as HTMLElement, blue.id, blue.color);
+  expect(s.presets.selectedIds.pen).toBe(blue.id); expect(s.state.color).toBe(blue.color);
+  expect(editor).not.toHaveBeenCalled();
 });

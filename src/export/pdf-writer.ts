@@ -51,11 +51,11 @@ export const EXPORT_MAX_PIXELS = 12_000_000;
  * lowered for a page so large that it would pass either cap. 0 for a page
  * without a size.
  */
-export function exportPixelScale(width: number, height: number): number {
+export function exportPixelScale(width: number, height: number, factor = 1): number {
   if (!(width > 0) || !(height > 0) || !Number.isFinite(width * height)) return 0;
   const byEdge = EXPORT_MAX_EDGE / Math.max(width, height);
   const byArea = Math.sqrt(EXPORT_MAX_PIXELS / (width * height));
-  return Math.min(EXPORT_PIXEL_SCALE, byEdge, byArea);
+  return Math.min(EXPORT_PIXEL_SCALE * factor, byEdge, byArea);
 }
 
 /**

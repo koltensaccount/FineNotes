@@ -1,3 +1,4 @@
+import { claimTransient } from "./transient-popover";
 /**
  * The selection's floating action bar and its "…" menu (0.5), drawn from a
  * list of {@link SelectionAction} entries. `selection-bar-model.ts` decides
@@ -121,7 +122,10 @@ export class SelectionActionBar {
     return this.menuEl !== null;
   }
 
+  private releaseTransient: (() => void) | null = null;
+
   closeMenu(): void {
+    this.releaseTransient?.(); this.releaseTransient = null;
     if (!this.menuEl) return;
     this.menuEl.remove();
     this.menuEl = null;
@@ -203,9 +207,10 @@ export class SelectionActionBar {
       return;
     }
     this.menuEl = this.parent.createDiv({
-      cls: "goodobsidian-selection-menu theme-dark",
+      cls: "goodobsidian-selection-menu",
       attr: { role: "menu" },
     });
+    this.releaseTransient = claimTransient(this.parent.ownerDocument, this, () => this.closeMenu());
     stopPageInput(this.menuEl);
     this.moreButton?.addClass("is-active");
     this.renderMenu();

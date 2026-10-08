@@ -1,3 +1,4 @@
+import { claimTransient } from "./transient-popover";
 /**
  * The ⋯ panel beside the toolbar's settings gear: GoodNotes' "More" sheet, from
  * the screen recording Joost supplied (2026-09-22), built from what this
@@ -50,6 +51,7 @@ export interface MorePanelActions {
   editTitle: (index: number) => void;
   copyLink: (index: number) => void;
   duplicate: (index: number) => void;
+  move?: (index: number) => void;
   changeTemplate: (index: number, anchor: HTMLElement) => void;
   goToPage: (index: number) => void;
   clear: (index: number) => void;
@@ -104,6 +106,8 @@ export class MorePanel {
     const { page, actions } = this;
     this.el.createDiv({ cls: "goodobsidian-more-title", text: "More" });
 
+    if (page.total > 1) {this.heading("Navigation"); this.goToRow(this.group());}
+    this.heading("Current Page");
     const card = this.group();
     const head = card.createDiv({ cls: "goodobsidian-more-pagehead" });
     head.createSpan({ cls: "goodobsidian-more-pagename", text: `Page ${page.index + 1}` });
@@ -133,12 +137,12 @@ export class MorePanel {
         run: () => actions.duplicate(page.index),
       });
     }
+    if (!page.single && actions.move) this.row(card, {icon: "move", text: "Move…", run: () => actions.move?.(page.index)});
     this.row(card, {
       icon: page.cover ? "palette" : "layout-template",
       text: page.cover ? "Change cover" : "Change template",
       run: (button) => actions.changeTemplate(page.index, button),
     });
-    if (page.total > 1) this.goToRow(card);
 
     this.heading("Clear or delete page");
     const danger = this.group();
@@ -237,7 +241,8 @@ export class MorePanel {
     const r = this.anchor.getBoundingClientRect();
     const width = Math.min(PANEL_WIDTH, window.innerWidth - 16);
     const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
-    const top = r.bottom + 6;
+    const height = Math.min(this.el.offsetHeight, window.innerHeight - 16);
+    const top = r.bottom + 6 + height <= window.innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - height - 6);
     this.el.setCssStyles({
       left: `${left}px`,
       top: `${top}px`,
@@ -247,6 +252,7 @@ export class MorePanel {
   }
 
   private installDismiss(): void {
+    this.dispose.push(claimTransient(this.el.ownerDocument, this, () => this.close()));
     const outside = (event: Event): void => {
       const target = event.target as Node | null;
       if (target && (this.el.contains(target) || this.anchor.contains(target))) return;

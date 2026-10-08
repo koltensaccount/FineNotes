@@ -1,3 +1,4 @@
+import { pdfQuality, type PdfQuality } from "../export/pdf-quality";
 /** Optional PDF associations; no notebook ink schema or platform dependencies. */
 import type { InkDocument } from "./document";
 import { stripInkSuffix } from "./new-notebook";
@@ -15,6 +16,8 @@ export interface CompanionEntry {
   followName: boolean;
   dirty: boolean;
   lastFingerprint?: string;
+  pdfQuality?: PdfQuality;
+  lastQuality?: PdfQuality;
   error?: string;
   transaction?: CompanionTransaction;
 }
@@ -87,6 +90,8 @@ export function parseCompanionStore(raw: unknown): CompanionStore {
         followName: value.followName !== false,
         dirty: value.dirty !== false,
       };
+      if (value.pdfQuality !== pdfQuality(value.pdfQuality)) delete out.entries[id].pdfQuality;
+      if (value.lastQuality !== pdfQuality(value.lastQuality)) delete out.entries[id].lastQuality;
       if (
         value.transaction &&
         (value.transaction.stage !== `${value.transaction.target}.fn-${id}-pending.pdf` ||
@@ -134,6 +139,7 @@ export function companionResources(doc: InkDocument): string[] {
   ].sort();
 }
 export interface CompanionSnapshot {
+  quality?: PdfQuality;
   fingerprint: string;
   resources: string[];
   export: () => Promise<Uint8Array>;
@@ -252,7 +258,7 @@ export class CompanionController {
               throw new Error(
                 "A companion PDF cannot also be this notebook's imported PDF or picture source.",
               );
-            if (!request.force && target && current.fingerprint === entry.lastFingerprint) {
+            if (!request.force && target && current.fingerprint === entry.lastFingerprint && current.quality === entry.lastQuality) {
               const dirty = (this.revisions.get(id) ?? 0) !== revision;
               const changed = entry.dirty !== dirty || entry.error !== undefined;
               entry.dirty = dirty;
@@ -275,9 +281,11 @@ export class CompanionController {
               throw new Error("Companion target is a notebook source.");
             await this.io.replace(entry, bytes, id);
             entry.lastFingerprint = current.fingerprint;
+            if (current.quality !== undefined) entry.lastQuality = current.quality;
+            else delete entry.lastQuality;
             const latest = await request.snapshot();
             entry.dirty =
-              latest.fingerprint !== current.fingerprint ||
+              latest.fingerprint !== current.fingerprint || latest.quality !== current.quality ||
               (this.revisions.get(id) ?? 0) !== revision;
             delete entry.error;
             await this.io.persist();

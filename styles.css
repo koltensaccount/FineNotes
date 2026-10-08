@@ -5832,3 +5832,39 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   white-space: normal;
   text-align: left;
 }
+
+/* Shared transient chrome; persistent panels and dialogs keep their own layouts. */
+.goodobsidian-popover,
+.goodobsidian-addpage,
+.goodobsidian-more,
+.goodobsidian-selection-menu {
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 4px 16px var(--background-modifier-box-shadow);
+}
+.goodobsidian-selection-menu {
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+.goodobsidian-popover .goodobsidian-wide,
+.goodobsidian-selection-row,
+.goodobsidian-more-row {
+  min-height: 44px;
+}
+.goodobsidian-selection-row.is-destructive {
+  color: var(--text-error);
+}
+
+.goodobsidian-selection-menu .goodobsidian-selection-row:hover:not(:disabled),
+.goodobsidian-selection-menu .goodobsidian-selection-tile:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.goodobsidian-selection-menu .mod-warning {
+  color: var(--text-error);
+}
+.goodobsidian-selection-row-icon svg,
+.goodobsidian-more-icon svg {
+  width: 18px;
+  height: 18px;
+}

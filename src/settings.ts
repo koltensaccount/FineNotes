@@ -1,3 +1,4 @@
+import { PDF_QUALITY_LABELS } from "./export/pdf-quality";
 /**
  * The settings tab, built from Obsidian 1.13's setting definitions: Obsidian
  * draws the rows, searches them, and calls `getControlValue` /
@@ -268,7 +269,7 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
   }
 
   override getSettingDefinitions(): SettingDefinitionItem[] {
-    return [...this.writingRows(), ...this.recognitionRows(), this.aiGroup(), this.supportGroup()];
+    return [...this.writingRows(), group("PDF Export", [dropdown("pdfExportQuality", "Default quality", "Raster detail for manual and inherited Companion PDF exports. Physical page sizes and source PDF vectors stay unchanged.", PDF_QUALITY_LABELS)]), ...this.recognitionRows(), this.aiGroup(), this.supportGroup()];
   }
 
   override getControlValue(key: string): unknown {

@@ -1,3 +1,4 @@
+import { PDF_QUALITY_LABELS, type PdfQuality } from "../export/pdf-quality";
 /**
  * The toolbar's settings button: this notebook's (or single page's) own
  * settings — which way its pages run (a notebook only), and where its new
@@ -30,11 +31,12 @@ const SUGGESTIONS = 5;
 
 export interface NoteSettingsHost {
   companion?: {
-    state: () => { enabled: boolean; followName: boolean; pdfPath: string; status: string };
+    state: () => { enabled: boolean; followName: boolean; pdfPath: string; status: string; pdfQuality?: PdfQuality | null };
     configure: (patch: {
       enabled?: boolean;
       followName?: boolean;
       pdfPath?: string;
+      pdfQuality?: PdfQuality | null;
     }) => Promise<void>;
     update: () => Promise<void>;
     choose: (changed: () => void) => void;
@@ -142,6 +144,11 @@ export class NoteSettingsModal extends Modal {
       if (this.showing) this.render();
     };
     new Setting(parent).setName("Companion PDF").setHeading();
+    new Setting(parent).setName("Quality").addDropdown(dropdown => {
+      dropdown.addOption("global", "Use global default");
+      for (const [value,label] of Object.entries(PDF_QUALITY_LABELS)) dropdown.addOption(value,label);
+      dropdown.setValue(state.pdfQuality ?? "global").onChange(value => void run(() => host.configure({pdfQuality: value === "global" ? null : value as PdfQuality})));
+    });
     new Setting(parent)
       .setName("Maintain an up-to-date PDF copy")
       .setDesc(

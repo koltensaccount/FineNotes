@@ -97,7 +97,7 @@ function groupOrder(
 }
 
 const barGroup = (action: SelectionAction): string => action.group;
-const menuGroup = (action: SelectionAction): string => action.menuGroup ?? action.group;
+const menuGroup = (action: SelectionAction): string => action.destructive ? "delete" : action.menuGroup ?? action.group;
 
 /** `items` of each group in group order, with a divider between non-empty groups. */
 function grouped<T extends { kind: string }>(
@@ -136,10 +136,12 @@ export function barItems(actions: readonly SelectionAction[]): BarItem[] {
 
 /** What the "…" menu shows: its tiles across the top, then its rows by group. */
 export function menuLayout(actions: readonly SelectionAction[]): MenuLayout {
+  const rank: Record<string, number> = {cut: 0, copy: 1, duplicate: 2, paste: 3, "crop-image": 4, colour: 5, front: 6, back: 7, lock: 8};
+  const ordered = [...actions].sort((a,b) => (a.destructive ? 100 : rank[a.id] ?? 50) - (b.destructive ? 100 : rank[b.id] ?? 50));
   return {
-    tiles: actions.filter((a) => menuPlacement(a) === "tile" && !a.swatches),
+    tiles: ordered.filter((a) => menuPlacement(a) === "tile" && !a.swatches),
     rows: grouped<MenuRow>(
-      actions,
+      ordered,
       menuGroup,
       (a) => menuPlacement(a) === "row",
       (action) => ({ kind: "action", action }),

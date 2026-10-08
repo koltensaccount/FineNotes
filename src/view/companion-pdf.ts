@@ -1,3 +1,4 @@
+import { type PdfQuality } from "../export/pdf-quality";
 /** Obsidian adapter for stable associations and journalled companion writes. */
 import { type App, type TAbstractFile, type TFile } from "obsidian";
 import {
@@ -205,7 +206,7 @@ export class CompanionPdfManager {
     notebook: TFile,
     _body: string,
     folder: string | undefined,
-    patch: { enabled?: boolean; followName?: boolean; pdfPath?: string },
+    patch: { enabled?: boolean; followName?: boolean; pdfPath?: string; pdfQuality?: PdfQuality | null },
   ): Promise<string> {
     const previous = this.configurations.get(notebook) ?? Promise.resolve("");
     const job = previous
@@ -225,7 +226,7 @@ export class CompanionPdfManager {
     notebook: TFile,
     body: string,
     folder: string | undefined,
-    patch: { enabled?: boolean; followName?: boolean; pdfPath?: string },
+    patch: { enabled?: boolean; followName?: boolean; pdfPath?: string; pdfQuality?: PdfQuality | null },
   ): Promise<string> {
     if (!notebook.path.endsWith(".notebook.md"))
       throw new Error("Companion PDFs are available for .notebook.md files.");
@@ -245,7 +246,7 @@ export class CompanionPdfManager {
       );
     }
     if (!validCompanionId(id)) throw new Error("Invalid companion identity");
-    if (patch.enabled === false && this.entry(id)) {
+    if (patch.enabled === false && patch.pdfQuality === undefined && this.entry(id)) {
       if (this.entry(id)!.notebookPath !== notebook.path) await this.bind(id, notebook);
       this.entry(id)!.enabled = false;
       await this.persist();
@@ -294,6 +295,9 @@ export class CompanionPdfManager {
       this.controller.claim(id, target);
       if (!current && !existing) delete entry.lastFingerprint;
     }
+    if (patch.pdfQuality !== undefined) {
+      if (patch.pdfQuality === null) delete entry.pdfQuality; else entry.pdfQuality = patch.pdfQuality;
+    }
     if (patch.followName !== undefined) entry.followName = patch.followName;
     if (patch.enabled !== undefined) entry.enabled = patch.enabled;
     if (patch.followName === true)
@@ -313,7 +317,7 @@ export class CompanionPdfManager {
     // Never clear a dirty transition that happened while the digest was pending.
     const current = await snapshot();
     const dirty =
-      current.fingerprint !== entry.lastFingerprint || !this.app.vault.getFileByPath(entry.pdfPath);
+      current.fingerprint !== entry.lastFingerprint || current.quality !== entry.lastQuality || !this.app.vault.getFileByPath(entry.pdfPath);
     if (dirty && !entry.dirty) {
       entry.dirty = true;
       await this.persist();

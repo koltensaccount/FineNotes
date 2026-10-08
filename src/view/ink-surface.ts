@@ -5158,18 +5158,20 @@ export class InkSurface {
       {
         id: "front",
         icon: "bring-to-front",
-        label: "Front",
+        label: "Bring to front",
         group: "edit",
-        menu: "tile",
+        menu: "row",
+        menuGroup: "arrange",
         enabled: can("front"),
         run: () => this.reorderSelectedImage("front"),
       },
       {
         id: "back",
         icon: "send-to-back",
-        label: "Back",
+        label: "Send to back",
         group: "edit",
-        menu: "tile",
+        menu: "row",
+        menuGroup: "arrange",
         enabled: can("back"),
         run: () => this.reorderSelectedImage("back"),
       },
@@ -5186,14 +5188,15 @@ export class InkSurface {
       {
         id: "lock",
         icon: "lock",
-        label: "Lock image",
+        label: "Lock",
         group: "edit",
+        menuGroup: "lock",
         run: () => this.lockSelectedImage(),
       },
       {
         id: "crop-image",
         icon: "crop",
-        label: "Crop image",
+        label: "Crop",
         group: "crop-image",
         run: () => this.startCrop(),
       },
@@ -5241,7 +5244,7 @@ export class InkSurface {
       actions.push({
         id: "colour",
         icon: "palette",
-        label: "Colour",
+        label: "Recolor",
         group: "style",
         swatches: {
           // The palette, then the custom colours picked lately anywhere.

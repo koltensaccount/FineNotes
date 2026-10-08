@@ -1,3 +1,5 @@
+import { PDF_QUALITY_FACTORS, pdfQuality } from "../../src/export/pdf-quality";
+import { exportPixelScale, EXPORT_MAX_EDGE, EXPORT_MAX_PIXELS, POINTS_PER_PAGE_PX } from "../../src/export/pdf-writer";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -221,3 +223,21 @@ it.each(["dashed", "dotted"] as const)(
     ).toBe(true);
   },
 );
+
+it("quality tiers change raster detail within existing memory caps, without changing page geometry", () => {
+  expect(PDF_QUALITY_FACTORS).toEqual({standard: 1, high: 1.25, "very-high": 1.5});
+  expect(pdfQuality(undefined)).toBe("high"); expect(pdfQuality("standard")).toBe("standard");
+  const width = 1024, height = 1448;
+  const scales = Object.values(PDF_QUALITY_FACTORS).map(factor => exportPixelScale(width, height, factor));
+  expect(scales[1]).toBeGreaterThan(scales[0]); expect(scales[2]).toBeGreaterThan(scales[1]);
+  for (const scale of scales) {expect(height * scale).toBeLessThanOrEqual(EXPORT_MAX_EDGE); expect(width * height * scale * scale).toBeLessThanOrEqual(EXPORT_MAX_PIXELS);}
+});
+
+it.each(["standard", "high", "very-high"] as const)("%s reaches the shared exporter without altering physical page size", async quality => {
+  const page = blankPage("p1");
+  const bytes = await exportPagesToPdf([page], sources, {title: "Quality", quality});
+  const scale = exportPixelScale(page.geometry.width, page.geometry.height, PDF_QUALITY_FACTORS[quality]);
+  expect(vi.mocked(renderPageThumbnail).mock.calls[0][3]).toBe(page.geometry.width * scale);
+  const result = await PDFDocument.load(bytes);
+  expect(result.getPage(0).getWidth()).toBeCloseTo(page.geometry.width * POINTS_PER_PAGE_PX, 2);
+});

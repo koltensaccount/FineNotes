@@ -1,3 +1,4 @@
+import { claimTransient } from "./transient-popover";
 /**
  * Choosing a page template, after GoodNotes:
  *
@@ -79,6 +80,8 @@ export function installPopoverDismiss(
   close: () => void,
   replace: () => void,
 ): () => void {
+  const doc = anchor.ownerDocument, win = doc.defaultView!;
+  const release = claimTransient(doc, el, close);
   const onDown = (event: PointerEvent): void => {
     const target = event.target as Node | null;
     if (target && (el.contains(target) || anchor.contains(target))) return;
@@ -93,15 +96,16 @@ export function installPopoverDismiss(
     else close();
   };
   // Capture: the drawing surface consumes its own pointer events.
-  document.addEventListener("pointerdown", onDown, true);
-  document.addEventListener("keydown", onKey);
-  window.addEventListener("resize", onResize);
+  doc.addEventListener("pointerdown", onDown, true);
+  doc.addEventListener("keydown", onKey);
+  win.addEventListener("resize", onResize);
   // A second tap on the anchor is the host's to handle: it closes the
   // popover instead of opening another (see each popover's `isOpen`).
   return () => {
-    document.removeEventListener("pointerdown", onDown, true);
-    document.removeEventListener("keydown", onKey);
-    window.removeEventListener("resize", onResize);
+    release();
+    doc.removeEventListener("pointerdown", onDown, true);
+    doc.removeEventListener("keydown", onKey);
+    win.removeEventListener("resize", onResize);
   };
 }
 

@@ -1,3 +1,4 @@
+import { effectivePdfQuality, type PdfQuality } from "../../src/export/pdf-quality";
 import { describe, expect, it, vi } from "vitest";
 import { blankPage, emptyDocument } from "../../src/model/document";
 import {
@@ -356,4 +357,29 @@ it("fingerprints rendering metadata while excluding stroke identity and replay t
   expect(companionContent(doc, options, [])).toBe(before);
   doc.pages[0].strokes[0].shape = "line";
   expect(companionContent(doc, options, [])).not.toBe(before);
+});
+
+describe("companion effective export quality", () => {
+  it("inherited global quality changes regenerate unchanged content and record only successful replacement", async () => {
+    const s = setup(); let global: PdfQuality = "standard";
+    const snapshot = async () => ({...await s.snapshot(), quality: effectivePdfQuality(undefined, global)});
+    await s.controller.update(ID, snapshot);
+    expect(s.entry.lastQuality).toBe("standard");
+    global = "high";
+    s.replace.mockRejectedValueOnce(new Error("write failed"));
+    await expect(s.controller.update(ID, snapshot)).rejects.toThrow("write failed");
+    expect(s.entry.lastQuality).toBe("standard"); expect(s.entry.dirty).toBe(true);
+    await s.controller.update(ID, snapshot);
+    expect(s.entry.lastQuality).toBe("high"); expect(s.entry.dirty).toBe(false);
+    expect(s.render).toHaveBeenCalledTimes(3);
+  });
+  it("a notebook override ignores the global default and canceled generation preserves the successful quality", async () => {
+    const s = setup();
+    const standard = async () => ({...await s.snapshot(), quality: effectivePdfQuality("standard", "high")});
+    await s.controller.update(ID, standard);
+    s.render.mockRejectedValueOnce(new DOMException("cancelled", "AbortError"));
+    const veryHigh = async () => ({...await s.snapshot(), quality: "very-high" as const});
+    await expect(s.controller.update(ID, veryHigh)).rejects.toThrow("cancelled");
+    expect(s.entry.lastQuality).toBe("standard"); expect(s.entry.dirty).toBe(true);
+  });
 });

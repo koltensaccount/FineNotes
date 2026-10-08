@@ -1,3 +1,5 @@
+import { dismissTransient } from "./transient-popover";
+import { effectivePdfQuality, pdfQuality, type PdfQuality } from "../export/pdf-quality";
 import {
   copiedPages,
   deletePages,
@@ -1103,6 +1105,7 @@ export class InkView extends TextFileView {
           if (tool === "text" && this.surface) this.plugin.offerTextHint(this.surface);
         },
         onPageChange: (index) => {
+          dismissTransient(this.contentEl.ownerDocument);
           this.sidebar?.setCurrentPage(index);
           this.scheduleLastPage();
         },
@@ -1285,10 +1288,13 @@ export class InkView extends TextFileView {
             state: () => {
               const id = companionIdFromBody(this.noteBody);
               const entry = this.plugin.companionPdfs.entry(id);
+              const desired = effectivePdfQuality(entry?.pdfQuality, pdfQuality(this.settings.pdfExportQuality));
+              if (entry?.enabled && !entry.dirty && entry.lastQuality !== desired) this.markCompanionChanged();
               return {
                 enabled: entry?.enabled ?? false,
                 followName: entry?.followName ?? true,
                 pdfPath: entry?.pdfPath ?? "",
+                pdfQuality: entry?.pdfQuality ?? null,
                 status: this.plugin.companionPdfs.status(id),
               };
             },
@@ -1511,6 +1517,8 @@ export class InkView extends TextFileView {
       this.settings.paperWidth,
     );
     if (doc.pages.length === 0) throw new Error("The notebook has no pages to export.");
+    const entry = this.plugin.companionPdfs.entry(companionIdFromBody(this.noteBody));
+    const quality = effectivePdfQuality(entry?.pdfQuality, pdfQuality(this.settings.pdfExportQuality));
     const resources = companionResources(doc);
     const assets = resources.map((path) => {
       const file = this.app.vault.getFileByPath(path);
@@ -1522,7 +1530,7 @@ export class InkView extends TextFileView {
       usePressure: this.toolState.pressureEnabled,
       highlighterAlpha: this.settings.highlighterAlpha,
     };
-    const fingerprint = await companionDigest(companionContent(doc, options, assets) + title);
+    const fingerprint = await companionDigest(companionContent(doc, options, assets) + title + ":" + quality);
     const sources = {
       readPdf: async (path: string) => {
         const source = this.app.vault.getFileByPath(path);
@@ -1536,11 +1544,13 @@ export class InkView extends TextFileView {
     };
     return {
       fingerprint,
+      quality,
       resources,
       export: () =>
         exportPagesToPdf(doc.pages, sources, {
           title,
           subject,
+          quality,
         }),
     };
   }
@@ -1559,6 +1569,7 @@ export class InkView extends TextFileView {
     enabled?: boolean;
     followName?: boolean;
     pdfPath?: string;
+    pdfQuality?: PdfQuality | null;
   }): Promise<void> {
     const note = this.file;
     if (!note || this.isProtected())
@@ -1575,6 +1586,7 @@ export class InkView extends TextFileView {
     if (this.file !== note) return;
     this.noteBody = savedBody;
     if (patch.enabled === true) await this.updateCompanionPdf(true);
+    else if (patch.pdfQuality !== undefined) await this.assessCompanionPdf();
   }
 
   async updateCompanionPdf(force = true): Promise<void> {
@@ -1636,6 +1648,7 @@ export class InkView extends TextFileView {
     };
     new ExportPdfModal(this.app, {
       noun: this.isSinglePage ? "page" : "notebook",
+      defaultQuality: pdfQuality(this.settings.pdfExportQuality),
       pageCount: total,
       currentPage: Math.max(0, Math.min(total - 1, this.surface?.currentPage ?? 0)),
       pageSize: (i) => doc.pages[i]?.geometry ?? { width: 0, height: 0 },
@@ -1647,11 +1660,11 @@ export class InkView extends TextFileView {
       },
       fileNameFor: (pages) =>
         uniqueFileName(exportBaseName(note.basename, pages, total), ".pdf", taken()),
-      export: async (pages, onProgress, cancelled) => {
+      export: async (pages, onProgress, cancelled, quality) => {
         const bytes = await exportPagesToPdf(
           pages.map((i) => doc.pages[i]),
           sources,
-          { title: stripInkSuffix(note.basename), onProgress, cancelled },
+          { title: stripInkSuffix(note.basename), onProgress, cancelled, quality: pdfQuality(quality) },
         );
         // Named at save time, not when the dialog opened: another export may
         // have taken the name since.
@@ -1906,6 +1919,7 @@ export class InkView extends TextFileView {
         editTitle: (at) => act("contents", at),
         copyLink: (at) => act("copy-link", at),
         duplicate: (at) => act("duplicate", at),
+        move: (at) => act("move", at),
         // A cover opens its picker on ⋯ itself: the row it was chosen from is gone.
         changeTemplate: (at) => {
           const target = doc.pages[at];

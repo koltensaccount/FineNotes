@@ -1,3 +1,4 @@
+import { PDF_QUALITY_FACTORS, type PdfQuality } from "../export/pdf-quality";
 /**
  * Export pages as a PDF. PDF backdrops retain their original text/vector
  * content with transparent annotation overlays. Other pages use the painter the
@@ -44,6 +45,7 @@ export interface PdfExportSources {
 }
 
 export interface PdfExportOptions {
+  quality?: PdfQuality;
   /** Optional ownership metadata; manual exports omit it. */
   subject?: string;
   title: string;
@@ -73,7 +75,7 @@ export async function exportPagesToPdf(
     if (composer && page.backdrop.kind === "pdf") {
       await composer.addPdf(page, () => renderAnnotationLayers(page, sources, options));
     } else {
-      const rendered = await renderPageJpeg(page, sources);
+      const rendered = await renderPageJpeg(page, sources, options.quality);
       if (composer) await composer.addImage(rendered);
       else out.push(rendered);
     }
@@ -89,9 +91,9 @@ export async function exportPagesToPdf(
 }
 
 /** One page as a JPEG, sized for print, with its size in points. */
-export async function renderPageJpeg(page: Page, sources: PdfExportSources): Promise<PdfImagePage> {
+export async function renderPageJpeg(page: Page, sources: PdfExportSources, quality: PdfQuality = "standard"): Promise<PdfImagePage> {
   const { width, height } = page.geometry;
-  const scale = exportPixelScale(width, height);
+  const scale = exportPixelScale(width, height, PDF_QUALITY_FACTORS[quality]);
   if (scale === 0) throw new Error("A page has no size");
 
   const painter = await preparePage(page, sources, scale);
@@ -193,8 +195,8 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 }
 
 /** Transparent ink/text/pictures only; source PDF content is composed separately. */
-async function renderAnnotationPng(page: Page, sources: PdfExportSources): Promise<Uint8Array> {
-  const scale = exportPixelScale(page.geometry.width, page.geometry.height);
+async function renderAnnotationPng(page: Page, sources: PdfExportSources, quality: PdfQuality = "standard"): Promise<Uint8Array> {
+  const scale = exportPixelScale(page.geometry.width, page.geometry.height, PDF_QUALITY_FACTORS[quality]);
   if (!scale) throw new Error("A page has no size");
   if (sources.images) await sources.images.prepare(page.images, scale);
   const canvas = createEl("canvas");
@@ -228,6 +230,6 @@ async function* renderAnnotationLayers(
   for (const layer of annotationLayers(page)) {
     if (options.cancelled?.()) throw new DOMException("Export cancelled", "AbortError");
     await new Promise((resolve) => window.setTimeout(resolve, 0));
-    yield { png: await renderAnnotationPng(layer.page, sources), multiply: layer.multiply };
+    yield { png: await renderAnnotationPng(layer.page, sources, options.quality), multiply: layer.multiply };
   }
 }

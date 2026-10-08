@@ -1,3 +1,4 @@
+import { claimTransient, presetActivation } from "./transient-popover";
 import { bindColorStripInput } from "./color-strip-input";
 import {
   type WritingPresets,
@@ -437,6 +438,10 @@ export class Toolbar {
   private leftInset = 0;
 
   private popover: HTMLElement | null = null;
+  private popoverTool: ActiveTool | null = null;
+  private popoverAnchor: HTMLElement | null = null;
+  private popoverPresetId: string | null = null;
+  private releaseTransient: (() => void) | null = null;
   private popoverKind: string | null = null;
   /** Redraws the open text popover's body in place after a change it made. */
   private popoverRender: (() => void) | null = null;
@@ -740,6 +745,7 @@ export class Toolbar {
 
   /** Rebuild the options pill for whatever tool is active. */
   private buildOptions(): void {
+    if (this.popover && this.popoverTool !== this.state.tool) this.closePopover();
     if (this.colorStrip && this.paletteTool)
       this.colorScroll[this.paletteTool] = this.colorStrip.scrollLeft;
     this.colorStrip = null;
@@ -815,7 +821,6 @@ export class Toolbar {
     pen.setAttribute("title", `${active.label} options`);
     pen.addEventListener("click", () => this.togglePenTypeList());
     this.penTypeButtons.set(active.id, pen);
-    this.chevron("Pen options", () => this.togglePenTypeList());
 
     this.optionsEl.createDiv({ cls: "goodobsidian-sep" });
 
@@ -920,10 +925,14 @@ export class Toolbar {
 
   private activateColorPreset(anchor: HTMLElement, id: string, color: string): void {
     const presets = this.options.writingPresets;
-    if (presets ? presets.selectedIds[this.writingTool] === id : this.state.color === color)
-      this.presetPopover(anchor, { id });
-    else if (presets) this.setPenPreset(id);
-    else this.setPenColor(color);
+    const selected = presets ? presets.selectedIds[this.writingTool] : this.state.color;
+    const editor = this.popoverKind === "pen-color" ? this.popoverPresetId : null;
+    const action = presetActivation(selected, id, editor ?? null);
+    if (action === "close") this.closePopover();
+    else if (action === "select") {
+      this.closePopover();
+      if (presets) this.setPenPreset(id); else this.setPenColor(color);
+    } else {this.presetPopover(anchor, {id}); this.popoverPresetId = id;}
   }
 
   private colorContext(anchor: HTMLElement, id: string): void {
@@ -962,6 +971,7 @@ export class Toolbar {
     start: "list" | "add" | "restore" | { id: string },
   ): void {
     const presets = this.options.writingPresets;
+    if (start === "add" && this.popoverKind === "pen-color" && this.popoverAnchor === anchor) {this.closePopover(); return;}
     if (!presets) {
       this.toggleColorPopover("pen-color", anchor, this.state.color, (color) =>
         this.setPenColor(color),
@@ -969,6 +979,7 @@ export class Toolbar {
       return;
     }
     const body = this.openPopover("pen-color", anchor);
+    this.popoverPresetId = typeof start === "object" ? start.id : null;
     this.popover?.addClass("is-color-popover", "is-preset-manager");
     this.presetDispose = renderPresetColors(
       body,
@@ -1822,8 +1833,11 @@ export class Toolbar {
             const selected = presets
               ? presets.selectedWidthIds[this.writingTool] === id
               : this.state.size === width;
-            if (selected) this.toggleWidthList(button, id);
+            const action = presetActivation(selected ? id : null, id, this.popoverKind === "widths" ? this.popoverPresetId : null);
+            if (action === "close") this.closePopover();
+            else if (action === "open") this.toggleWidthList(button, id);
             else {
+              this.closePopover();
               if (presets) selectWidthSlot(presets, this.writingTool, id);
               this.setWidth(width);
               this.refreshQuickWidths();
@@ -1845,11 +1859,12 @@ export class Toolbar {
   }
 
   private toggleWidthList(anchor: HTMLElement, editingId?: string): void {
-    if (this.popoverKind === "widths" && editingId === undefined) {
+    if (this.popoverKind === "widths" && (editingId !== undefined ? this.popoverPresetId === editingId : this.popoverAnchor === anchor)) {
       this.closePopover();
       return;
     }
     const body = this.openPopover("widths", anchor);
+    this.popoverPresetId = editingId ?? null;
     body.addClass("goodobsidian-width-popover");
     const preferences = this.options.writingPresets,
       tool = this.writingTool;
@@ -1866,6 +1881,7 @@ export class Toolbar {
       selectedSlot: () => preferences?.selectedWidthIds[tool] ?? null,
       edit: (id) => {
         editingId = id;
+        this.popoverPresetId = id;
       },
       selectSlot: (id) => {
         if (!preferences) return;
@@ -2111,11 +2127,16 @@ export class Toolbar {
     });
 
     this.popover = popover;
+    this.popoverAnchor = anchor;
+    this.popoverTool = this.state.tool;
+    this.releaseTransient = claimTransient(this.host.ownerDocument, this, () => this.closePopover());
     this.popoverKind = kind;
     return body;
   }
 
   private closePopover(): void {
+    this.releaseTransient?.(); this.releaseTransient = null;
+    this.popoverAnchor = null; this.popoverPresetId = null; this.popoverTool = null;
     this.presetDispose?.();
     this.presetDispose = null;
     this.presetDragging = false;
@@ -2137,25 +2158,13 @@ export class Toolbar {
     if (!popover) return;
     const hostBox = this.host.getBoundingClientRect();
     const anchorBox = anchor.getBoundingClientRect();
-    if (
-      ["widths", "pens", "pen-color", "color-actions", "line-style"].includes(
-        this.popoverKind ?? "",
-      )
-    ) {
-      const fit = writingPopoverFit(hostBox, anchorBox);
-      popover.setCssStyles({
-        top: `${Math.round(fit.top)}px`,
-        maxHeight: `${Math.floor(fit.maxHeight)}px`,
-        maxWidth: `${Math.floor(fit.maxWidth)}px`,
-        transform: fit.above ? "translate(-50%, -100%)" : "translateX(-50%)",
-      });
-    }
+    const fit = writingPopoverFit(hostBox, anchorBox);
+    popover.setCssStyles({
+      top: `${Math.round(fit.top)}px`, maxHeight: `${Math.floor(fit.maxHeight)}px`,
+      maxWidth: `${Math.floor(fit.maxWidth)}px`,
+      transform: fit.above ? "translate(-50%, -100%)" : "translateX(-50%)",
+    });
     const box = popover.getBoundingClientRect();
-    if (popover.hasClass("is-preset-manager")) {
-      popover.setCssStyles({
-        maxHeight: `${Math.max(44, hostBox.bottom - box.top - EDGE_INSET)}px`,
-      });
-    }
     let shift = 0;
     if (box.right > hostBox.right - EDGE_INSET) shift = hostBox.right - EDGE_INSET - box.right;
     if (box.left + shift < hostBox.left + EDGE_INSET) shift = hostBox.left + EDGE_INSET - box.left;
@@ -2171,16 +2180,13 @@ export class Toolbar {
     const onDown = (event: PointerEvent): void => {
       if (!this.popover) return;
       if (this.presetDragging) {
-        event.preventDefault();
-        event.stopPropagation();
         return;
       }
       const target = event.target as Node | null;
       if (
         target &&
-        (this.popover.contains(target) ||
-          this.barEl.contains(target) ||
-          this.optionsEl.contains(target))
+        (this.popover.contains(target) || this.popoverAnchor?.contains(target) ||
+          (target instanceof Element && target.closest("[data-preset-id], [data-width-id]")))
       ) {
         return;
       }
@@ -2190,11 +2196,11 @@ export class Toolbar {
       if (event.key === "Escape") this.closePopover();
     };
     // Capture phase: the drawing surface handles its own input below us.
-    this.host.addEventListener("pointerdown", onDown, true);
-    this.host.addEventListener("keydown", onKey);
+    this.host.ownerDocument.addEventListener("pointerdown", onDown, true);
+    this.host.ownerDocument.addEventListener("keydown", onKey);
     this.disposers.push(() => {
-      this.host.removeEventListener("pointerdown", onDown, true);
-      this.host.removeEventListener("keydown", onKey);
+      this.host.ownerDocument.removeEventListener("pointerdown", onDown, true);
+      this.host.ownerDocument.removeEventListener("keydown", onKey);
     });
   }
 

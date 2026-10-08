@@ -1,3 +1,4 @@
+import { installPopoverDismiss } from "./template-picker";
 /**
  * The "Insert image" menu: the popover the toolbar's image button opens,
  * after GoodNotes' — Photos, Take photo, From vault — and the vault picker
@@ -230,27 +231,7 @@ export class ImageMenuPopover {
   }
 
   private installDismiss(): void {
-    const onDown = (event: PointerEvent): void => {
-      const target = event.target as Node | null;
-      if (target && (this.el.contains(target) || this.anchor.contains(target))) return;
-      this.close();
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") this.close();
-    };
-    const onResize = (): void => {
-      if (this.anchor.isConnected) this.place();
-      else this.close();
-    };
-    // Capture: the drawing surface consumes its own pointer events.
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", onResize);
-    this.dispose.push(() => {
-      document.removeEventListener("pointerdown", onDown, true);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", onResize);
-    });
+    this.dispose.push(installPopoverDismiss(this.el, this.anchor, () => this.close(), () => this.place()));
   }
 }
 

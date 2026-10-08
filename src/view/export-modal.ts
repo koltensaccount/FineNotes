@@ -1,3 +1,4 @@
+import { PDF_QUALITY_LABELS, pdfQuality, type PdfQuality } from "../export/pdf-quality";
 /**
  * The toolbar's share button: "Export as PDF", as in GoodNotes. What will be
  * exported is shown, not described:
@@ -19,7 +20,7 @@
  * it can be opened in Obsidian or handed to the system share sheet.
  */
 
-import { type App, Modal, setIcon } from "obsidian";
+import { type App, Modal, Setting, setIcon } from "obsidian";
 import {
   type ExportScope,
   allPages,
@@ -40,6 +41,7 @@ export interface ExportedPdf {
 }
 
 export interface ExportPdfHost {
+  defaultQuality?: PdfQuality;
   /** "notebook" or "page": only the wording changes. */
   noun: string;
   pageCount: number;
@@ -58,6 +60,7 @@ export interface ExportPdfHost {
     pages: readonly number[],
     onProgress: (done: number, total: number) => void,
     cancelled: () => boolean,
+    quality?: PdfQuality,
   ) => Promise<ExportedPdf>;
   /** Open the saved PDF in Obsidian. */
   open: (path: string) => void;
@@ -76,6 +79,8 @@ export class ExportPdfModal extends Modal {
   /** Where a shift-click span starts: the last page tapped. */
   private anchor: number | null = null;
   private busy = false;
+  private quality: PdfQuality;
+  private qualitySelect: HTMLSelectElement | null = null;
   private cancelled = false;
   private closed = false;
   private readonly keyboard: DialogKeyboard;
@@ -88,6 +93,7 @@ export class ExportPdfModal extends Modal {
     private readonly host: ExportPdfHost,
   ) {
     super(app);
+    this.quality = pdfQuality(host.defaultQuality);
     this.keyboard = new DialogKeyboard(this.modalEl);
     this.pageScope = host.pageCount > 1 ? "all" : "current";
     this.chosen = [host.currentPage];
@@ -163,6 +169,11 @@ export class ExportPdfModal extends Modal {
 
     const stage = contentEl.createDiv({ cls: "goodobsidian-export-stage" });
     const summary = contentEl.createDiv({ cls: "goodobsidian-ask-note" });
+    new Setting(contentEl).setName("Quality").setDesc("Higher raster detail; PDF text and vectors stay preserved.").addDropdown(dropdown => {
+      for (const [value,label] of Object.entries(PDF_QUALITY_LABELS)) dropdown.addOption(value,label);
+      dropdown.setValue(this.quality).onChange(value => {this.quality = pdfQuality(value);});
+      this.qualitySelect = dropdown.selectEl;
+    });
     const status = contentEl.createDiv({ cls: "goodobsidian-ask-status" });
     const actions = contentEl.createDiv({ cls: "goodobsidian-ask-actions" });
     const cancel = actions.createEl("button", { text: "Cancel" });
@@ -267,6 +278,8 @@ export class ExportPdfModal extends Modal {
       const pages = this.pages();
       if (pages.length === 0 || this.busy) return;
       this.busy = true;
+      const quality = this.quality;
+      if (this.qualitySelect) this.qualitySelect.disabled = true;
       this.cancelled = false;
       go.disabled = true;
       contentEl.addClass("is-busy");
@@ -280,12 +293,14 @@ export class ExportPdfModal extends Modal {
             status.setText(done < total ? `Rendering page ${done + 1} of ${total}…` : "Saving…");
           },
           () => this.cancelled,
+          quality,
         );
         if (this.closed) return;
         this.renderDone(saved);
       } catch (error) {
         if (this.closed || (error instanceof DOMException && error.name === "AbortError")) return;
         this.busy = false;
+        if (this.qualitySelect) this.qualitySelect.disabled = false;
         contentEl.removeClass("is-busy");
         status.addClass("is-error");
         status.setText(errorMessage(error));

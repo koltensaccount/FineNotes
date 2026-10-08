@@ -1,3 +1,4 @@
+import { pdfQuality } from "./export/pdf-quality";
 import { type WritingPresets, migrateWritingPresets } from "./model/writing-presets";
 import { CompanionPdfManager } from "./view/companion-pdf";
 import { FileExplorerNotebookButton } from "./view/file-explorer-notebook-button";
@@ -397,6 +398,7 @@ export default class GoodObsidianPlugin extends Plugin {
     const saved = own ?? (await this.settingsFromPreviousId());
     this.firstInstall = saved === null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    this.settings.pdfExportQuality = pdfQuality(this.settings.pdfExportQuality);
     this.settings.writingPresets = migrateWritingPresets(
       this.settings,
       saved === null || Object.keys(saved).length === 0,
