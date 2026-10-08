@@ -37,13 +37,15 @@ export function renderThicknessEditor(
   let disposers: Array<() => void> = [];
   body.addClass("goodobsidian-thickness-editor");
   const head = body.createDiv({ cls: "goodobsidian-width-head" });
-  head.createDiv({ cls: "goodobsidian-popover-label", text: options.title ?? "Stroke thickness" });
+  head.createDiv({ cls: "goodobsidian-popover-label goodobsidian-size-title", text: options.title ?? "Stroke thickness" });
   const readout = head.createSpan({
     cls: "goodobsidian-width-readout",
     attr: { "aria-live": "polite" },
   });
   const preview = body.createDiv({ cls: "goodobsidian-live-stroke" });
-  const range = body.createEl("input", {
+  const hint = body.createDiv({ cls: "goodobsidian-size-hint" });
+  const slider = body.createDiv({ cls: "goodobsidian-thickness-slider" });
+  const range = slider.createEl("input", {
     type: "range",
     cls: "goodobsidian-thickness-range",
     attr: { "aria-label": options.title ?? "Stroke thickness" },
@@ -51,6 +53,9 @@ export function renderThicknessEditor(
   range.min = "0";
   range.max = String(options.stops.length - 1);
   range.step = "1";
+  const limits = slider.createDiv({ cls: "goodobsidian-size-limits", attr: { "aria-hidden": "true" } });
+  const minimum = limits.createSpan(), maximum = limits.createSpan();
+  body.createDiv({ cls: "goodobsidian-popover-label", text: options.manage ? "Saved presets" : "Quick sizes" });
   const list = body.createDiv({ cls: "goodobsidian-thickness-presets" });
   const button = (parent: HTMLElement, label: string, run: () => void) => {
     const el = parent.createEl("button", {
@@ -66,13 +71,15 @@ export function renderThicknessEditor(
     options.reset();
     refresh();
   });
+  let add: HTMLButtonElement | null = null;
   if (options.manage) {
-    const add = button(footer, "Add current width", () => {
+    add = button(footer, "Add width preset", () => {
       options.manage!.save(options.current().width, options.editing?.());
       refresh();
     });
+    add.addClass("mod-cta");
     add.hidden = !!options.editing?.();
-    button(footer, "Restore width presets", () => {
+    button(footer, "Restore default presets", () => {
       options.manage!.restore();
       refresh();
     });
@@ -82,14 +89,18 @@ export function renderThicknessEditor(
       label = previewThicknessLabel(current.type, current.width);
     head
       .querySelector?.(".goodobsidian-popover-label")
-      ?.setText(options.editing?.() ? "Edit width slot" : options.title ?? "Stroke thickness");
+      ?.setText(options.title ?? "Stroke thickness");
+    hint.setText(options.manage
+      ? options.editing?.() ? "Adjust this preset. Changes save automatically." : "Adjust the slider, then add a width preset."
+      : `Adjust ${options.measurement ?? "thickness"}. Changes apply immediately.`);
+    minimum.setText(previewThicknessLabel(current.type, options.stops[0]));
+    maximum.setText(previewThicknessLabel(current.type, options.stops[options.stops.length - 1]));
     readout.setText(label);
     range.value = String(nearestStop(options.stops, current.width));
     range.setAttribute("aria-valuetext", `${label} ${options.measurement ?? "thickness"}`);
     preview.replaceChildren(options.preview?.(current.width, false, body.ownerDocument) ?? createStrokePreview(current, body.ownerDocument));
-    footer.querySelectorAll("button").forEach((el) => {
-      if (el.textContent === "Add current width") el.hidden = !!options.editing?.();
-    });
+    if (add) add.hidden = !!options.editing?.();
+    const scroll = list.scrollTop;
     for (const dispose of disposers) dispose();
     disposers = [];
     list.empty();
@@ -99,6 +110,8 @@ export function renderThicknessEditor(
         id && options.selectedSlot ? options.selectedSlot() === id : width === current.width;
       const row = list.createDiv({ cls: "goodobsidian-thickness-row" });
       row.setAttribute("data-preset-index", String(index));
+      row.toggleClass("has-reorder", !!options.reorder);
+      row.toggleClass("has-remove", !!options.manage);
       const name = previewThicknessLabel(current.type, width);
       if (options.reorder) {
         const handle = button(row, `Move ${name} width`, () => {});
@@ -119,16 +132,23 @@ export function renderThicknessEditor(
       pick.empty();
       pick.addClass("goodobsidian-thickness-choice");
       pick.append(options.preview?.(width, true, body.ownerDocument) ?? createStrokePreview({ ...current, width, compact: true }, body.ownerDocument));
-      pick.createSpan({ text: name });
+      pick.createSpan({ cls: "goodobsidian-size-value", text: name });
+      const check = pick.createSpan({ cls: "goodobsidian-size-check" });
+      setIcon(check, "check");
+      check.style.visibility = active ? "visible" : "hidden";
       pick.toggleClass("is-active", !!active);
       pick.setAttribute("aria-pressed", String(!!active));
       if (options.manage) {
-        button(row, `Remove ${name} width`, () => {
+        const remove = button(row, `Remove ${name} width`, () => {
           options.manage!.remove(id ?? width);
           refresh();
-        }).setText("×");
+        });
+        remove.empty();
+        remove.addClass("goodobsidian-size-remove");
+        setIcon(remove, "trash-2");
       }
     }
+    list.scrollTop = scroll;
   };
   range.addEventListener("input", () => {
     const width = options.stops[Number(range.value)];

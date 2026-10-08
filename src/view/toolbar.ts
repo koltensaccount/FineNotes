@@ -1892,6 +1892,7 @@ export class Toolbar {
     };
     this.popover?.addClass("has-thickness-editor");
     this.widthEditorRefresh = renderThicknessEditor(body, {
+      title: this.state.tool === "shape" ? "Stroke thickness" : tool === "highlighter" ? "Highlighter thickness" : "Pen thickness",
       current: () => this.previewOptions(),
       presets: () => this.widths,
       editing: () => editingId,
@@ -1978,7 +1979,7 @@ export class Toolbar {
       this.syncActive();
     };
     this.widthEditorRefresh = renderThicknessEditor(body, {
-      title: "Eraser size",
+      title: "Eraser diameter",
       resetLabel: "Reset eraser size",
       measurement: "diameter",
       preview: (size, compact, doc) => {

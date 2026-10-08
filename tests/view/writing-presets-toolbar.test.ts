@@ -145,7 +145,7 @@ describe("popover anchors and eraser resizing", () => {
     const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, popoverKind: null, popover: { addClass: vi.fn() }, openPopover: vi.fn(() => ({})), closePopover: close, keepPopoverInside: vi.fn(), callbacks: { onEraserChange: callback }, syncActive: vi.fn() });
     toolbar.toggleEraserSizeList(anchor);
     const options = vi.mocked(renderThicknessEditor).mock.calls[0][1];
-    expect(options.title).toBe("Eraser size");
+    expect(options.title).toBe("Eraser diameter");
     options.select(17.5);
     expect(callback).toHaveBeenLastCalledWith("stroke", 17.5);
     expect(options.current().width).toBe(17.5);
