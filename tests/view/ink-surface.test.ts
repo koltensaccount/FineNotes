@@ -1422,3 +1422,19 @@ describe("shape tap and completed smoothing integration", () => {
     }
   });
 });
+
+describe("view-only writing guides", () => {
+  it("coalesces style changes until paint, without history, dirty-state or Companion callbacks", () => {
+    const page = blankPage("p1"), lined = blankPage("p2"); lined.backdrop = { kind: "lined" };
+    const doc = { pages: [page, lined] };
+    const renderer = { setWritingGuides: vi.fn(), renderDocument: vi.fn(() => true) };
+    const changed = vi.fn(), history = { push: vi.fn() }, requestFrame = vi.fn();
+    const surface = surfaceWith({ doc, renderer, history, callbacks: { onChange: changed }, requestFrame, pendingWritingGuides: null, flushEraseDirty: vi.fn(), toolState: { pressureEnabled: false }, eraseIds: new Set(), erasePieces: new Map() });
+    Object.defineProperty(surface, "viewMoving", { value: false });
+    run(surface, "setWritingGuides", true, { spacing: 20 }); run(surface, "setWritingGuides", true, { spacing: 48 });
+    expect(renderer.setWritingGuides).not.toHaveBeenCalled(); expect(requestFrame).toHaveBeenCalledTimes(2);
+    run(surface, "renderDry"); expect(renderer.setWritingGuides).toHaveBeenCalledOnce(); expect(renderer.setWritingGuides.mock.calls[0][0].spacing).toBe(48); expect(renderer.setWritingGuides.mock.calls[0][1]).toEqual(["p1"]);
+    run(surface, "setWritingGuides", false, {}); run(surface, "renderDry"); expect(renderer.setWritingGuides).toHaveBeenLastCalledWith(null, ["p1"]);
+    expect(changed).not.toHaveBeenCalled(); expect(history.push).not.toHaveBeenCalled(); expect(page.backdrop).toEqual({ kind: "blank" }); expect(page.strokes).toEqual([]);
+  });
+});

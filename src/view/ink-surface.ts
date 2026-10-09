@@ -1,3 +1,4 @@
+import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
 import { smoothCompletedStroke } from "../ink/stroke-smoothing";
 import { resizeHeldShape, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, rotateShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
 import { highlighterWetRuns } from "../ink/highlighter";
@@ -71,6 +72,7 @@ import {
   Renderer,
   type StrokeStyle,
   penFor,
+  paperColorOf,
 } from "../canvas/renderer";
 import {
   type BoxFrame,
@@ -1695,6 +1697,17 @@ export class InkSurface {
   // --- What the host can ask for -----------------------------------------------
 
   /** Switch this notebook's paper between white (default) and dark. */
+  private pendingWritingGuides: { style: ReturnType<typeof writingGuidesOf> | null } | null = null;
+  /** Coalesced with the existing paint frame, with no notebook/history callback. */
+  setWritingGuides(enabled: boolean, raw: unknown): void {
+    this.pendingWritingGuides = { style: enabled ? writingGuidesOf(raw) : null };
+    this.requestFrame();
+  }
+  writingGuideContext(): { eligible: boolean; paper: string; scale: number } {
+    const page = this.doc.pages[this.pageIndex];
+    return { eligible: !!page && guidesEligible(page), paper: page ? paperColorOf(page, this.paper) : this.paper.paper, scale: this.unitScale };
+  }
+
   setDarkPaper(dark: boolean): void {
     this.paperIsDark = dark;
     this.paper = paperTheme(dark);
@@ -3021,6 +3034,10 @@ export class InkSurface {
    */
   private renderDry(budgetMs = Infinity): boolean {
     if (!this.renderer) return true;
+    if (this.pendingWritingGuides) {
+      this.renderer.setWritingGuides(this.pendingWritingGuides.style, this.doc.pages.filter(guidesEligible).map(page => page.id));
+      this.pendingWritingGuides = null;
+    }
     this.flushEraseDirty();
     // `eraseIds` / `erasePieces` are empty except during a live erase gesture.
     // The lasso selection's frame is DOM (it takes presses), not canvas.

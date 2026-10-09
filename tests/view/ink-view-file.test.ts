@@ -486,3 +486,21 @@ describe("saving while the pen writes", () => {
     expect(saves).toBe(1);
   });
 });
+
+describe("temporary writing guide view state", () => {
+  it("opens off, keeps visibility local, shares style state, and never requests a notebook save", () => {
+    const shared = fakePlugin(); const one = new InkView(new WorkspaceLeaf({}) as never, shared as never); const two = new InkView(new WorkspaceLeaf({}) as never, shared as never);
+    const first = one as unknown as { writingGuideHost(): import("../../src/view/writing-guides").WritingGuideHost; refreshWritingGuides(): void; surface: unknown };
+    const second = two as unknown as typeof first;
+    const setOne = vi.fn(), setTwo = vi.fn();
+    first.surface = { setWritingGuides: setOne, writingGuideContext: () => ({ paper: "#ffffff", eligible: true, scale: 1 }) };
+    second.surface = { setWritingGuides: setTwo, writingGuideContext: () => ({ paper: "#000000", eligible: true, scale: 1 }) };
+    const a = first.writingGuideHost(), b = second.writingGuideHost();
+    expect(a.state().enabled).toBe(false); expect(b.state().enabled).toBe(false);
+    a.enable(true); expect(a.state().enabled).toBe(true); expect(b.state().enabled).toBe(false); expect(setTwo).not.toHaveBeenCalled();
+    shared.settings.writingGuides = { ...a.state().style, spacing: 64 };
+    first.refreshWritingGuides(); second.refreshWritingGuides();
+    expect(a.state().style.spacing).toBe(64); expect(b.state().style.spacing).toBe(64); expect(setTwo).not.toHaveBeenCalled();
+    expect((one as unknown as { saveRequests: number }).saveRequests).toBe(0); expect((two as unknown as { saveRequests: number }).saveRequests).toBe(0);
+  });
+});

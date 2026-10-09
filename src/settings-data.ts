@@ -1,3 +1,4 @@
+import { DEFAULT_WRITING_GUIDES, type WritingGuideStyle } from "./model/writing-guides";
 import type { PdfQuality } from "./export/pdf-quality";
 import {
   colorList,
@@ -42,6 +43,7 @@ import type { EraserMode } from "./view/toolbar";
 export type ToolId = "pen" | "highlighter" | "eraser" | "select";
 
 export interface GoodObsidianSettings {
+  writingGuides?: WritingGuideStyle;
   pdfExportQuality: PdfQuality;
   /** Versioned user-managed toolbar preferences, upgraded explicitly on load. */
   writingPresets?: WritingPresets;
@@ -160,6 +162,7 @@ export interface GoodObsidianSettings {
 // The records are copies, so a host that edits its settings in place cannot
 // change the shared defaults.
 export const DEFAULT_SETTINGS: GoodObsidianSettings = {
+  writingGuides: { ...DEFAULT_WRITING_GUIDES },
   pdfExportQuality: "high",
   drawAndHold: true,
   defaultTool: "pen",

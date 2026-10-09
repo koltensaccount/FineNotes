@@ -1,3 +1,4 @@
+import { renderWritingGuideControls, type WritingGuideHost } from "./writing-guides";
 import { PDF_QUALITY_LABELS, type PdfQuality } from "../export/pdf-quality";
 /**
  * The toolbar's settings button: this notebook's (or single page's) own
@@ -30,6 +31,7 @@ import { DialogKeyboard } from "./dialog-keyboard";
 const SUGGESTIONS = 5;
 
 export interface NoteSettingsHost {
+  writingGuides?: WritingGuideHost;
   companion?: {
     state: () => { enabled: boolean; followName: boolean; pdfPath: string; status: string; pdfQuality?: PdfQuality | null };
     configure: (patch: {
@@ -87,6 +89,7 @@ export class NoteSettingsModal extends Modal {
   /** Keeps the row being typed in, and its folder list, above the keyboard. */
   private readonly keyboard: DialogKeyboard;
   private showing = false;
+  private disposeGuides: (() => void) | null = null;
 
   constructor(
     app: App,
@@ -104,6 +107,7 @@ export class NoteSettingsModal extends Modal {
   }
 
   override onClose(): void {
+    this.disposeGuides?.(); this.disposeGuides = null;
     this.showing = false;
     this.keyboard.end();
     this.contentEl.empty();
@@ -113,7 +117,13 @@ export class NoteSettingsModal extends Modal {
     const { contentEl } = this;
     // Re-rendering drops the field being typed in.
     this.keyboard.end();
+    this.disposeGuides?.(); this.disposeGuides = null;
     contentEl.empty();
+    if (this.host.writingGuides) {
+      const details = contentEl.createEl("details", { cls: "goodobsidian-guide-details" });
+      details.createEl("summary", { text: "Writing guides" });
+      details.addEventListener("toggle", () => { if (details.open && !this.disposeGuides) this.disposeGuides = renderWritingGuideControls(details, this.host.writingGuides!); });
+    }
     // A single page has nowhere to scroll to.
     if (!this.host.single) this.renderScroll(contentEl);
     new Setting(contentEl).setName("Where new files are saved").setHeading();

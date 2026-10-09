@@ -1,3 +1,5 @@
+import { paintWritingGuides } from "./writing-guides";
+import type { WritingGuideStyle } from "../model/writing-guides";
 import { highlighterPolygons } from "../ink/highlighter";
 import { lineStyleOf, patternedRuns } from "../ink/line-style";
 import type { LineStyle } from "../model/document";
@@ -324,6 +326,12 @@ function now(): number {
 }
 
 export class Renderer {
+  private writingGuides: WritingGuideStyle | null = null;
+  /** Changes only this interactive renderer's cached tiles and stand-ins. */
+  setWritingGuides(style: WritingGuideStyle | null, blankPageIds: readonly string[]): void {
+    this.writingGuides = style ? { ...style } : null;
+    for (const id of blankPageIds) this.invalidatePage(id);
+  }
   /** How opaque highlighter ink is drawn, 0..1. The surface sets it from the settings. */
   highlighterAlpha = DEFAULT_HIGHLIGHTER_ALPHA;
   /** Paper colours. Paper-white by default; a dark page is a notebook override. */
@@ -947,6 +955,7 @@ export class Renderer {
       deviceScale: level,
       ...(Number.isFinite(region.minX) ? { region } : {}),
     });
+    if (this.writingGuides) paintWritingGuides(ctx, page, region, this.writingGuides, paperColorOf(page, this.paper), this.view.scale, level);
     this.paintImages(ctx, page, region, level);
     // Inset by half a device pixel so the hairline lies inside the clip.
     const hair = 1 / level;

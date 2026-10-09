@@ -6101,3 +6101,22 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-shape-fields input { width: 94px; min-height: 36px; color: var(--text-normal); background: var(--background-modifier-form-field); }
 .goodobsidian-smoothing-control { display: grid; gap: 8px; padding: 12px 8px; color: var(--text-normal); }
 .goodobsidian-smoothing-control input { width: 100%; }
+
+.goodobsidian-guide-popover { background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); box-shadow: var(--gob-shadow-float); }
+.goodobsidian-writing-guides { display: grid; gap: 10px; padding: 12px; color: var(--text-normal); }
+.goodobsidian-guide-enable, .goodobsidian-guide-slider-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.goodobsidian-guide-enable { min-height: 44px; font-weight: 500; cursor: pointer; }
+.goodobsidian-guide-enable input { width: 20px; height: 20px; }
+.goodobsidian-guide-slider { display: grid; gap: 6px; padding: 4px 0; font-size: var(--font-ui-small); }
+.goodobsidian-guide-slider-head span:last-child { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.goodobsidian-guide-slider input { width: 100%; min-height: 36px; margin: 0; }
+.goodobsidian-writing-guides .goodobsidian-segmented button { min-height: 44px; flex: 1; }
+.goodobsidian-guide-label { font-size: var(--font-ui-small); font-weight: 500; }
+.goodobsidian-guide-color { display: flex; align-items: center; gap: 10px; min-height: 44px; justify-content: flex-start; }
+.goodobsidian-guide-color-disc { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--background-modifier-border); }
+.goodobsidian-guide-preview { display: block; width: 100%; height: 72px; border: 1px solid var(--background-modifier-border); border-radius: 6px; pointer-events: none; }
+.goodobsidian-guide-reset { min-height: 44px; }
+.goodobsidian-guide-status { margin-left: auto; color: var(--text-muted); font-size: var(--font-ui-small); }
+.goodobsidian-guide-details { border: 1px solid var(--background-modifier-border); border-radius: 8px; margin-bottom: 16px; background: var(--background-primary); }
+.goodobsidian-guide-details summary { min-height: 44px; padding: 12px; cursor: pointer; font-weight: 500; }
+.goodobsidian-writing-guides .goodobsidian-color-mixer { background: var(--background-primary); }

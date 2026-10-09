@@ -1,3 +1,4 @@
+import { writingGuidesOf } from "./model/writing-guides";
 import { pdfQuality } from "./export/pdf-quality";
 import { type WritingPresets, migrateWritingPresets } from "./model/writing-presets";
 import { CompanionPdfManager } from "./view/companion-pdf";
@@ -153,6 +154,11 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   override async onload(): Promise<void> {
+    this.register(() => {
+      if (this.writingGuideSaveTimer === null) return;
+      clearTimeout(this.writingGuideSaveTimer); this.writingGuideSaveTimer = null;
+      void this.saveSettings();
+    });
     // Each vendor reads only its own key slot, so a cloud key can never reach
     // an arbitrary user-configured URL (the custom endpoint has a slot of its own).
     // Registered before the settings load, which check the saved provider
@@ -398,6 +404,7 @@ export default class GoodObsidianPlugin extends Plugin {
     const saved = own ?? (await this.settingsFromPreviousId());
     this.firstInstall = saved === null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    this.settings.writingGuides = writingGuidesOf(this.settings.writingGuides);
     this.settings.pdfExportQuality = pdfQuality(this.settings.pdfExportQuality);
     this.settings.writingPresets = migrateWritingPresets(
       this.settings,
@@ -690,6 +697,14 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   /** Remember which pen gestures are on, for the next session. */
+  private writingGuideSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  saveWritingGuides(raw: unknown): void {
+    this.settings.writingGuides = writingGuidesOf(raw);
+    for (const view of this.openNotebooks()) view.refreshWritingGuides();
+    if (this.writingGuideSaveTimer !== null) clearTimeout(this.writingGuideSaveTimer);
+    this.writingGuideSaveTimer = setTimeout(() => { this.writingGuideSaveTimer = null; void this.saveSettings(); }, 200);
+  }
+
   savePenGestures(gestures: PenGestures): void {
     this.settings.penGestures = penGesturesOf(gestures);
     for (const view of this.openNotebooks()) view.setPenGestures(this.settings.penGestures);

@@ -1,3 +1,5 @@
+import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
+import { writingGuidesOf, type WritingGuideStyle } from "../model/writing-guides";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { AnchoredNativeMenus, dismissTransient } from "./transient-popover";
 import { effectivePdfQuality, pdfQuality, type PdfQuality } from "../export/pdf-quality";
@@ -239,6 +241,10 @@ export class InkView extends TextFileView {
   private sidebar: PageSidebar | null = null;
   /** The ⋯ panel, while open. */
   private morePanel: MorePanel | null = null;
+  private guidesEnabled = false;
+  private guidePopover: WritingGuidePopover | null = null;
+  private readonly guideSubscribers = new Set<() => void>();
+  private guideContextKey = "";
   private nativeMenus: AnchoredNativeMenus<Menu> | null = null;
   private addPagePopover: { popover: AddPagePopover; anchor: HTMLElement } | null = null;
   private coverPopover: { popover: CoverPopover; anchor: HTMLElement } | null = null;
@@ -330,6 +336,11 @@ export class InkView extends TextFileView {
   /** Obsidian read the file (on open, or because it changed on disk). */
   setViewData(data: string, _clear: boolean): void {
     this.companionUnloadedFile = null;
+    if (this.loadedPath !== (this.file?.path ?? null)) {
+      this.guidesEnabled = false;
+      this.guidePopover?.close();
+      this.surface?.setWritingGuides(false, this.settings.writingGuides);
+    }
     const { body, doc, payload } = parseInkFile(data, this.settings.paperWidth);
     const held = this.guard.admit({
       text: data,
@@ -491,6 +502,7 @@ export class InkView extends TextFileView {
     this.toolbar = null;
     this.sidebar?.destroy();
     this.sidebar = null;
+    this.guidePopover?.close();
     this.morePanel?.close();
     this.morePanel = null;
     this.addPagePopover?.popover.close();
@@ -1113,7 +1125,7 @@ export class InkView extends TextFileView {
           this.markCompanionChanged();
         },
         // The zoom or the screen changed: keep PDF pages as sharp as the ink.
-        onStatus: () => this.matchPdfResolution(),
+        onStatus: () => { this.matchPdfResolution(); this.refreshGuideContext(); },
         onPen: (down) => this.penActivity(down),
         isLocked: () => this.isProtected(),
         returnToPenOnReselect: () => this.settings.returnToPenOnReselect === true,
@@ -1147,6 +1159,7 @@ export class InkView extends TextFileView {
         },
       },
     );
+    this.surface.setWritingGuides(this.guidesEnabled, this.settings.writingGuides);
     this.surface.setBackdropPainter(this.backdrops);
     // Audio (0.5). Strokes are stamped on the recorder's clock, so ink and
     // audio share one timeline even if the wall clock jumps mid-recording.
@@ -1297,6 +1310,7 @@ export class InkView extends TextFileView {
     };
     new NoteSettingsModal(this.app, {
       single: this.isSinglePage,
+      writingGuides: this.writingGuideHost(),
       folders: () => ({ ...this.doc.folders }),
       setFolder: (kind, folder) => apply(new SetAttachmentFolder(kind, folder)),
       scrollDirection: () => scrollDirectionOf(this.doc),
@@ -1905,7 +1919,36 @@ export class InkView extends TextFileView {
    * Everything it offers goes through `pageAction`, so it is undoable and
    * refused on a protected note exactly as the sidebar's page menu is.
    */
+  refreshWritingGuides(): void {
+    if (this.guidesEnabled) this.surface?.setWritingGuides(true, this.settings.writingGuides);
+    for (const changed of this.guideSubscribers) changed();
+  }
+  private refreshGuideContext(): void {
+    if (!this.guideSubscribers.size) return;
+    const key = JSON.stringify(this.surface?.writingGuideContext());
+    if (key === this.guideContextKey) return; this.guideContextKey = key;
+    for (const changed of this.guideSubscribers) changed();
+  }
+  private setGuidesEnabled(enabled: boolean): void {
+    this.guidesEnabled = enabled;
+    this.surface?.setWritingGuides(enabled, this.settings.writingGuides);
+    for (const changed of this.guideSubscribers) changed();
+  }
+  private writingGuideHost(): WritingGuideHost {
+    return {
+      state: () => ({ enabled: this.guidesEnabled, style: writingGuidesOf(this.settings.writingGuides), ...(this.surface?.writingGuideContext() ?? { eligible: false, paper: "#ffffff", scale: 1 }) }),
+      enable: enabled => this.setGuidesEnabled(enabled),
+      configure: (patch: Partial<WritingGuideStyle>) => this.plugin.saveWritingGuides({ ...writingGuidesOf(this.settings.writingGuides), ...patch }),
+      subscribe: changed => { this.guideSubscribers.add(changed); return () => { this.guideSubscribers.delete(changed); }; },
+    };
+  }
+  private toggleGuidePopover(anchor: HTMLElement): void {
+    const open = this.guidePopover; this.guidePopover = null;
+    if (open?.isOpen) { open.close(); if (open.anchorEl === anchor) return; }
+    this.guidePopover = new WritingGuidePopover(anchor, this.writingGuideHost());
+  }
   private toggleMorePanel(anchor: HTMLElement): void {
+    if (this.guidePopover?.isOpen && this.guidePopover.anchorEl === anchor) { this.guidePopover.close(); return; }
     const open = this.morePanel;
     this.morePanel = null;
     if (open?.isOpen) {
@@ -1932,6 +1975,7 @@ export class InkView extends TextFileView {
         clearable: page.strokes.length > 0,
       },
       {
+        writingGuides: { enabled: () => this.guidesEnabled, toggle: () => this.setGuidesEnabled(!this.guidesEnabled), customize: at => this.toggleGuidePopover(at) },
         paintThumbnail: (canvas, at, width) => this.sidebar?.paintThumbnail(canvas, at, width),
         toggleBookmark: (at) => act("bookmark", at),
         editTitle: (at) => act("contents", at),
@@ -1962,6 +2006,7 @@ export class InkView extends TextFileView {
     this.nativeMenus?.close();
     this.toolbar?.dismissPopover();
     this.sidebar?.dismissMenu();
+    this.guidePopover?.close();
     this.morePanel?.close();
     this.addPagePopover?.popover.close();
     this.coverPopover?.popover.close();
