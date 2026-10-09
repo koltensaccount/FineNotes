@@ -1419,6 +1419,30 @@ describe("individual shape editing", () => {
     const imageActions=run<any[]>(surface,"imageActions",{ pageId:"p1",image }); expect(imageActions.some(action=>action.id === "delete")).toBe(true);
   });
 
+  it.each(["resize", "scale"])("%s supports mixed pen/highlighter ink, preview, cancellation and one undo step", mode => {
+    const { surface,stroke,selection,doc,history,renderer }=fixture(); delete stroke.shape;
+    const highlight: Stroke={ id:"s2",color:"#ffff00",size:12,tool:"highlighter",pts:[100,120,.3,300,180,.8] };
+    doc.pages[0].strokes.push(highlight); selection.strokes.push(highlight);
+    const original=selection.strokes.map(s=>structuredClone(s));
+    expect(run(surface,"editableInk",selection)).toBe(true);
+    const frame={ cx:200,cy:150,w:200,h:100,angle:0 };
+    const drag={ pointerId:1,selection,bounds:{ minX:94,minY:94,maxX:306,maxY:206 },from:{ x:300,y:200 },dx:0,dy:0,lifted:true,ink:{ base:original,draft:original,frame,preview:frame,handle:"se",mode } };
+    surface.groupDrag=drag; run(surface,"moveInkHandle",drag,{ index:0,width:800,height:1000 },{ x:400,y:250 });
+    expect(selection.strokes).toEqual(original); expect(drag.ink.draft[1].tool).toBe("highlighter"); expect(drag.ink.draft[1].color).toBe("#ffff00"); expect(drag.ink.draft[1].pts[2]).toBe(.3);
+    expect(drag.ink.draft[0].size).toBe(mode === "scale" ? 6 : 3); expect(drag.ink.draft[1].size).toBe(mode === "scale" ? 24 : 12);
+    expect(renderer.renderSelectionDraft.mock.calls.at(-1)![1]).toEqual(drag.ink.draft);
+    run(surface,"endGroupDrag",false); expect(selection.strokes).toEqual(original); expect(history.undo(doc)).toBeNull();
+    surface.groupDrag=drag; run(surface,"endGroupDrag",true); expect(selection.strokes[1].pts).toEqual(drag.ink.draft[1].pts);
+    history.undo(doc); expect(selection.strokes).toEqual(original); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(selection.strokes[1].size).toBe(mode === "scale" ? 24 : 12);
+  });
+  it("offers drawing controls only for ink selections, retaining mixed-object behavior",()=>{
+    const {surface,stroke,selection}=fixture(); delete stroke.shape;
+    Object.assign(surface,{ pasteAction:()=>({id:"paste"}),palette:[],toolState:{recentColors:[]} });
+    expect(run<any[]>(surface,"groupActions",selection).map(a=>a.id)).toEqual(expect.arrayContaining(["drawing-resize","drawing-scale"]));
+    expect(run(surface,"editableInk",{...selection,images:[{}]})).toBe(false);
+    expect(run(surface,"editableInk",{...selection,textBoxes:[{}]})).toBe(false);
+  });
+
 });
 
 describe("shape tap and completed smoothing integration", () => {

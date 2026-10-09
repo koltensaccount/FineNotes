@@ -202,6 +202,7 @@ import {
   RecolorStrokes,
   RemoveElements,
   TranslateElements,
+  TransformSelectedInk,
   copyElements,
   elementsOnPage,
   isEmptySelection,
@@ -703,6 +704,7 @@ interface GroupDrag {
   dy: number;
   /** Whether the selection has left the tiles for the wet layer yet. */
   lifted: boolean;
+  ink?: { base: Stroke[]; draft: Stroke[]; frame: ShapeFrame; preview: ShapeFrame; handle: ShapeHandle; mode: "resize" | "scale" };
   shape?: { stroke: Stroke; frame: ShapeFrame; handle: ShapeHandle; mode: "resize" | "scale"; pts: number[]; originalSize: number; size: number; factor: number };
 }
 
@@ -1271,11 +1273,11 @@ export class InkSurface {
       const button = this.selectionFrameEl.createEl("button", { cls: `goodobsidian-shape-handle is-${handle}`, attr: { "data-shape-handle": handle, "aria-label": `Shape ${handle} handle` } });
       
     }
-    this.selectionFrameEl.addEventListener("lostpointercapture", () => { if (this.groupDrag?.shape) this.endGroupDrag(false); });
+    this.selectionFrameEl.addEventListener("lostpointercapture", event => { if (event.pointerId === this.groupDrag?.pointerId && !this.selectionFrameEl.hasPointerCapture(event.pointerId) && (this.groupDrag.shape || this.groupDrag.ink)) this.endGroupDrag(false); });
     this.selectionFrameEl.addEventListener("pointerdown", this.onSelectionPointerDown);
     this.actionBar = new SelectionActionBar(this.selectionUiEl, "Selection");
     const cancelShapeEdit = (): void => {
-      if (!this.groupDrag?.shape) return;
+      if (!(this.groupDrag?.shape || this.groupDrag?.ink)) return;
       this.endGroupDrag(false);
     };
     const hiddenShapeEdit = (): void => { if (activeDocument.visibilityState === "hidden") cancelShapeEdit(); };
@@ -1937,7 +1939,7 @@ export class InkSurface {
    */
   handleKeyDown(event: KeyboardEvent): boolean {
     if (event.defaultPrevented || event.isComposing || isEditable(event.target)) return false;
-    if (event.key === "Escape" && (this.groupDrag?.shape)) {
+    if (event.key === "Escape" && ((this.groupDrag?.shape || this.groupDrag?.ink))) {
       this.cancelGroupDrag(); this.shapeMode = "resize"; this.syncSelectionOverlay(); event.preventDefault(); return true;
     }
     // Space on a focused toolbar button presses the button.
@@ -5221,6 +5223,14 @@ export class InkSurface {
   }
 
   /** Put the selection's dashed frame where it is (or where a drag has it), and its bar. */
+  private editableInk(sel: GroupSelection | null): boolean {
+    return !!sel && sel.strokes.length > 0 && !sel.images.length && !sel.textBoxes.length;
+  }
+  private frameForInk(sel: GroupSelection): ShapeFrame | null {
+    const bounds = this.groupBounds(sel); if (!bounds) return null;
+    return { cx: (bounds.minX + bounds.maxX) / 2, cy: (bounds.minY + bounds.maxY) / 2, w: Math.max(4, bounds.maxX - bounds.minX), h: Math.max(4, bounds.maxY - bounds.minY), angle: 0 };
+  }
+
   private editableShape(sel: GroupSelection | null): Stroke | null {
     if (!sel || sel.strokes.length !== 1 || sel.images.length || sel.textBoxes.length) return null;
     const stroke = sel.strokes[0];
@@ -5258,7 +5268,8 @@ export class InkSurface {
     const bounds = sel && box ? this.groupBounds(sel) : null;
     this.selectionFrameEl.toggleClass("is-hidden", !box || !bounds);
     const shape = this.editableShape(sel);
-    this.selectionFrameEl.toggleClass("is-shape", !!shape);
+    const ink = !shape && this.editableInk(sel);
+    this.selectionFrameEl.toggleClass("is-shape", !!shape || ink);
     this.selectionFrameEl.style.transform = "";
     for (const button of this.selectionFrameEl.querySelectorAll<HTMLElement>(".goodobsidian-shape-handle")) button.classList.add("is-hidden");
     if (box && bounds) {
@@ -5273,20 +5284,20 @@ export class InkSurface {
         height: `${(bounds.maxY - bounds.minY) * scale + 2 * SELECTION_PAD_PX}px`,
       });
       this.selectionFrameEl.toggleClass("is-dragging", drag !== null);
-      if (shape) {
+      if (shape || ink) {
         const transform = drag?.shape;
-        const frame = transform ? shapeFrame(shape.shape!, transform.pts, transform.frame.angle)! : this.frameForShape(shape);
+        const frame = shape ? (transform ? shapeFrame(shape.shape!, transform.pts, transform.frame.angle)! : this.frameForShape(shape)) : (drag?.ink?.preview ?? this.frameForInk(sel!)!);
         const h = Math.max(frame.h * scale, 12);
         this.selectionFrameEl.setCssStyles({ left: `${(box.x + frame.cx + (drag?.dx ?? 0)) * scale - frame.w * scale / 2}px`, top: `${(box.y + frame.cy + (drag?.dy ?? 0)) * scale - h / 2}px`, width: `${frame.w * scale}px`, height: `${h}px`, transform: `rotate(${frame.angle}rad)` });
-        const connector = shape.shape === "line" || shape.shape === "arrow";
-        const handles: ShapeHandle[] = connector ? ["start", "end"] : independentlyResizable(shape.shape!) && this.shapeMode === "resize" ? ["n", "s", "e", "w", "nw", "ne", "sw", "se"] : ["nw", "ne", "sw", "se"];
+        const connector = shape?.shape === "line" || shape?.shape === "arrow";
+        const handles: ShapeHandle[] = connector ? ["start", "end"] : (ink || independentlyResizable(shape!.shape!)) && this.shapeMode === "resize" ? ["n", "s", "e", "w", "nw", "ne", "sw", "se"] : ["nw", "ne", "sw", "se"];
         const visibleHandles = handles.filter(handle => !(["n", "s"].includes(handle) && frame.w * scale < 88) && !(["e", "w"].includes(handle) && h < 88));
         for (const handle of visibleHandles) this.selectionFrameEl.querySelector(`.is-${handle}`)?.classList.remove("is-hidden");
       }
       // The loop that made the selection, while it is still those elements.
       const outline = this.selectionOutline;
       const count = sel ? sel.strokes.length + sel.images.length + sel.textBoxes.length : 0;
-      const shown = !shape && outline !== null && outline.count === count;
+      const shown = !shape && !ink && outline !== null && outline.count === count;
       this.selectionFrameEl.toggleClass("has-outline", shown);
       if (shown) {
         const at = (v: number): string => (SELECTION_PAD_PX + v * scale).toFixed(1);
@@ -5498,6 +5509,9 @@ export class InkSurface {
         const size = values.scale !== undefined ? scaledStrokeSize(values.size ?? live.size, values.scale / 100) : values.size;
         this.applyShapeEdit(sel.pageId, live, pts, current.angle, values.scale !== undefined ? "Scale shape" : "Edit shape dimensions", size);
       } } });
+    }
+    if (!shape && this.editableInk(sel)) {
+      for (const mode of ["resize", "scale"] as const) actions.push({ id: `drawing-${mode}`, icon: mode === "resize" ? "move-horizontal" : "maximize-2", label: mode === "resize" ? "Resize" : "Scale proportionally", group: "shape", bar: true, run: () => { this.shapeMode = mode; this.syncSelectionOverlay(); } });
     }
     if (sel.strokes.length > 0) {
       const first = sel.strokes[0].color;
@@ -6184,7 +6198,10 @@ export class InkSurface {
     }
     const stroke = this.editableShape(sel);
     const handle = (event.target as HTMLElement).closest<HTMLElement>("[data-shape-handle]")?.dataset.shapeHandle as ShapeHandle | undefined;
+    const inkFrame = !stroke && handle && this.editableInk(sel) ? this.frameForInk(sel) : null;
+    const base = inkFrame ? sel.strokes.map(s => ({ ...s, pts: s.pts.slice() })) : [];
     this.groupDrag = {
+      ...(inkFrame && handle ? { ink: { base, draft: base, frame: inkFrame, preview: inkFrame, handle, mode: this.shapeMode } } : {}),
       ...(stroke && handle ? { shape: { stroke, frame: this.frameForShape(stroke), handle, mode: this.shapeMode, pts: stroke.pts.slice(), originalSize: stroke.size, size: stroke.size, factor: 1 } } : {}),
       pointerId: event.pointerId,
       selection: sel,
@@ -6211,7 +6228,8 @@ export class InkSurface {
     const box = this.boxForPage(drag.selection.pageId);
     if (!box) return;
     const point = this.pagePoint(box, event.clientX, event.clientY);
-    if (drag.shape) this.moveShapeHandle(drag, box, point);
+    if (drag.ink) this.moveInkHandle(drag, box, point);
+    else if (drag.shape) this.moveShapeHandle(drag, box, point);
     else this.moveGroupDrag(drag, box, point);
   };
 
@@ -6235,7 +6253,7 @@ export class InkSurface {
     const drag = this.groupDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     event.stopPropagation();
-    this.endGroupDrag(!drag.shape || event.type !== "pointercancel");
+    this.endGroupDrag(!(drag.shape || drag.ink) || event.type !== "pointercancel");
   };
 
   /**
@@ -6256,7 +6274,7 @@ export class InkSurface {
     const box = drag ? this.boxForPage(drag.selection.pageId) : null;
     if (!drag?.lifted || !box) return;
     const { images } = drag.selection;
-    const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts, size: drag.shape.size ?? drag.shape.stroke.size }] : drag.selection.strokes;
+    const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts, size: drag.shape.size ?? drag.shape.stroke.size }] : drag.ink?.draft ?? drag.selection.strokes;
     this.renderer?.renderSelectionDraft(
       box.index,
       strokes,
@@ -6287,7 +6305,7 @@ export class InkSurface {
     const drag = this.groupDrag;
     if (!drag) return;
     this.groupDrag = null;
-    if (drag.shape && !commit) this.shapeMode = "resize";
+    if ((drag.shape || drag.ink) && !commit) this.shapeMode = "resize";
     this.circleDrag = false;
     this.selectionFrameEl.removeEventListener("pointermove", this.onSelectionPointerMove);
     this.selectionFrameEl.removeEventListener("pointerup", this.onSelectionPointerEnd);
@@ -6304,13 +6322,17 @@ export class InkSurface {
     this.renderer?.clearWet();
     const { pageId } = drag.selection;
     const box = this.boxForPage(pageId);
+    const inkChanged = !!drag.ink && drag.ink.draft.some((draft, index) => draft.size !== drag.selection.strokes[index].size || draft.pts.some((v, i) => v !== drag.selection.strokes[index].pts[i]));
     const geometryChanged = !!drag.shape && (drag.shape.pts.some((v, i) => v !== drag.shape!.stroke.pts[i]) || (drag.shape.size !== undefined && drag.shape.size !== drag.shape.stroke.size));
     const moved =
       commit &&
-      (geometryChanged || drag.dx !== 0 || drag.dy !== 0) &&
+      (inkChanged || geometryChanged || drag.dx !== 0 || drag.dy !== 0) &&
       this.doc.pages.some((page) => page.id === pageId);
     if (moved) {
-      if (drag.shape) {
+      if (drag.ink) {
+        this.history.push(this.doc, new TransformSelectedInk(pageId, drag.ink.draft.map((draft,index) => ({ stroke: drag.selection.strokes[index], pts: draft.pts, size: draft.size })), drag.ink.mode === "scale" ? "Scale drawing" : "Resize drawing"));
+        this.shapeMode = "resize";
+      } else if (drag.shape) {
         const shape = drag.shape;
         this.history.push(this.doc, new TransformStroke(pageId, shape.stroke.id, shape.pts, shape.mode === "scale" ? shape.size : undefined, shape.mode === "scale" ? "Scale shape" : "Resize shape"));
         this.selectedShapeFrame = { id: shape.stroke.id, points: shape.stroke.pts, frame: shapeFrame(shape.stroke.shape!, shape.stroke.pts, shape.frame.angle)! };
@@ -6319,13 +6341,39 @@ export class InkSurface {
       this.strokeIndex.rebuild(this.doc.pages);
     }
     if (box) {
-      const after = moved ? (drag.shape ? strokeBounds(drag.shape.stroke) : shiftBounds(drag.bounds, drag.dx, drag.dy)) : null;
+      const after = moved ? (drag.ink ? this.groupBounds(drag.selection) : drag.shape ? strokeBounds(drag.shape.stroke) : shiftBounds(drag.bounds, drag.dx, drag.dy)) : null;
       this.renderer?.invalidateRegion(box.index, unionBounds(drag.bounds, after) ?? drag.bounds);
     }
     this.renderDry();
     this.syncTextBoxes();
     this.syncSelectionOverlay();
     if (moved) this.changed();
+  }
+
+  private moveInkHandle(drag: GroupDrag, box: PageBox, p: Pt): void {
+    const edit = drag.ink!, frame = edit.frame, handle = edit.handle;
+    p = { x: Math.max(0, Math.min(box.width,p.x)), y: Math.max(0,Math.min(box.height,p.y)) };
+    let factor = 1;
+    if (edit.mode === "scale") {
+      const original = Math.hypot(drag.from.x-frame.cx,drag.from.y-frame.cy);
+      factor = Math.max(4 / Math.min(frame.w,frame.h),Math.hypot(p.x-frame.cx,p.y-frame.cy) / Math.max(2,original));
+      edit.preview = { ...frame,w:frame.w*factor,h:frame.h*factor };
+    } else {
+      let left=frame.cx-frame.w/2,right=frame.cx+frame.w/2,top=frame.cy-frame.h/2,bottom=frame.cy+frame.h/2;
+      if(handle.includes("w")) left=Math.min(right-4,left+p.x-drag.from.x);
+      if(handle.includes("e")) right=Math.max(left+4,right+p.x-drag.from.x);
+      if(handle.includes("n")) top=Math.min(bottom-4,top+p.y-drag.from.y);
+      if(handle.includes("s")) bottom=Math.max(top+4,bottom+p.y-drag.from.y);
+      edit.preview={ cx:(left+right)/2,cy:(top+bottom)/2,w:right-left,h:bottom-top,angle:0 };
+    }
+    const next=edit.preview;
+    edit.draft=edit.base.map(stroke => {
+      const pts=stroke.pts.slice();
+      for(let i=0;i<pts.length;i+=3) { pts[i]=next.cx+(pts[i]-frame.cx)*next.w/frame.w; pts[i+1]=next.cy+(pts[i+1]-frame.cy)*next.h/frame.h; }
+      return { ...stroke,pts,size: edit.mode === "scale" ? scaledStrokeSize(stroke.size,factor) : stroke.size };
+    });
+    if(!drag.lifted) this.liftSelection(drag,box);
+    this.renderGroupDraft(); this.syncSelectionOverlay();
   }
 
   private moveShapeHandle(drag: GroupDrag, box: PageBox, p: Pt): void {

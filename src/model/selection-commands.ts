@@ -300,3 +300,26 @@ function restoreTo<T>(list: T[], removed: ReadonlyArray<Removed<T>>): void {
     list.splice(Math.min(index, list.length), 0, item);
   }
 }
+
+/** One undoable resize/scale of selected vector ink; keep element identity and styling. */
+export class TransformSelectedInk implements Command {
+  private previous: { stroke: Stroke; pts: number[]; size: number }[] = [];
+  private readonly next: { stroke: Stroke; pts: number[]; size: number }[];
+  constructor(readonly pageId: string, entries: readonly { stroke: Stroke; pts: number[]; size: number }[], readonly label = "Resize drawing") {
+    this.next = entries.map(entry => ({ ...entry, pts: entry.pts.slice() }));
+  }
+  apply(doc: InkDocument): void {
+    const page = pageById(doc, this.pageId); this.previous = [];
+    if (!page) return;
+    for (const entry of this.next) {
+      if (!page.strokes.includes(entry.stroke)) continue;
+      this.previous.push({ stroke: entry.stroke, pts: entry.stroke.pts, size: entry.stroke.size });
+      entry.stroke.pts = entry.pts.slice(); entry.stroke.size = entry.size;
+    }
+  }
+  invert(doc: InkDocument): void {
+    const page = pageById(doc, this.pageId); if (!page) return;
+    for (const entry of this.previous) if (page.strokes.includes(entry.stroke)) { entry.stroke.pts = entry.pts; entry.stroke.size = entry.size; }
+    this.previous = [];
+  }
+}
