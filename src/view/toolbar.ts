@@ -363,6 +363,8 @@ export interface ToolbarCallbacks {
   onShare?: (anchor: HTMLElement) => void;
   /** Open the ⋯ panel for the page being read; `anchor` is the button. */
   onMore?: (anchor: HTMLElement) => void;
+  onWritingGuides?: (anchor: HTMLElement) => void;
+  writingGuidesEnabled?: () => boolean;
   // --- The Text tool (0.5).
   /** A text control changed: apply `patch` to the box being edited, if there is one. */
   onTextStyle?: (patch: TextStylePatch) => void;
@@ -893,6 +895,23 @@ export class Toolbar {
       this.callbacks.onPenAutoShapeChange?.(!on);
       this.buildOptions();
     });
+    if (this.callbacks.onWritingGuides) {
+      const guides = this.optionsEl.createEl("button", { cls: "goodobsidian-shape goodobsidian-writing-guide-anchor clickable-icon" });
+      iconOrText(guides, "notebook-pen", "Guides");
+      guides.addEventListener("click", () => this.callbacks.onWritingGuides?.(guides));
+      this.syncWritingGuides();
+    }
+  }
+
+  syncWritingGuides(): void {
+    const on = this.callbacks.writingGuidesEnabled?.() === true;
+    for (const button of this.optionsEl.querySelectorAll<HTMLElement>(".goodobsidian-writing-guide-anchor")) {
+      const label = `Writing guides: ${on ? "on" : "off"}`;
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", `${label} — customize lines, grid or dots`);
+      button.setAttribute("aria-pressed", String(on));
+      button.toggleClass("is-active", on);
+    }
   }
 
   private buildColorStrip(): void {

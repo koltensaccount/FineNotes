@@ -32,14 +32,14 @@ describe("writing guide preferences and colors", () => {
   });
 });
 describe("bounded page-space guide drawing", () => {
-  it("off and incompatible templates/PDFs do no drawing", () => {
+  it("off does no drawing, while templates, covers and PDFs all receive guides", () => {
     const { ctx, log } = context(), page = blankPage();
     expect(paintWritingGuides(ctx, page, region, null, "#ffffff", 1, 1)).toBe(0);
+    expect(log).toEqual([]);
     for (const kind of ["lined", "grid", "dotted", "cornell", "cover", "pdf"]) {
       page.backdrop = { kind } as typeof page.backdrop;
-      expect(paintWritingGuides(ctx, page, region, DEFAULT_WRITING_GUIDES, "#ffffff", 1, 1)).toBe(0);
+      expect(paintWritingGuides(ctx, page, region, DEFAULT_WRITING_GUIDES, "#ffffff", 1, 1)).toBeGreaterThan(0);
     }
-    expect(log).toEqual([]);
   });
   it.each([[300, 500], [1200, 900]])("clips guide geometry to each %s × %s page and requested tile", (width, height) => {
     const { ctx, log } = context(), page = blankPage("p1", { width, height });

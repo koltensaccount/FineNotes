@@ -59,7 +59,7 @@ export function renderWritingGuideControls(parent: HTMLElement, host: WritingGui
   const refresh = (): void => {
     const state = host.state(), style = writingGuidesOf(state.style);
     enabled.checked = state.enabled;
-    notice.textContent = state.eligible ? "Temporary guides on blank pages only. Never included in PDFs or thumbnails." : "This page uses a template, cover or PDF. Guides are hidden here; blank pages remain eligible.";
+    notice.textContent = "Temporary guides on every page. Never included in PDFs or thumbnails.";
     for (const [key, control] of sliders) {
       const number = style[key as "spacing" | "thickness" | "opacity"];
       control.input.value = String(key === "opacity" ? Math.round(number * 100) : number);

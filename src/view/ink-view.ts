@@ -1044,6 +1044,8 @@ export class InkView extends TextFileView {
         onShare: () => this.exportPdf(),
         onSearch: () => void this.openSearch(),
         onMore: (anchor) => this.toggleMorePanel(anchor),
+        onWritingGuides: (anchor) => this.toggleGuidePopover(anchor),
+        writingGuidesEnabled: () => this.guidesEnabled,
       },
       {
         defaultSize: this.settings.defaultSize,
@@ -1931,6 +1933,7 @@ export class InkView extends TextFileView {
   }
   private setGuidesEnabled(enabled: boolean): void {
     this.guidesEnabled = enabled;
+    this.toolbar?.syncWritingGuides();
     this.surface?.setWritingGuides(enabled, this.settings.writingGuides);
     for (const changed of this.guideSubscribers) changed();
   }
@@ -1948,7 +1951,6 @@ export class InkView extends TextFileView {
     this.guidePopover = new WritingGuidePopover(anchor, this.writingGuideHost());
   }
   private toggleMorePanel(anchor: HTMLElement): void {
-    if (this.guidePopover?.isOpen && this.guidePopover.anchorEl === anchor) { this.guidePopover.close(); return; }
     const open = this.morePanel;
     this.morePanel = null;
     if (open?.isOpen) {
@@ -1975,7 +1977,6 @@ export class InkView extends TextFileView {
         clearable: page.strokes.length > 0,
       },
       {
-        writingGuides: { enabled: () => this.guidesEnabled, toggle: () => this.setGuidesEnabled(!this.guidesEnabled), customize: at => this.toggleGuidePopover(at) },
         paintThumbnail: (canvas, at, width) => this.sidebar?.paintThumbnail(canvas, at, width),
         toggleBookmark: (at) => act("bookmark", at),
         editTitle: (at) => act("contents", at),

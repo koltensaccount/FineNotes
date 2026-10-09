@@ -45,7 +45,6 @@ export interface MorePanelPage {
 }
 
 export interface MorePanelActions {
-  writingGuides?: { enabled: () => boolean; toggle: () => void; customize: (anchor: HTMLElement) => void };
   // Properties holding functions, not methods (CLAUDE.md: a callback is a value).
   paintThumbnail: (canvas: HTMLCanvasElement, index: number, cssWidth: number) => void;
   toggleBookmark: (index: number) => void;
@@ -108,14 +107,6 @@ export class MorePanel {
     const { page, actions } = this;
     this.el.createDiv({ cls: "goodobsidian-more-title", text: "More" });
 
-    if (actions.writingGuides) {
-      this.heading("View"); const view = this.group();
-      const guides = actions.writingGuides;
-      const toggle = this.row(view, { icon: "list", text: "Writing guides", run: () => guides.toggle() });
-      toggle.setAttribute("aria-pressed", String(guides.enabled()));
-      toggle.createSpan({ cls: "goodobsidian-guide-status", text: guides.enabled() ? "On" : "Off" });
-      this.row(view, { icon: "sliders-horizontal", text: "Customize guides…", run: () => guides.customize(this.anchor) });
-    }
     if (page.total > 1) {this.heading("Navigation"); this.goToRow(this.group());}
     this.heading("Current Page");
     const card = this.group();

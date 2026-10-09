@@ -328,9 +328,9 @@ function now(): number {
 export class Renderer {
   private writingGuides: WritingGuideStyle | null = null;
   /** Changes only this interactive renderer's cached tiles and stand-ins. */
-  setWritingGuides(style: WritingGuideStyle | null, blankPageIds: readonly string[]): void {
+  setWritingGuides(style: WritingGuideStyle | null, pageIds: readonly string[]): void {
     this.writingGuides = style ? { ...style } : null;
-    for (const id of blankPageIds) this.invalidatePage(id);
+    for (const id of pageIds) this.invalidatePage(id);
   }
   /** How opaque highlighter ink is drawn, 0..1. The surface sets it from the settings. */
   highlighterAlpha = DEFAULT_HIGHLIGHTER_ALPHA;

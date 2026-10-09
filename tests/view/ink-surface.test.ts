@@ -1433,8 +1433,8 @@ describe("view-only writing guides", () => {
     Object.defineProperty(surface, "viewMoving", { value: false });
     run(surface, "setWritingGuides", true, { spacing: 20 }); run(surface, "setWritingGuides", true, { spacing: 48 });
     expect(renderer.setWritingGuides).not.toHaveBeenCalled(); expect(requestFrame).toHaveBeenCalledTimes(2);
-    run(surface, "renderDry"); expect(renderer.setWritingGuides).toHaveBeenCalledOnce(); expect(renderer.setWritingGuides.mock.calls[0][0].spacing).toBe(48); expect(renderer.setWritingGuides.mock.calls[0][1]).toEqual(["p1"]);
-    run(surface, "setWritingGuides", false, {}); run(surface, "renderDry"); expect(renderer.setWritingGuides).toHaveBeenLastCalledWith(null, ["p1"]);
+    run(surface, "renderDry"); expect(renderer.setWritingGuides).toHaveBeenCalledOnce(); expect(renderer.setWritingGuides.mock.calls[0][0].spacing).toBe(48); expect(renderer.setWritingGuides.mock.calls[0][1]).toEqual(["p1", "p2"]);
+    run(surface, "setWritingGuides", false, {}); run(surface, "renderDry"); expect(renderer.setWritingGuides).toHaveBeenLastCalledWith(null, ["p1", "p2"]);
     expect(changed).not.toHaveBeenCalled(); expect(history.push).not.toHaveBeenCalled(); expect(page.backdrop).toEqual({ kind: "blank" }); expect(page.strokes).toEqual([]);
   });
 });
