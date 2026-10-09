@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { presetGeometry } from "../../src/ink/shape-geometry";
-import { shapeFrame, resizeShape, rotateShape, scaleShape, editEndpoint, resizeHeldShape, localPoint } from "../../src/ink/shape-edit";
+import { alignNewShape, adjustHeldShape, scaledStrokeSize, shapeFrame, resizeShape, rotateShape, scaleShape, editEndpoint, resizeHeldShape, localPoint } from "../../src/ink/shape-edit";
 import { TransformStroke } from "../../src/model/commands";
 import { History } from "../../src/model/history";
 import { emptyDocument, type Stroke } from "../../src/model/document";
@@ -66,5 +66,43 @@ describe("vector shape editing", () => {
     expect({ ...reopened, pts: [] }).toEqual({ ...stroke, pts: [] });
     for (let i = 0; i < next.length; i++) expect(reopened.pts[i]).toBeCloseTo(next[i], i % 3 === 2 ? 2 : 3);
     history.undo(doc); expect(stroke).toEqual(before); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(stroke.pts).toEqual(next);
+  });
+});
+
+
+describe("new page-aligned creation and proportional outline scaling", () => {
+  it.each(["rect", "roundrect", "ellipse", "triangle", "diamond", "star"] as const)("new %s is page aligned without modifying its source", kind => {
+    const original = rotateShape(presetGeometry(kind, { x: 100, y: 100 }, { x: 300, y: 200 }, .5), pivot, .3);
+    const before = original.slice(), clean = alignNewShape(kind, original);
+    expect(original).toEqual(before);
+    if (kind === "rect") { expect(clean[1]).toBe(clean[4]); expect(clean[3]).toBe(clean[6]); expect(shapeFrame(kind,clean)!.angle).toBe(0); }
+    if (kind === "ellipse") {
+      const frame = shapeFrame(kind,clean,0)!;
+      for (let i=0;i<clean.length;i+=3) { const x = (clean[i]-frame.cx)/(frame.w/2), y=(clean[i+1]-frame.cy)/(frame.h/2); expect(x*x+y*y).toBeCloseTo(1,2); }
+    }
+    expect(shapeFrame(kind,clean,0)!.cx).toBeCloseTo(shapeFrame(kind,original,0)!.cx,1);
+  });
+  it("initial lines snap to the nearest page axis, then endpoints and arrowheads follow Pencil freely", () => {
+    for (const kind of ["line", "arrow"] as const) {
+      const pts = presetGeometry(kind,{ x: 100,y: 100 },{ x: 300,y: 160 },.5), aligned=alignNewShape(kind,pts);
+      expect(aligned[1]).toBe(aligned[4]); expect(aligned.slice(0,3)).toEqual(pts.slice(0,3));
+      const from={ x: 300,y: 160 }, to={ x: 320,y: 230 };
+      const moved=adjustHeldShape(kind,aligned,{ x: 100,y: 100 },from,to);
+      expect(moved[4]).toBe(170); expect(moved.slice(0,3)).toEqual(aligned.slice(0,3));
+      if(kind === "arrow") expect(Math.hypot(moved[9]-moved[3],moved[10]-moved[4])).toBeCloseTo(Math.hypot(aligned[9]-aligned[3],aligned[10]-aligned[4]),1);
+    }
+  });
+  it("held closed resizing changes axes independently without rotation", () => {
+    const base=rect(), resized=adjustHeldShape("rect",base,pivot,{ x: 300,y: 200 },{ x: 300,y: 225 });
+    const frame=shapeFrame("rect",resized)!; expect(frame.w).toBe(200); expect(frame.h).toBe(150); expect(frame.angle).toBe(0);
+  });
+  it("proportional scaling changes geometry and outline together in one undo/redo command", () => {
+    const doc=emptyDocument(), page=doc.pages[0], history=new History();
+    const stroke: Stroke={ id:"s1",pts:rect(),size:3,tool:"pen",shape:"rect",color:"#000000",lineStyle:"dashed",t0:25 }; page.strokes.push(stroke);
+    const before=structuredClone(stroke), next=scaleShape(stroke.pts,pivot,2);
+    history.push(doc,new TransformStroke(page.id,stroke.id,next,scaledStrokeSize(stroke.size,2),"Scale shape"));
+    expect(stroke.size).toBe(6); expect(shapeFrame("rect",stroke.pts)!.w).toBe(400); expect(stroke.t0).toBe(25);
+    history.undo(doc); expect(stroke).toEqual(before); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(stroke.size).toBe(6); expect(stroke.pts).toEqual(next);
+    expect(scaledStrokeSize(3,NaN)).toBe(3); expect(scaledStrokeSize(3,10000)).toBe(1000); expect(scaledStrokeSize(3,.0001)).toBe(.1);
   });
 });

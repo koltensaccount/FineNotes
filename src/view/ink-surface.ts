@@ -1,6 +1,6 @@
 import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
 import { smoothCompletedStroke } from "../ink/stroke-smoothing";
-import { resizeHeldShape, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, rotateShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
+import { adjustHeldShape, alignNewShape, scaledStrokeSize, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
 import { highlighterWetRuns } from "../ink/highlighter";
 import { constrainShape, CONSTRAINABLE_SHAPES } from "../ink/shape-constraint";
 import { lineStyleOf } from "../ink/line-style";
@@ -173,7 +173,6 @@ import {
   isConnectorPreset,
   presetGeometry,
   shapePivot,
-  transformShape,
 } from "../ink/shape-geometry";
 import {
   type TableStroke,
@@ -704,7 +703,7 @@ interface GroupDrag {
   dy: number;
   /** Whether the selection has left the tiles for the wet layer yet. */
   lifted: boolean;
-  shape?: { stroke: Stroke; frame: ShapeFrame; handle: ShapeHandle; mode: "resize" | "scale" | "rotate"; pts: number[]; angle: number };
+  shape?: { stroke: Stroke; frame: ShapeFrame; handle: ShapeHandle; mode: "resize" | "scale"; pts: number[]; originalSize: number; size: number; factor: number };
 }
 
 export class InkSurface {
@@ -903,7 +902,7 @@ export class InkSurface {
    * selection's bounds then (page px), and how many elements it took: the
    * outline is drawn only while the selection is still those elements.
    */
-  private shapeMode: "resize" | "scale" | "rotate" = "resize";
+  private shapeMode: "resize" | "scale" = "resize";
   private selectedShapeFrame: { id: string; points: number[]; frame: ShapeFrame } | null = null;
   private shapeTap: { box: PageBox; at: Pt; stroke: Stroke | null; sample: PointerSample } | null = null;
   private selectionOutline: { loop: number[]; count: number } | null = null;
@@ -1268,9 +1267,9 @@ export class InkSurface {
     this.selectionPathEl = activeDocument.createElementNS(SVG_NS, "path");
     outline.append(this.selectionPathEl);
     this.selectionFrameEl.append(outline);
-    for (const handle of ["n", "s", "e", "w", "nw", "ne", "sw", "se", "start", "end", "rotate"] as ShapeHandle[]) {
-      const button = this.selectionFrameEl.createEl("button", { cls: `goodobsidian-shape-handle is-${handle}`, attr: { "data-shape-handle": handle, "aria-label": handle === "rotate" ? "Rotate shape" : `Shape ${handle} handle` } });
-      if (handle === "rotate") setIcon(button, "rotate-cw");
+    for (const handle of ["n", "s", "e", "w", "nw", "ne", "sw", "se", "start", "end"] as ShapeHandle[]) {
+      const button = this.selectionFrameEl.createEl("button", { cls: `goodobsidian-shape-handle is-${handle}`, attr: { "data-shape-handle": handle, "aria-label": `Shape ${handle} handle` } });
+      
     }
     this.selectionFrameEl.addEventListener("lostpointercapture", () => { if (this.groupDrag?.shape) this.endGroupDrag(false); });
     this.selectionFrameEl.addEventListener("pointerdown", this.onSelectionPointerDown);
@@ -1938,7 +1937,7 @@ export class InkSurface {
    */
   handleKeyDown(event: KeyboardEvent): boolean {
     if (event.defaultPrevented || event.isComposing || isEditable(event.target)) return false;
-    if (event.key === "Escape" && (this.groupDrag?.shape || this.shapeMode === "rotate")) {
+    if (event.key === "Escape" && (this.groupDrag?.shape)) {
       this.cancelGroupDrag(); this.shapeMode = "resize"; this.syncSelectionOverlay(); event.preventDefault(); return true;
     }
     // Space on a focused toolbar button presses the button.
@@ -3249,25 +3248,37 @@ export class InkSurface {
 
   setPenGestures(gestures: unknown): void {
     this.toolState.penGestures = penGesturesOf(gestures);
+    this.traceModifier(`setting applied: ${this.toolState.penGestures.constrainWithFinger ? "enabled" : "disabled"}`);
     if (!this.toolState.penGestures.constrainWithFinger) this.pointerInput?.cancelShapeConstraint();
   }
 
-  private canConstrainShape(sample: PointerSample): boolean {
-    if (!penGesturesOf(this.toolState.penGestures).constrainWithFinger || !this.activePage) return false;
-    if (!Number.isFinite(sample.x + sample.y)) return false;
+  private shapeConstraintRejection(sample: PointerSample): string | null {
+    if (!penGesturesOf(this.toolState.penGestures).constrainWithFinger) return "setting disabled";
+    if (!this.activePage) return "no active page/draft; Pencil gesture already ended";
+    if (!Number.isFinite(sample.x + sample.y)) return "invalid contact coordinates";
     const kind = this.snap?.kind ?? this.shapeDrag?.preset;
-    return !!kind && kind !== "table" && CONSTRAINABLE_SHAPES.includes(kind);
+    if (!kind) return "shape not recognized yet; freehand is not eligible";
+    if (kind === "table" || !CONSTRAINABLE_SHAPES.includes(kind)) return `unsupported shape: ${kind}`;
+    return null;
+  }
+  private canConstrainShape(sample: PointerSample): boolean { return this.shapeConstraintRejection(sample) === null; }
+  private traceModifier(state: string): void {
+    if (!this.debug) return;
+    this.modifierDiagnostic = state;
+    this.modifierDiagnostics.push({ t: now(), state });
+    if (this.modifierDiagnostics.length > 96) this.modifierDiagnostics.shift();
+    this.hud.mark(`finger: ${state}`); this.scheduleHud();
   }
 
   private updateConstrainedSnap(): void {
     const snap = this.snap;
     if (!snap) return;
-    const angular = this.shapeConstrained && (snap.kind === "line" || snap.kind === "arrow");
-    const raw = angular ? transformShape(snap.base, snap.pivot, snap.from, snap.to) : resizeHeldShape(snap.base, snap.pivot, snap.from, snap.to);
+    const raw = adjustHeldShape(snap.kind, snap.base, snap.pivot, snap.from, snap.to);
     if (this.shapeConstrained) {
       const constrained = constrainShape(snap.kind, raw, this.constraintAngle);
       snap.pts = constrained.pts;
       this.constraintAngle = constrained.angle;
+      this.traceModifier(`constraint geometry applied: ${snap.kind}, changed=${constrained.pts.some((v,i) => v !== raw[i])}, preview scheduled`);
     } else snap.pts = raw;
     this.scheduleWet();
   }
@@ -3276,6 +3287,7 @@ export class InkSurface {
     if (!this.shapeConstrained) return pts;
     const constrained = constrainShape(kind, pts, this.constraintAngle);
     this.constraintAngle = constrained.angle;
+    this.traceModifier(`constraint geometry applied: ${kind}, changed=${constrained.pts.some((v,i) => v !== pts[i])}, preset preview`);
     return constrained.pts;
   }
 
@@ -3293,17 +3305,14 @@ export class InkSurface {
     }
   }
 
-  private readonly pointerCallbacks: PointerControllerCallbacks = {
-    onModifierDebug: (state) => {
-      if (!this.debug) return;
-      this.modifierDiagnostic = state;
-      this.modifierDiagnostics.push({ t: now(), state });
-      if (this.modifierDiagnostics.length > 16) this.modifierDiagnostics.shift();
-      this.hud.mark(`finger: ${state}`);
-      this.scheduleHud();
-    },
+  private readonly pointerCallbacks = this.createPointerCallbacks();
+  private createPointerCallbacks(): PointerControllerCallbacks { return {
+    modifierDebugEnabled: () => this.debug,
+    shapeConstraintRejection: sample => this.shapeConstraintRejection(sample),
+    onModifierDebug: state => this.traceModifier(state),
     canConstrainShape: (sample) => this.canConstrainShape(sample),
     onShapeConstraint: (active) => {
+      this.traceModifier(`surface onShapeConstraint(${active})`);
       this.shapeConstrained = active;
       if (!active) this.constraintAngle = undefined;
       if (this.snap) this.updateConstrainedSnap();
@@ -3444,7 +3453,7 @@ export class InkSurface {
       this.requestFrame();
     },
     onDebug: (record) => this.onPointerEvent(record),
-  };
+  }; }
 
   /**
    * A pen landed on a finger gesture: the touch was most likely the writing
@@ -3822,6 +3831,7 @@ export class InkSurface {
     this.diagHold = { fired: true, verdict: verdictOf(builder.points(), true) };
     this.hudVerdict("hold", builder.points(), result, true);
     if (!result) return;
+    result.pts = alignNewShape(result.kind, result.pts);
     const pivot = shapePivot(result.kind, result.pts);
     if (!pivot) return;
     this.snap = {
@@ -3832,6 +3842,7 @@ export class InkSurface {
       to: { x: anchor.x, y: anchor.y },
       pts: result.pts,
     };
+    this.traceModifier(`held shape recognized: ${result.kind}`);
     this.scheduleWet();
   }
 
@@ -3915,6 +3926,9 @@ export class InkSurface {
         devicePixelRatio: window.devicePixelRatio,
         coalescedEvents: proto !== null && "getCoalescedEvents" in proto,
         predictedEvents: proto !== null && "getPredictedEvents" in proto,
+        fingerSettingEnabled: penGesturesOf(this.toolState.penGestures).constrainWithFinger === true,
+        shapeModifierStatus: this.pointerInput?.modifierStatus ?? null,
+        activeShape: this.snap?.kind ?? this.shapeDrag?.preset ?? null,
         shapeModifier: this.modifierDiagnostic,
         shapeModifierEvents: this.modifierDiagnostics,
         roundedPen: this.pointerInput?.strokeRounded ?? null,
@@ -4251,6 +4265,7 @@ export class InkSurface {
       // have trailed a tail as it left the glass.
       const held = heldLongEnough;
       shape = recognizeAtZoom(builder.points(), this.userZoom, { held });
+      if (shape) shape.pts = alignNewShape(shape.kind, shape.pts);
       this.hudVerdict(cancelledWhileHeld ? "cx-hold" : "lift", builder.points(), shape, held);
     } else if (!shape && this.debug) {
       this.hud.mark(final ? "lift·nohold" : "cx·nohold");
@@ -5123,6 +5138,8 @@ export class InkSurface {
       images: [...images],
       textBoxes: [...textBoxes],
     };
+    const shape = this.editableShape(this.selection);
+    if (shape && !independentlyResizable(shape.shape!) && !["line", "arrow", "circle"].includes(shape.shape!)) this.shapeMode = "scale";
     this.syncSelectionOverlay();
   }
 
@@ -5258,11 +5275,11 @@ export class InkSurface {
       this.selectionFrameEl.toggleClass("is-dragging", drag !== null);
       if (shape) {
         const transform = drag?.shape;
-        const frame = transform ? shapeFrame(shape.shape!, transform.pts, transform.frame.angle + transform.angle)! : this.frameForShape(shape);
+        const frame = transform ? shapeFrame(shape.shape!, transform.pts, transform.frame.angle)! : this.frameForShape(shape);
         const h = Math.max(frame.h * scale, 12);
         this.selectionFrameEl.setCssStyles({ left: `${(box.x + frame.cx + (drag?.dx ?? 0)) * scale - frame.w * scale / 2}px`, top: `${(box.y + frame.cy + (drag?.dy ?? 0)) * scale - h / 2}px`, width: `${frame.w * scale}px`, height: `${h}px`, transform: `rotate(${frame.angle}rad)` });
         const connector = shape.shape === "line" || shape.shape === "arrow";
-        const handles: ShapeHandle[] = this.shapeMode === "rotate" ? ["rotate"] : connector ? ["start", "end"] : independentlyResizable(shape.shape!) && this.shapeMode === "resize" ? ["n", "s", "e", "w", "nw", "ne", "sw", "se"] : ["nw", "ne", "sw", "se"];
+        const handles: ShapeHandle[] = connector ? ["start", "end"] : independentlyResizable(shape.shape!) && this.shapeMode === "resize" ? ["n", "s", "e", "w", "nw", "ne", "sw", "se"] : ["nw", "ne", "sw", "se"];
         const visibleHandles = handles.filter(handle => !(["n", "s"].includes(handle) && frame.w * scale < 88) && !(["e", "w"].includes(handle) && h < 88));
         for (const handle of visibleHandles) this.selectionFrameEl.querySelector(`.is-${handle}`)?.classList.remove("is-hidden");
       }
@@ -5305,7 +5322,6 @@ export class InkSurface {
     } else if (group) {
       bounds = this.groupBounds(group);
       this.actionBar.setActions(this.groupActions(group));
-      if (this.shapeMode === "rotate" && this.editableShape(group)) clearAbove = 56;
     } else if (image) {
       // The picture and its rotate knob, wherever a turn has put the knob.
       bounds = this.imageChromeBounds(image.image);
@@ -5464,9 +5480,9 @@ export class InkSurface {
     const shape = this.editableShape(sel);
     if (shape) {
       const frame = this.frameForShape(shape);
-      for (const mode of ["resize", "scale", "rotate"] as const) {
+      for (const mode of ["resize", "scale"] as const) {
         if (mode === "resize" && !independentlyResizable(shape.shape!) && shape.shape !== "line" && shape.shape !== "arrow") continue;
-        actions.push({ id: `shape-${mode}`, icon: mode === "rotate" ? "rotate-cw" : mode === "scale" ? "maximize-2" : "move-horizontal", label: mode === "resize" ? "Resize" : mode === "scale" ? "Scale proportionally" : "Rotate", group: "shape", bar: true, run: () => { this.shapeMode = mode; this.syncSelectionOverlay(); } });
+        actions.push({ id: `shape-${mode}`, icon: mode === "scale" ? "maximize-2" : "move-horizontal", label: mode === "resize" ? "Resize" : "Scale proportionally", group: "shape", bar: true, run: () => { this.shapeMode = mode; this.syncSelectionOverlay(); } });
       }
       const dimensions = independentlyResizable(shape.shape!) ? [
         { key: "w", label: "Width (page px)", value: frame.w, min: 4, max: 100000 },
@@ -5479,7 +5495,8 @@ export class InkSurface {
         const diameter = values.diameter;
         const length = values.length;
         const pts = diameter !== undefined ? scaleShape(live.pts, { x: current.cx, y: current.cy }, diameter / current.w) : length !== undefined ? editEndpoint(live.shape as "line" | "arrow", live.pts, "end", { x: live.pts[0] + Math.cos(current.angle) * length, y: live.pts[1] + Math.sin(current.angle) * length }) : values.scale !== undefined ? scaleShape(live.pts, { x: current.cx, y: current.cy }, values.scale / 100) : resizeShape(live.shape!, live.pts, current, values.w, values.h);
-        this.applyShapeEdit(sel.pageId, live, pts, current.angle, "Edit shape dimensions", values.size);
+        const size = values.scale !== undefined ? scaledStrokeSize(values.size ?? live.size, values.scale / 100) : values.size;
+        this.applyShapeEdit(sel.pageId, live, pts, current.angle, values.scale !== undefined ? "Scale shape" : "Edit shape dimensions", size);
       } } });
     }
     if (sel.strokes.length > 0) {
@@ -6168,7 +6185,7 @@ export class InkSurface {
     const stroke = this.editableShape(sel);
     const handle = (event.target as HTMLElement).closest<HTMLElement>("[data-shape-handle]")?.dataset.shapeHandle as ShapeHandle | undefined;
     this.groupDrag = {
-      ...(stroke && handle ? { shape: { stroke, frame: this.frameForShape(stroke), handle, mode: this.shapeMode, pts: stroke.pts.slice(), angle: 0 } } : {}),
+      ...(stroke && handle ? { shape: { stroke, frame: this.frameForShape(stroke), handle, mode: this.shapeMode, pts: stroke.pts.slice(), originalSize: stroke.size, size: stroke.size, factor: 1 } } : {}),
       pointerId: event.pointerId,
       selection: sel,
       bounds,
@@ -6239,7 +6256,7 @@ export class InkSurface {
     const box = drag ? this.boxForPage(drag.selection.pageId) : null;
     if (!drag?.lifted || !box) return;
     const { images } = drag.selection;
-    const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts }] : drag.selection.strokes;
+    const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts, size: drag.shape.size ?? drag.shape.stroke.size }] : drag.selection.strokes;
     this.renderer?.renderSelectionDraft(
       box.index,
       strokes,
@@ -6287,7 +6304,7 @@ export class InkSurface {
     this.renderer?.clearWet();
     const { pageId } = drag.selection;
     const box = this.boxForPage(pageId);
-    const geometryChanged = !!drag.shape && drag.shape.pts.some((v, i) => v !== drag.shape!.stroke.pts[i]);
+    const geometryChanged = !!drag.shape && (drag.shape.pts.some((v, i) => v !== drag.shape!.stroke.pts[i]) || (drag.shape.size !== undefined && drag.shape.size !== drag.shape.stroke.size));
     const moved =
       commit &&
       (geometryChanged || drag.dx !== 0 || drag.dy !== 0) &&
@@ -6295,8 +6312,8 @@ export class InkSurface {
     if (moved) {
       if (drag.shape) {
         const shape = drag.shape;
-        this.history.push(this.doc, new TransformStroke(pageId, shape.stroke.id, shape.pts, undefined, shape.mode === "rotate" ? "Rotate shape" : shape.mode === "scale" ? "Scale shape" : "Resize shape"));
-        this.selectedShapeFrame = { id: shape.stroke.id, points: shape.stroke.pts, frame: shapeFrame(shape.stroke.shape!, shape.stroke.pts, shape.frame.angle + shape.angle)! };
+        this.history.push(this.doc, new TransformStroke(pageId, shape.stroke.id, shape.pts, shape.mode === "scale" ? shape.size : undefined, shape.mode === "scale" ? "Scale shape" : "Resize shape"));
+        this.selectedShapeFrame = { id: shape.stroke.id, points: shape.stroke.pts, frame: shapeFrame(shape.stroke.shape!, shape.stroke.pts, shape.frame.angle)! };
         this.shapeMode = "resize";
       } else this.history.push(this.doc, new TranslateElements(pageId, drag.selection, drag.dx, drag.dy));
       this.strokeIndex.rebuild(this.doc.pages);
@@ -6316,19 +6333,16 @@ export class InkSurface {
     const { stroke, frame, handle } = edit;
     const pivot = { x: frame.cx, y: frame.cy };
     p = { x: Math.max(0, Math.min(box.width, p.x)), y: Math.max(0, Math.min(box.height, p.y)) };
-    if (handle === "rotate") {
-      const radius = Math.hypot(p.x - pivot.x, p.y - pivot.y);
-      if (radius < this.atFitZoom(12)) return;
-      edit.angle = Math.atan2(p.y - pivot.y, p.x - pivot.x) - Math.atan2(drag.from.y - pivot.y, drag.from.x - pivot.x);
-      edit.pts = rotateShape(stroke.pts, pivot, edit.angle);
-    } else if (handle === "start" || handle === "end") {
+    if (handle === "start" || handle === "end") {
       if (edit.mode === "scale") {
         const original = Math.hypot(drag.from.x - pivot.x, drag.from.y - pivot.y);
-        edit.pts = scaleShape(stroke.pts, pivot, Math.max(4 / Math.max(4, frame.w), Math.hypot(p.x - pivot.x, p.y - pivot.y) / Math.max(2, original)));
+        edit.factor = Math.max(4 / Math.max(4, frame.w), Math.hypot(p.x - pivot.x, p.y - pivot.y) / Math.max(2, original));
+        edit.pts = scaleShape(stroke.pts, pivot, edit.factor);
       } else edit.pts = editEndpoint(stroke.shape as "line" | "arrow", stroke.pts, handle, p);
     } else if (edit.mode === "scale" || !independentlyResizable(stroke.shape!)) {
       const original = Math.hypot(drag.from.x - pivot.x, drag.from.y - pivot.y);
-      edit.pts = scaleShape(stroke.pts, pivot, Math.max(4 / Math.max(4, Math.min(frame.w, frame.h)), Math.hypot(p.x - pivot.x, p.y - pivot.y) / Math.max(2, original)));
+      edit.factor = Math.max(4 / Math.max(4, Math.min(frame.w, frame.h)), Math.hypot(p.x - pivot.x, p.y - pivot.y) / Math.max(2, original));
+      edit.pts = scaleShape(stroke.pts, pivot, edit.factor);
     } else {
       const at = localPoint(frame, p), from = localPoint(frame, drag.from);
       let left = -frame.w / 2, right = frame.w / 2, top = -frame.h / 2, bottom = frame.h / 2;
@@ -6339,6 +6353,7 @@ export class InkSurface {
       const center = worldPoint(frame, { x: (left + right) / 2, y: (top + bottom) / 2 });
       edit.pts = resizeShape(stroke.shape!, stroke.pts, frame, right - left, bottom - top, center);
     }
+    edit.size = edit.mode === "scale" ? scaledStrokeSize(edit.originalSize ?? stroke.size, edit.factor) : stroke.size;
     if (!drag.lifted) this.liftSelection(drag, box);
     this.renderGroupDraft(); this.syncSelectionOverlay();
   }

@@ -1,5 +1,5 @@
 import { presetGeometry, transformShape } from "../../src/ink/shape-geometry";
-import { resizeHeldShape } from "../../src/ink/shape-edit";
+import { rotateShape, adjustHeldShape } from "../../src/ink/shape-edit";
 import { constrainShape } from "../../src/ink/shape-constraint";
 /**
  * `src/view/ink-surface.ts` — characterisation of the parts of the surface
@@ -1282,14 +1282,14 @@ describe("finger constraints surface lifecycle", () => {
     const base = presetGeometry("line", { x: 10, y: 20 }, { x: 110, y: 50 }, .5);
     const snap = { kind: "line", base, pivot: { x: 10, y: 20 }, from: { x: 110, y: 50 }, to: { x: 150, y: 90 }, pts: base };
     const surface = surfaceWith({ snap, shapeConstrained: true, constraintAngle: undefined, scheduleWet: vi.fn() });
-    const raw = transformShape(base, snap.pivot, snap.from, snap.to);
+    const raw = adjustHeldShape("line", base, snap.pivot, snap.from, snap.to);
     run(surface, "updateConstrainedSnap");
     expect(snap.pts).toEqual(constrainShape("line", raw).pts);
     snap.to = { x: 180, y: 70 };
     run(surface, "updateConstrainedSnap");
     surface.shapeConstrained = false; surface.constraintAngle = undefined;
     run(surface, "updateConstrainedSnap");
-    expect(snap.pts).toEqual(resizeHeldShape(base, snap.pivot, snap.from, snap.to));
+    expect(snap.pts).toEqual(adjustHeldShape("line", base, snap.pivot, snap.from, snap.to));
     expect(snap.base).toBe(base);
   });
   it("clears recognized shape state, modifier ownership and pending wet ink on tool/page cancellation", () => {
@@ -1396,6 +1396,29 @@ describe("individual shape editing", () => {
 
     run(surface, "cancelGroupDrag"); expect(end).toHaveBeenCalledWith(false);
   });
+  it("Scale preview changes outline before one combined commit, while resize retains width", () => {
+    const { surface,stroke,selection,history,doc,renderer }=fixture(); const before=stroke.pts.slice();
+    const drag={ pointerId:1,selection,bounds:{ minX:98,minY:98,maxX:302,maxY:202 },from:{ x:300,y:200 },clientX:300,clientY:200,dx:0,dy:0,lifted:true,shape:{ stroke,frame:{ cx:200,cy:150,w:200,h:100,angle:0 },handle:"se",mode:"scale",pts:before.slice(),originalSize:3,size:3,factor:1 } };
+    surface.groupDrag=drag; run(surface,"moveShapeHandle",drag,{ index:0,width:800,height:1000 },{ x:400,y:250 });
+    expect(drag.shape.size).toBe(6); expect(stroke.size).toBe(3); expect(stroke.pts).toEqual(before);
+    expect(renderer.renderSelectionDraft.mock.calls.at(-1)![1][0].size).toBe(6);
+    run(surface,"endGroupDrag",true); expect(stroke.size).toBe(6); expect(stroke.pts[3]-stroke.pts[0]).toBe(400);
+    history.undo(doc); expect(stroke.size).toBe(3); expect(stroke.pts).toEqual(before); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(stroke.size).toBe(6);
+  });
+  it("numeric Scale uses the same thickness rule; legacy selection and image rotation remain unchanged", () => {
+    const { surface,stroke,selection }=fixture(); stroke.shape="triangle"; stroke.pts=presetGeometry("triangle",{ x:100,y:100 },{ x:300,y:200 },.5);
+    const edited=vi.fn(); Object.assign(surface,{ pasteAction:()=>({ id:"paste" }),palette:[],toolState:{ recentColors:[] },applyShapeEdit:edited });
+    const actions=run<any[]>(surface,"groupActions",selection);
+    expect(actions.some(action=>action.id === "shape-rotate")).toBe(false);
+    actions.find(action=>action.id === "shape-values").fields.apply({ scale:200,size:3 }); expect(edited.mock.calls[0][5]).toBe(6);
+    stroke.shape="rect"; stroke.pts=rotateShape(presetGeometry("rect",{ x:100,y:100 },{ x:300,y:200 },.5),{ x:200,y:150 },.7);
+    const legacy=stroke.pts.slice(); run(surface,"frameForShape",stroke); expect(stroke.pts).toEqual(legacy);
+    // Image rotation's separate action/model are intentionally preserved.
+    const image={ id:"i1",x:0,y:0,w:100,h:100 };
+    Object.assign(surface,{ imagesShown:true,canLayerImage:()=>true });
+    const imageActions=run<any[]>(surface,"imageActions",{ pageId:"p1",image }); expect(imageActions.some(action=>action.id === "delete")).toBe(true);
+  });
+
 });
 
 describe("shape tap and completed smoothing integration", () => {

@@ -1,9 +1,9 @@
 /** Shape edits operate on existing vector points; width and styling stay separate. */
 import type { ShapeKind } from "../model/document";
-import { roundRectPoints, type Pt } from "./shape-geometry";
+import { presetGeometry, roundRectPoints, type Pt } from "./shape-geometry";
 
 export interface ShapeFrame { cx: number; cy: number; w: number; h: number; angle: number }
-export type ShapeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se" | "start" | "end" | "rotate";
+export type ShapeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se" | "start" | "end";
 export const MIN_SHAPE_DIMENSION = 4;
 const boxKinds = ["rect", "roundrect", "ellipse"];
 export const independentlyResizable = (kind: ShapeKind): boolean => boxKinds.includes(kind);
@@ -105,4 +105,44 @@ export function resizeHeldShape(pts: readonly number[], pivot: Pt, from: Pt, to:
   const original = Math.hypot(from.x - pivot.x, from.y - pivot.y);
   if (original < 4) return pts.slice();
   return scaleShape(pts, pivot, Math.max(0.02, Math.hypot(to.x - pivot.x, to.y - pivot.y) / original));
+}
+
+/** Normalize newly recognized geometry only. Never called on stored strokes. */
+export function alignNewShape(kind: ShapeKind, pts: readonly number[]): number[] {
+  const frame = shapeFrame(kind, pts);
+  if (!frame) return pts.slice();
+  if (kind === "line" || kind === "arrow") {
+    const axis = Math.round(frame.angle / (Math.PI / 2)) * Math.PI / 2;
+    return editEndpoint(kind, pts, "end", { x: pts[0] + frame.w * Math.cos(axis), y: pts[1] + frame.w * Math.sin(axis) });
+  }
+  if (kind === "circle" || kind === "cloud") return pts.slice();
+  const pivot = { x: frame.cx, y: frame.cy };
+  const delta = frame.angle - Math.round(frame.angle / (Math.PI / 2)) * Math.PI / 2;
+  const aligned = rotateShape(pts, pivot, -delta);
+  const bounds = shapeFrame(kind, aligned, 0)!;
+  if (["rect", "roundrect", "ellipse", "triangle", "diamond", "star"].includes(kind)) {
+    const clean = presetGeometry(kind as "rect" | "roundrect" | "ellipse" | "triangle" | "diamond" | "star", { x: bounds.cx - bounds.w / 2, y: bounds.cy - bounds.h / 2 }, { x: bounds.cx + bounds.w / 2, y: bounds.cy + bounds.h / 2 }, pts[2]);
+    for (let i = 2; i < clean.length; i += 3) clean[i] = pts[Math.min(pts.length - 1, Math.floor((i / 3) * (pts.length / clean.length)) * 3 + 2)];
+    return clean;
+  }
+  // Unnamed polygons retain their vertices; align the dominant edge to its
+  // nearest page axis without turning them into an unrelated preset.
+  let longest = 0, angle = 0;
+  for (let i = 3; i < pts.length; i += 3) { const x = pts[i]-pts[i-3], y = pts[i+1]-pts[i-2], length = Math.hypot(x,y); if (length > longest) { longest = length; angle = Math.atan2(y,x); } }
+  return rotateShape(pts, pivot, Math.round(angle / (Math.PI / 2)) * Math.PI / 2 - angle);
+}
+export function adjustHeldShape(kind: ShapeKind, pts: readonly number[], pivot: Pt, from: Pt, to: Pt): number[] {
+  if (kind === "line" || kind === "arrow") return editEndpoint(kind, pts, "end", { x: pts[3] + to.x - from.x, y: pts[4] + to.y - from.y });
+  if (independentlyResizable(kind)) {
+    const frame = shapeFrame(kind, pts, 0);
+    if (!frame) return pts.slice();
+    const width = Math.abs(from.x - pivot.x) >= 4 ? frame.w * Math.abs((to.x - pivot.x) / (from.x - pivot.x)) : frame.w + 2 * (to.x - from.x);
+    const height = Math.abs(from.y - pivot.y) >= 4 ? frame.h * Math.abs((to.y - pivot.y) / (from.y - pivot.y)) : frame.h + 2 * (to.y - from.y);
+    return resizeShape(kind, pts, frame, Math.max(4, width), Math.max(4, height));
+  }
+  return resizeHeldShape(pts, pivot, from, to);
+}
+export function scaledStrokeSize(original: number, factor: number): number {
+  if (!(original > 0) || !(factor > 0) || !Number.isFinite(original + factor)) return original;
+  return Math.max(.1, Math.min(1000, original * factor));
 }

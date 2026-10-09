@@ -194,6 +194,7 @@ describe("attaching", () => {
   it("listens for the four pointer events, and detach stops listening", () => {
     const rig = new Rig();
     expect([...rig.el.listeners.keys()].sort()).toEqual([
+      "gotpointercapture",
       "lostpointercapture",
       "pointercancel",
       "pointerdown",
@@ -885,6 +886,7 @@ describe("modifier routing diagnostics", () => {
     vi.useFakeTimers(); const changes = vi.fn();
     const rig = new Rig(undefined, { canConstrainShape: () => true, onShapeConstraint: changes });
     rig.pen("pointerdown", 1, { x: 10, y: 10 }); rig.finger("pointerdown", 2, 100, 100, 0); vi.advanceTimersByTime(140);
+    rig.el.captured.delete(1);
     rig.el.listeners.get("lostpointercapture")?.(eventFor(1, "pen", { x: 10, y: 10 }));
     expect(changes.mock.calls).toEqual([[true], [false]]);
     rig.finger("pointermove", 2, 130, 130, 150); expect(rig.take().some(x => /panStart|pinchStart/.test(x))).toBe(false);

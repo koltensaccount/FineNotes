@@ -82,6 +82,8 @@ export interface PointerControllerCallbacks {
   canConstrainShape?(sample: PointerSample): boolean;
   onShapeConstraint?(active: boolean): void;
   onModifierDebug?(state: string): void;
+  modifierDebugEnabled?: () => boolean;
+  shapeConstraintRejection?: (sample: PointerSample) => string | null;
   /** The samples since the last move. */
   onMove(coalesced: PointerSample[]): void;
   onEnd(sample: PointerSample): void;
@@ -154,11 +156,25 @@ export class PointerController {
     };
   }
 
+  get modifierStatus(): Record<string, unknown> {
+    return { penPointerId: this.stroke, realPen: this.penStroke, penCaptureLost: this.penCaptureLost, penCaptured: this.stroke !== null && this.element.hasPointerCapture(this.stroke), fingerPointerId: this.modifier?.id ?? null, active: this.modifier?.active ?? false, waiting: this.modifier?.timer !== null && this.modifier !== null };
+  }
+  private readonly gotCapture = (event: PointerEvent): void => {
+    if (event.pointerId === this.stroke && this.element.hasPointerCapture(event.pointerId)) this.penCaptureLost = false;
+    this.listener.onModifierDebug?.(`capture acquired: ${event.pointerType}#${event.pointerId}, owned=${this.element.hasPointerCapture(event.pointerId)}`);
+  };
   private readonly lostModifier = (event: PointerEvent): void => {
+    // Capture loss bubbles from old child targets during transfer. The pending
+    // target still belongs to us in that case; it is not gesture cancellation.
+    if (this.element.hasPointerCapture(event.pointerId)) {
+      this.listener.onModifierDebug?.(`capture transferred: ${event.pointerType}#${event.pointerId}, still owned`);
+      return;
+    }
     if (event.pointerId === this.stroke) { this.penCaptureLost = true; this.cancelShapeConstraint(); this.listener.onModifierDebug?.("Pencil capture lost"); return; }
     if (event.pointerId !== this.modifier?.id) return;
     this.cancelShapeConstraint();
     this.modifier = null;
+    this.listener.onModifierDebug?.("finger capture lost; modifier cleared");
   };
   private readonly modifierBlur = (): void => {
     const modifier = this.modifier;
@@ -175,11 +191,15 @@ export class PointerController {
     if (this.tryModifier(event)) event.stopPropagation();
   };
   private tryModifier(event: PointerEvent): boolean {
-    if (event.pointerType !== "touch" || !this.isPenDrawing || this.penCaptureLost || this.modifier) return false;
+    if (event.pointerType !== "touch") return false;
+    this.listener.onModifierDebug?.(`finger pointerdown received: id=${event.pointerId}, contact=${event.width ?? 1}x${event.height ?? 1}`);
+    if (!this.isPenDrawing) { this.listener.onModifierDebug?.("rejected: no active real Pencil"); return false; }
+    if (this.penCaptureLost) { this.listener.onModifierDebug?.("rejected: Pencil capture genuinely lost"); return false; }
+    if (this.modifier) { this.listener.onModifierDebug?.("rejected: another modifier contact already reserved"); return false; }
     const target = event.target as HTMLElement | null;
-    if (target?.closest?.("button, input, textarea, [contenteditable=true], .goodobsidian-selection-ui, .goodobsidian-image-ui, .goodobsidian-textboxes")) return false;
+    if (target?.closest?.("button, input, textarea, [contenteditable=true], .goodobsidian-selection-ui, .goodobsidian-image-ui, .goodobsidian-textboxes")) { this.listener.onModifierDebug?.("rejected: control/text/selection target"); return false; }
     const sample = this.sample(event);
-    if (!this.listener.canConstrainShape?.(sample)) { this.listener.onModifierDebug?.("ineligible shape or disabled"); return false; }
+    if (!this.listener.canConstrainShape?.(sample)) { this.listener.onModifierDebug?.(`rejected: ${this.listener.shapeConstraintRejection?.(sample) ?? "ineligible shape or disabled"}`); return false; }
     const w = Math.max(1, event.width ?? 1), h = Math.max(1, event.height ?? 1);
     if (w > 56 || h > 56 || w * h > 2500 || Math.max(w / h, h / w) > 2.5) { this.listener.onModifierDebug?.("palm contact rejected"); return false; }
     const modifier = { id: event.pointerId, x: event.clientX, y: event.clientY, sample, active: false, slop: Math.max(8, Math.min(16, Math.max(w, h) * 0.4)), timer: null as ReturnType<typeof setTimeout> | null };
@@ -197,8 +217,23 @@ export class PointerController {
     }, 140);
     return true;
   }
+  // Diagnostics only: observe both browser streams without routing or claiming
+  // raw touches. This distinguishes missing PointerEvents from eligibility failure.
+  private readonly observeDocumentPointer = (event: PointerEvent): void => {
+    if (!this.listener.modifierDebugEnabled?.() || event.pointerType !== "touch") return;
+    this.listener.onModifierDebug?.(`document finger pointerdown: id=${event.pointerId}, inside=${this.element.contains(event.target as Node)}`);
+  };
+  private readonly observeDocumentTouch = (event: TouchEvent): void => {
+    if (!this.listener.modifierDebugEnabled?.()) return;
+    for (const touch of Array.from(event.changedTouches)) {
+      this.listener.onModifierDebug?.(`document ${event.type}: ${(touch as Touch & { touchType?: string }).touchType ?? "unknown"}#${touch.identifier}, inside=${this.element.contains(event.target as Node)}`);
+    }
+  };
   attach(): void {
     this.element.addEventListener("pointerdown", this.modifierDown, true);
+    this.element.addEventListener("gotpointercapture", this.gotCapture);
+    this.element.ownerDocument?.addEventListener("pointerdown", this.observeDocumentPointer, true);
+    for (const type of ["touchstart", "touchend", "touchcancel"] as const) this.element.ownerDocument?.addEventListener(type, this.observeDocumentTouch, true);
     this.element.addEventListener("lostpointercapture", this.lostModifier);
     this.element.ownerDocument?.addEventListener("visibilitychange", this.modifierVisibility);
     this.element.ownerDocument?.defaultView?.addEventListener("blur", this.modifierBlur);
@@ -207,6 +242,9 @@ export class PointerController {
 
   detach(): void {
     this.element.removeEventListener("pointerdown", this.modifierDown, true);
+    this.element.removeEventListener("gotpointercapture", this.gotCapture);
+    this.element.ownerDocument?.removeEventListener("pointerdown", this.observeDocumentPointer, true);
+    for (const type of ["touchstart", "touchend", "touchcancel"] as const) this.element.ownerDocument?.removeEventListener(type, this.observeDocumentTouch, true);
     this.element.removeEventListener("lostpointercapture", this.lostModifier);
     this.element.ownerDocument?.removeEventListener("visibilitychange", this.modifierVisibility);
     this.element.ownerDocument?.defaultView?.removeEventListener("blur", this.modifierBlur);
@@ -265,6 +303,7 @@ export class PointerController {
     event.preventDefault();
     const pen = event.pointerType === "pen";
     this.penStroke = pen;
+    this.listener.onModifierDebug?.(`drawing pointer started: ${event.pointerType}#${event.pointerId}, real Pencil=${pen}`);
     if (pen) this.notePen(event);
     this.rounded = pen && !this.penIsPrecise;
     this.debug("down", event, 0);
@@ -274,7 +313,7 @@ export class PointerController {
   private moved(event: PointerEvent): void {
     if (event.pointerId === this.modifier?.id) {
       event.preventDefault();
-      if (Math.hypot(event.clientX - this.modifier.x, event.clientY - this.modifier.y) > this.modifier.slop) { this.listener.onModifierDebug?.("contact moved"); this.cancelShapeConstraint(); }
+      if ((this.modifier.active || this.modifier.timer !== null) && Math.hypot(event.clientX - this.modifier.x, event.clientY - this.modifier.y) > this.modifier.slop) { this.listener.onModifierDebug?.("contact moved"); this.cancelShapeConstraint(); }
       return;
     }
     if (this.modifier?.active && !this.listener.canConstrainShape?.(this.modifier.sample)) this.cancelShapeConstraint();
@@ -309,6 +348,7 @@ export class PointerController {
     this.stroke = null;
     this.penStroke = false;
     this.releaseCapture(id);
+    this.listener.onModifierDebug?.(cancelled ? "Pencil pointercancel; gesture ending" : "Pencil pointerup; committing visible geometry");
     if (cancelled) {
       this.debug("cancel", event, 0);
       this.cancelShapeConstraint();
