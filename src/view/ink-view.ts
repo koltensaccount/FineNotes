@@ -337,6 +337,7 @@ export class InkView extends TextFileView {
   setViewData(data: string, _clear: boolean): void {
     this.companionUnloadedFile = null;
     if (this.loadedPath !== (this.file?.path ?? null)) {
+      this.latestDrawingAt = 0;
       this.guidesEnabled = false;
       this.guidePopover?.close();
       this.surface?.setWritingGuides(false, this.settings.writingGuides);
@@ -460,11 +461,14 @@ export class InkView extends TextFileView {
   }
 
   /** The pen touched the page or left it: hold, or let go of, what would stall it. */
+  private latestDrawingAt = 0;
+  get lastDrawingAt(): number { return this.latestDrawingAt; }
   private penActivity(down: boolean): void {
     window.clearTimeout(this.quietTimer);
     this.quietTimer = 0;
     const t = performance.now();
     if (down) {
+      this.latestDrawingAt = Date.now();
       this.writeHold.penDown(t);
       this.pdfCache?.setHeld(true);
       // Should the lift never arrive, let go anyway.
@@ -582,6 +586,7 @@ export class InkView extends TextFileView {
       this.surface?.exportDiagnostics({
         version: this.plugin.manifest.version,
         file: this.file?.path ?? null,
+        lastDrawingAt: this.latestDrawingAt,
       }) ?? null
     );
   }

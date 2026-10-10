@@ -1,3 +1,4 @@
+import { diagnosticView } from "./view/diagnostic-view";
 import { writingGuidesOf } from "./model/writing-guides";
 import { pdfQuality } from "./export/pdf-quality";
 import { type WritingPresets, migrateWritingPresets } from "./model/writing-presets";
@@ -909,7 +910,7 @@ export default class GoodObsidianPlugin extends Plugin {
    * what the recogniser thought.
    */
   private async copyShapeDiagnostics(): Promise<void> {
-    const view = this.app.workspace.getActiveViewOfType(InkView) ?? this.openNotebooks()[0];
+    const view = diagnosticView(this.app.workspace.getActiveViewOfType(InkView), this.openNotebooks());
     const report = view?.exportDiagnostics();
     if (!report) {
       new Notice("Open a handwriting note and draw a few shapes first.");

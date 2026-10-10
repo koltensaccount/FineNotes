@@ -1450,9 +1450,11 @@ body.is-mobile .goodobsidian-scrollthumb {
    over any paper. */
 .goodobsidian-hud {
   position: absolute;
-  inset: 8px auto auto 8px;
+  inset: auto auto 12px 8px;
   z-index: 5;
-  max-width: 70%;
+  max-width: calc(100% - 24px);
+  max-height: 40%;
+  overflow: hidden;
   padding: 6px 8px;
   border-radius: var(--gob-radius-s);
   background-color: rgb(0 0 0 / 0.6);
