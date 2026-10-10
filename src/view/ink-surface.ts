@@ -1,8 +1,7 @@
 import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
-import { smoothCompletedStroke } from "../ink/stroke-smoothing";
 import { adjustHeldShape, alignNewShape, scaledStrokeSize, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
 import { highlighterWetRuns } from "../ink/highlighter";
-import { constrainShape, CONSTRAINABLE_SHAPES } from "../ink/shape-constraint";
+import { constrainShape } from "../ink/shape-constraint";
 import { lineStyleOf } from "../ink/line-style";
 import { bindContextInput, bindPressDismissal } from "./context-input";
 import {
@@ -976,10 +975,7 @@ export class InkSurface {
    * The Shape tool's preset being dragged out. `moved` sticks once the pen
    * has left the tap slop: dragging back to the start is still a drag.
    */
-  private shapeConstrained = false;
   private constraintAngle: number | undefined;
-  private modifierDiagnostic = "no contact";
-  private modifierDiagnostics: { t: number; state: string }[] = [];
   private shapeDrag: {
     preset: ShapePreset | "table";
     origin: Pt;
@@ -1001,7 +997,6 @@ export class InkSurface {
    * could still carry it on (`input/pen-rejoin.ts`): when and where it
    * lifted, the builder that holds its points, and the step that added it.
    */
-  private strokeSmoothing = 0;
   private lastLift: {
     t: number;
     boxIndex: number;
@@ -1012,7 +1007,6 @@ export class InkSurface {
     stroke: Stroke;
     command: Command;
     penDownAt: number | null;
-    smoothing: number;
   } | null = null;
   /** Where the pen was last seen (layout space), for a cancel, which has no position. */
   private penAt: Pt | null = null;
@@ -1315,7 +1309,6 @@ export class InkSurface {
       undo: () => this.undo(),
       redo: () => this.redo(),
       blocked: () =>
-        this.pointerInput?.hasModifierContact === true ||
         this.pointerInput?.isPenDrawing === true ||
         !!this.shapeDrag ||
         this.handHeld ||
@@ -3248,79 +3241,44 @@ export class InkSurface {
     return { x: sample.x - box.x, y: sample.y - box.y };
   }
 
-  setPenGestures(gestures: unknown): void {
-    this.toolState.penGestures = penGesturesOf(gestures);
-    this.traceModifier(`setting applied: ${this.toolState.penGestures.constrainWithFinger ? "enabled" : "disabled"}`);
-    if (!this.toolState.penGestures.constrainWithFinger) this.pointerInput?.cancelShapeConstraint();
-  }
-
-  private shapeConstraintRejection(sample: PointerSample): string | null {
-    if (!penGesturesOf(this.toolState.penGestures).constrainWithFinger) return "setting disabled";
-    if (!this.activePage) return "no active page/draft; Pencil gesture already ended";
-    if (!Number.isFinite(sample.x + sample.y)) return "invalid contact coordinates";
-    const kind = this.snap?.kind ?? this.shapeDrag?.preset;
-    if (!kind) return "shape not recognized yet; freehand is not eligible";
-    if (kind === "table" || !CONSTRAINABLE_SHAPES.includes(kind)) return `unsupported shape: ${kind}`;
-    return null;
-  }
-  private canConstrainShape(sample: PointerSample): boolean { return this.shapeConstraintRejection(sample) === null; }
-  private traceModifier(state: string): void {
-    if (!this.debug) return;
-    this.modifierDiagnostic = state;
-    this.modifierDiagnostics.push({ t: now(), state });
-    if (this.modifierDiagnostics.length > 96) this.modifierDiagnostics.shift();
-    this.hud.mark(`finger: ${state}`); this.scheduleHud();
+  setPenGestures(gestures: unknown): void { this.toolState.penGestures = penGesturesOf(gestures); }
+  setConstrainShapes(enabled: boolean): void {
+    this.toolState.constrainShapes = enabled; this.constraintAngle = undefined;
+    if (this.snap) this.updateConstrainedSnap();
+    else if (this.shapeDrag && this.activePage) this.showShapeDraft(this.activePage);
   }
 
   private updateConstrainedSnap(): void {
     const snap = this.snap;
     if (!snap) return;
     const raw = adjustHeldShape(snap.kind, snap.base, snap.pivot, snap.from, snap.to);
-    if (this.shapeConstrained) {
+    if (this.toolState.constrainShapes === true) {
       const constrained = constrainShape(snap.kind, raw, this.constraintAngle);
       snap.pts = constrained.pts;
       this.constraintAngle = constrained.angle;
-      this.traceModifier(`constraint geometry applied: ${snap.kind}, changed=${constrained.pts.some((v,i) => v !== raw[i])}, preview scheduled`);
     } else snap.pts = raw;
     this.scheduleWet();
   }
 
   private constraintGeometry(kind: ShapeKind, pts: number[]): number[] {
-    if (!this.shapeConstrained) return pts;
+    if (this.toolState.constrainShapes !== true) return pts;
     const constrained = constrainShape(kind, pts, this.constraintAngle);
     this.constraintAngle = constrained.angle;
-    this.traceModifier(`constraint geometry applied: ${kind}, changed=${constrained.pts.some((v,i) => v !== pts[i])}, preset preview`);
     return constrained.pts;
   }
 
   private cancelShapeDraft(): void {
-    this.shapeTap = null;
-    const owned = this.shapeConstrained || this.pointerInput?.hasModifierContact === true;
-    this.pointerInput?.cancelShapeConstraint();
-    this.shapeConstrained = false;
-    this.constraintAngle = undefined;
-    if (owned && (this.snap || this.shapeDrag)) {
-      this.shapeDrag = null;
-      this.endWetStroke();
-      this.activePage = null;
+    this.shapeTap = null; this.constraintAngle = undefined;
+    if (this.snap || this.shapeDrag) {
+      this.shapeDrag = null; this.endWetStroke(); this.activePage = null;
       this.pointerInput?.cancelDrawing();
     }
   }
 
   private readonly pointerCallbacks = this.createPointerCallbacks();
   private createPointerCallbacks(): PointerControllerCallbacks { return {
-    modifierDebugEnabled: () => this.debug,
-    shapeConstraintRejection: sample => this.shapeConstraintRejection(sample),
-    onModifierDebug: state => this.traceModifier(state),
-    canConstrainShape: (sample) => this.canConstrainShape(sample),
-    onShapeConstraint: (active) => {
-      this.traceModifier(`surface onShapeConstraint(${active})`);
-      this.shapeConstrained = active;
-      if (!active) this.constraintAngle = undefined;
-      if (this.snap) this.updateConstrainedSnap();
-      else if (this.shapeDrag && this.activePage) this.showShapeDraft(this.activePage);
-    },
     onStart: (sample) => {
+      this.constraintAngle = undefined;
       this.callbacks.onPen?.(true);
       this.penDown(sample);
     },
@@ -3635,7 +3593,6 @@ export class InkSurface {
       return;
     }
     const resumed = this.resumeLifted(box, at);
-    if (!resumed) this.strokeSmoothing = penGesturesOf(this.toolState.penGestures).strokeSmoothing ?? 0;
     const builder = resumed ?? new StrokeBuilder(this.builderOpts());
     builder.add({ ...sample, ...at });
     this.builder = builder;
@@ -3688,7 +3645,6 @@ export class InkSurface {
       this.hud.mark("rejoin");
       this.scheduleHud();
     }
-    this.strokeSmoothing = lift.smoothing;
     return lift.builder;
   }
 
@@ -3844,8 +3800,7 @@ export class InkSurface {
       to: { x: anchor.x, y: anchor.y },
       pts: result.pts,
     };
-    this.traceModifier(`held shape recognized: ${result.kind}`);
-    this.scheduleWet();
+    this.updateConstrainedSnap();
   }
 
   // --- Shape diagnostics ----------------------------------------------------
@@ -3928,11 +3883,8 @@ export class InkSurface {
         devicePixelRatio: window.devicePixelRatio,
         coalescedEvents: proto !== null && "getCoalescedEvents" in proto,
         predictedEvents: proto !== null && "getPredictedEvents" in proto,
-        fingerSettingEnabled: penGesturesOf(this.toolState.penGestures).constrainWithFinger === true,
-        shapeModifierStatus: this.pointerInput?.modifierStatus ?? null,
+        constrainShapes: this.toolState.constrainShapes === true,
         activeShape: this.snap?.kind ?? this.shapeDrag?.preset ?? null,
-        shapeModifier: this.modifierDiagnostic,
-        shapeModifierEvents: this.modifierDiagnostics,
         roundedPen: this.pointerInput?.strokeRounded ?? null,
         scale: Math.round(this.scale * 1000) / 1000,
         tool: this.toolState.tool,
@@ -4267,7 +4219,7 @@ export class InkSurface {
       // have trailed a tail as it left the glass.
       const held = heldLongEnough;
       shape = recognizeAtZoom(builder.points(), this.userZoom, { held });
-      if (shape) shape.pts = alignNewShape(shape.kind, shape.pts);
+      if (shape) shape.pts = this.constraintGeometry(shape.kind, alignNewShape(shape.kind, shape.pts));
       this.hudVerdict(cancelledWhileHeld ? "cx-hold" : "lift", builder.points(), shape, held);
     } else if (!shape && this.debug) {
       this.hud.mark(final ? "lift·nohold" : "cx·nohold");
@@ -4283,13 +4235,12 @@ export class InkSurface {
     // Stored as it was drawn on the wet layer: the same colour, width and ink.
     const { color, size, tool, lineStyle } = this.currentStyle();
     const rawPoints = builder.points();
-    const finishedPoints = !shape && final && this.toolState.tool === "pen" && tool === "pen" ? smoothCompletedStroke(rawPoints, this.strokeSmoothing, builder.isCentred) : rawPoints;
     const stroke: Stroke = {
       id: this.strokeIds.next(),
       color,
       size,
       tool,
-      pts: shape ? shape.pts : finishedPoints,
+      pts: shape ? shape.pts : rawPoints,
       ...(lineStyle && lineStyle !== "solid" ? { lineStyle } : {}),
       ...(shape ? { shape: shape.kind } : {}),
     };
@@ -4311,7 +4262,6 @@ export class InkSurface {
         stroke,
         command,
         penDownAt: this.penDownAt,
-        smoothing: this.strokeSmoothing,
       };
     }
   }

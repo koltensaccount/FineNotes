@@ -43,6 +43,7 @@ import type { EraserMode } from "./view/toolbar";
 export type ToolId = "pen" | "highlighter" | "eraser" | "select";
 
 export interface GoodObsidianSettings {
+  constrainShapes?: boolean;
   writingGuides?: WritingGuideStyle;
   pdfExportQuality: PdfQuality;
   /** Versioned user-managed toolbar preferences, upgraded explicitly on load. */
@@ -162,6 +163,7 @@ export interface GoodObsidianSettings {
 // The records are copies, so a host that edits its settings in place cannot
 // change the shared defaults.
 export const DEFAULT_SETTINGS: GoodObsidianSettings = {
+  constrainShapes: false,
   writingGuides: { ...DEFAULT_WRITING_GUIDES },
   pdfExportQuality: "high",
   drawAndHold: true,

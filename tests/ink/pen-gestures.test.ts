@@ -32,15 +32,13 @@ describe("penGesturesOf", () => {
       scribbleErase: true,
       scribbleErasesAll: false,
       circleLasso: true,
-      constrainWithFinger: false,
-      strokeSmoothing: 0,
     });
   });
 
   it("keeps every switch that is a boolean", () => {
     expect(
       penGesturesOf({ scribbleErase: false, scribbleErasesAll: true, circleLasso: false }),
-    ).toEqual({ scribbleErase: false, scribbleErasesAll: true, circleLasso: false, constrainWithFinger: false, strokeSmoothing: 0 });
+    ).toEqual({ scribbleErase: false, scribbleErasesAll: true, circleLasso: false });
     expect(penGesturesOf({ circleLasso: false })).toEqual({
       ...DEFAULT_PEN_GESTURES,
       circleLasso: false,

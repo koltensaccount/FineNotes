@@ -284,6 +284,7 @@ export interface ToolbarState {
    * counts as off.
    */
   penAutoShape?: boolean;
+  constrainShapes?: boolean;
   /** The Shape tool's colour. `undefined` counts as {@link DEFAULT_SHAPE_COLOR}. */
   shapeColor?: string;
   /** Custom colours picked lately, newest first, for every colour picker. */
@@ -377,6 +378,7 @@ export interface ToolbarCallbacks {
   /** The pen's auto-shape toggle changed. Hosts persist it. */
   onPenAutoShapeChange?: (enabled: boolean) => void;
   /** A pen gesture was switched on or off. Hosts persist it. */
+  onConstrainShapesChange?: (enabled: boolean) => void;
   onPenGesturesChange?: (gestures: PenGestures) => void;
   /** The Shape tool's colour changed. Hosts persist it. */
   onShapeColorChange?: (color: string) => void;
@@ -821,7 +823,7 @@ export class Toolbar {
     const active = this.activePenType();
     const pen = this.optionsEl.createEl("button", { cls: "goodobsidian-pentype" });
     pen.append(
-      createStrokePreview({ ...this.previewOptions(), color: "currentColor", compact: true }, this.host.ownerDocument),
+      this.penTypeGraphic(active),
     );
     pen.setAttribute("aria-label", `${active.label} options`);
     pen.setAttribute("title", `${active.label} options`);
@@ -2089,6 +2091,10 @@ export class Toolbar {
     this.popoverRender();
   }
 
+  private penTypeGraphic(spec: PenTypeSpec): Node {
+    return createStrokePreview({ type: spec.id, width: spec.id === "highlighter" ? 8 : spec.id === "brush" ? 5 : 3, color: "currentColor", pressure: true, compact: true }, this.host.ownerDocument);
+  }
+
   private renderPenTypes(body: HTMLElement, openGestures: () => void): void {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
     for (const spec of PEN_MENU_TYPES) {
@@ -2096,18 +2102,7 @@ export class Toolbar {
         cls: "goodobsidian-wide goodobsidian-pen-choice clickable-icon",
         attr: { "aria-label": spec.label, title: spec.label },
       });
-      button.append(
-        createStrokePreview(
-          {
-            type: spec.id,
-            width: spec.id === "highlighter" ? 8 : spec.id === "brush" ? 5 : 3,
-            color: "currentColor",
-            pressure: true,
-            compact: true,
-          },
-          this.host.ownerDocument,
-        ),
-      );
+      button.append(this.penTypeGraphic(spec));
       const caption = button.createSpan({ cls: "goodobsidian-pen-caption" });
       caption.createSpan({ text: spec.label });
       caption.createSpan({ cls: "goodobsidian-pen-hint", text: TOOL_HINTS[spec.id] });
@@ -2118,6 +2113,12 @@ export class Toolbar {
         this.choosePenType(spec);
       });
     }
+    const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
+    this.switchRow(constraints, "Constrain shapes", this.state.constrainShapes === true, on => {
+      this.state.constrainShapes = on;
+      this.callbacks.onConstrainShapesChange?.(on);
+    });
+    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Choose before drawing. Snap shape angles to 15° steps and make rectangles/ellipses square/circular. Handwriting stays unchanged." });
     body.createDiv({ cls: "goodobsidian-popover-divider" });
     const link = body.createEl("button", {
       cls: "goodobsidian-wide goodobsidian-popover-link clickable-icon",
@@ -2156,19 +2157,6 @@ export class Toolbar {
       this.callbacks.onPressurePreferenceChange?.(on);
     });
     body.createDiv({ cls: "goodobsidian-popover-hint", text: "Vary stroke thickness with Apple Pencil pressure when using Fountain Pen or Brush Pen." });
-    const smoothing = body.createDiv({ cls: "goodobsidian-smoothing-control" });
-    const readout = smoothing.createEl("label", { text: `Stroke smoothing · ${gestures.strokeSmoothing ?? 0}/10` });
-    const slider = smoothing.createEl("input", { type: "range" });
-    slider.min = "0"; slider.max = "10"; slider.step = "1"; slider.value = String(gestures.strokeSmoothing ?? 0);
-    slider.setAttribute("aria-label", "Stroke smoothing");
-    slider.addEventListener("input", () => {
-      const strength = Number(slider.value);
-      readout.textContent = `Stroke smoothing · ${strength}/10`;
-      this.state.penGestures = { ...penGesturesOf(this.state.penGestures), strokeSmoothing: strength };
-      this.callbacks.onPenGesturesChange?.(this.state.penGestures);
-    });
-    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Smooth completed handwriting strokes without adding delay while writing. 0 Off · 1–3 Light · 4–6 Medium · 7–10 Strong." });
-
     const scribble = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(scribble, "Scribble to erase", gestures.scribbleErase, (on) =>
       set({ scribbleErase: on }),
@@ -2184,12 +2172,6 @@ export class Toolbar {
       cls: "goodobsidian-popover-hint",
       text: "Erase handwriting and drawings by scribbling over them.",
     });
-
-    const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
-    this.switchRow(constraints, "Constrain shapes with finger", gestures.constrainWithFinger === true, (on) =>
-      set({ constrainWithFinger: on }),
-    );
-    body.createDiv({ cls: "goodobsidian-popover-hint", text: "While holding a recognized shape with Apple Pencil, hold one finger on the page to constrain its angle or proportions." });
 
     const lasso = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(lasso, "Circle to lasso", gestures.circleLasso, (on) =>

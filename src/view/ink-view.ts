@@ -218,6 +218,7 @@ function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
     textDragSize: s.textDragSize === true,
     penAutoShape: s.penAutoShape === true,
     penGestures: penGesturesOf(s.penGestures),
+    constrainShapes: s.constrainShapes === true,
     shapeColor: parseHexColor(s.shapeColor ?? "") ?? DEFAULT_SHAPE_COLOR,
     recentColors: recentColorsOf(s.recentColors),
   };
@@ -568,6 +569,12 @@ export class InkView extends TextFileView {
   }
 
   /** The pressure setting changed: the pen in hand widens with pressure if it is a pressure pen. */
+  setConstrainShapes(enabled: boolean): void {
+    this.toolState.constrainShapes = enabled;
+    this.surface?.setConstrainShapes(enabled);
+    this.toolbar?.refreshPressurePreference();
+  }
+
   setPenGestures(gestures: unknown): void {
     this.toolState.penGestures = penGesturesOf(gestures);
     this.surface?.setPenGestures(gestures);
@@ -1035,6 +1042,7 @@ export class InkView extends TextFileView {
         onTextList: (kind) => void this.surface?.applyTextList(kind),
         onTextDelete: () => void this.surface?.deleteEditingTextBox(),
         onPenAutoShapeChange: (enabled) => this.plugin.savePenAutoShape(enabled),
+        onConstrainShapesChange: enabled => this.plugin.saveConstrainShapes(enabled),
         onPenGesturesChange: (gestures) => this.plugin.savePenGestures(gestures),
         onShapeColorChange: (color) => this.plugin.saveShapeColor(color),
         onRecentColors: (colors) => this.plugin.saveRecentColors(colors),

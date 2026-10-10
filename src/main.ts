@@ -406,6 +406,8 @@ export default class GoodObsidianPlugin extends Plugin {
     this.firstInstall = saved === null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     this.settings.writingGuides = writingGuidesOf(this.settings.writingGuides);
+    this.settings.constrainShapes = this.settings.constrainShapes === true;
+    this.settings.penGestures = penGesturesOf(this.settings.penGestures);
     this.settings.pdfExportQuality = pdfQuality(this.settings.pdfExportQuality);
     this.settings.writingPresets = migrateWritingPresets(
       this.settings,
@@ -704,6 +706,12 @@ export default class GoodObsidianPlugin extends Plugin {
     for (const view of this.openNotebooks()) view.refreshWritingGuides();
     if (this.writingGuideSaveTimer !== null) clearTimeout(this.writingGuideSaveTimer);
     this.writingGuideSaveTimer = setTimeout(() => { this.writingGuideSaveTimer = null; void this.saveSettings(); }, 200);
+  }
+
+  saveConstrainShapes(enabled: boolean): void {
+    this.settings.constrainShapes = enabled;
+    for (const view of this.openNotebooks()) view.setConstrainShapes(enabled);
+    void this.saveSettings();
   }
 
   savePenGestures(gestures: PenGestures): void {

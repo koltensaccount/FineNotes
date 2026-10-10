@@ -6098,8 +6098,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-shape-fields { display: grid; gap: 8px; padding: 12px; background: var(--background-primary); color: var(--text-normal); }
 .goodobsidian-shape-fields label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--font-ui-small); }
 .goodobsidian-shape-fields input { width: 94px; min-height: 36px; color: var(--text-normal); background: var(--background-modifier-form-field); }
-.goodobsidian-smoothing-control { display: grid; gap: 8px; padding: 12px 8px; color: var(--text-normal); }
-.goodobsidian-smoothing-control input { width: 100%; }
 
 .goodobsidian-guide-popover { background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); box-shadow: var(--gob-shadow-float); }
 .goodobsidian-writing-guides { display: grid; gap: 10px; padding: 12px; color: var(--text-normal); }
@@ -6123,7 +6121,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 /* Obsidian/theme range rules can otherwise shrink these controls to their
    default slider width. Give adjustment tracks the editor's entire width. */
 .goodobsidian-thickness-editor .goodobsidian-thickness-slider,
-.goodobsidian-smoothing-control,
 .goodobsidian-writing-guides .goodobsidian-guide-slider {
   width: 100%;
   min-width: 0;
@@ -6131,7 +6128,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   box-sizing: border-box;
 }
 .goodobsidian-thickness-editor input[type="range"].goodobsidian-thickness-range,
-.goodobsidian-smoothing-control input[type="range"],
 .goodobsidian-writing-guides .goodobsidian-guide-slider input[type="range"] {
   --slider-width: 100%;
   display: block;

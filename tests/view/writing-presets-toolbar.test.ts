@@ -180,7 +180,7 @@ it("eraser filter choices expose All ink/Highlighter/Pen without resetting mode 
   expect(state.eraserMode).toBe("stroke"); expect(state.eraserSize).toBe(17.5);
 });
 
-describe("pen gesture pressure and smoothing", () => {
+describe("pen gestures pressure controls", () => {
   it("switching pen types reads the shared preference without overwriting it", () => {
     const s = setup(); const preference = vi.fn();
     const t = s.toolbar as unknown as { callbacks: Record<string, unknown> };
@@ -191,7 +191,7 @@ describe("pen gesture pressure and smoothing", () => {
     }
     expect(preference).not.toHaveBeenCalled();
   });
-  it("pressure writes the shared preference and smoothing saves without rebuilding its active slider", () => {
+  it("pressure writes the shared preference and removed gesture controls are absent", () => {
     const inputs: { value: string; listeners: Record<string, () => void> }[] = [];
     const node = (): any => ({ querySelector: () => ({ childElementCount: 1 }), createDiv: () => node(), createSpan: () => node(), setAttribute: () => {}, addEventListener: () => {}, createEl: (tag: string, options: { type?: string }) => {
       const child = node(); child.value = ""; child.listeners = {}; child.addEventListener = (name: string, fn: () => void) => { child.listeners[name] = fn; };
@@ -199,11 +199,12 @@ describe("pen gesture pressure and smoothing", () => {
       return child;
     } });
     const switches = new Map<string, (on: boolean) => void>(), preference = vi.fn(), saved = vi.fn(), rerender = vi.fn();
-    const state = { penGestures: { strokeSmoothing: 0 } };
+    const state = { penGestures: {} };
     const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, callbacks: { pressureAllowed: () => true, onPressurePreferenceChange: preference, onPenGesturesChange: saved }, popoverRender: rerender, switchRow: (_body: unknown, label: string, _enabled: boolean, on: (enabled: boolean) => void) => { switches.set(label, on); return {}; } });
     toolbar.renderPenGestures(node(), () => {});
     switches.get("Pressure sensitivity")!(false); expect(preference).toHaveBeenCalledWith(false);
-    inputs[0].value = "6"; inputs[0].listeners.input();
-    expect(saved).toHaveBeenCalledWith(expect.objectContaining({ strokeSmoothing: 6 })); expect(rerender).not.toHaveBeenCalled();
+    expect(inputs).toHaveLength(0);
+    expect(switches.has("Constrain shapes with finger")).toBe(false);
+    expect(rerender).not.toHaveBeenCalled();
   });
 });

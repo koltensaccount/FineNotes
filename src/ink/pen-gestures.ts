@@ -20,8 +20,6 @@ export interface PenGestures {
   /** "Erase shapes and highlighter": only while {@link scribbleErase} is on. */
   scribbleErasesAll: boolean;
   circleLasso: boolean;
-  constrainWithFinger?: boolean;
-  strokeSmoothing?: number;
 }
 
 /** GoodNotes' defaults, less the extra reach of the scribble: handwriting only. */
@@ -29,8 +27,6 @@ export const DEFAULT_PEN_GESTURES: Readonly<PenGestures> = {
   scribbleErase: true,
   scribbleErasesAll: false,
   circleLasso: true,
-  constrainWithFinger: false,
-  strokeSmoothing: 0,
 };
 
 /** The switches from anything read off disk; a missing or bad one is its default. */
@@ -44,8 +40,6 @@ export function penGesturesOf(raw: unknown): PenGestures {
     scribbleErase: flag("scribbleErase"),
     scribbleErasesAll: flag("scribbleErasesAll"),
     circleLasso: flag("circleLasso"),
-    constrainWithFinger: flag("constrainWithFinger"),
-    strokeSmoothing: typeof o.strokeSmoothing === "number" && Number.isFinite(o.strokeSmoothing) ? Math.round(Math.max(0, Math.min(10, o.strokeSmoothing))) : 0,
   };
 }
 
