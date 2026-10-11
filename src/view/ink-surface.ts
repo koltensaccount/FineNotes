@@ -4664,7 +4664,18 @@ export class InkSurface {
       [],
       [],
     );
-    this.history.push(this.doc, new RemoveStrokesFromPage(page.id, ids, "Scribble to erase"));
+    const { color, size, tool, lineStyle } = this.currentStyle();
+    const scribbleStroke: Stroke = {
+      id: this.strokeIds.next(),
+      color,
+      size,
+      tool,
+      pts,
+      ...(lineStyle && lineStyle !== "solid" ? { lineStyle } : {}),
+    };
+    this.history.push(this.doc, addStrokesTimed(page, [scribbleStroke], this.penDownAt));
+    const removeIds = new Set([...ids, scribbleStroke.id]);
+    this.history.push(this.doc, new RemoveStrokesFromPage(page.id, removeIds, "Scribble to erase"));
     for (const id of ids) this.strokeIndex.remove(id, page.id);
     if (erased) this.renderer?.invalidateRegion(box.index, erased);
     if (this.debug) this.hud.mark("scribble");

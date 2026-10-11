@@ -23,6 +23,7 @@ import { IdSequence, highestIdNumber, strokeIdsOf } from "../../src/view/id-sequ
 import { PointerHud } from "../../src/view/pointer-hud";
 import { StrokeIndex } from "../../src/view/stroke-index";
 import { SizeWait } from "../../src/view/surface-size";
+import realScribbles from "../ink/fixtures/real-scribbles-ipad.json";
 
 vi.mock("obsidian", () => ({
   Notice: class {},
@@ -1419,3 +1420,78 @@ describe("view-only writing guides", () => {
     expect(changed).not.toHaveBeenCalled(); expect(history.push).not.toHaveBeenCalled(); expect(page.backdrop).toEqual({ kind: "blank" }); expect(page.strokes).toEqual([]);
   });
 });
+
+describe("scribble to erase undo and redo", () => {
+  it("restores the erased stroke and the scribble on first undo, then removes the scribble on second undo", () => {
+    const page = blankPage("p1");
+    const existingStroke: Stroke = {
+      id: "s1",
+      color: "#000000",
+      size: 3,
+      tool: "pen",
+      pts: [170, 140, 0.5, 185, 140, 0.5, 200, 140, 0.5],
+    };
+    page.strokes = [existingStroke];
+    const doc = documentOf(page);
+    const history = new History();
+    const strokeIndex = new StrokeIndex();
+    strokeIndex.rebuild([page]);
+    const strokeIds = new IdSequence("s");
+    strokeIds.restart(strokeIdsOf(doc));
+    const surface = surfaceWith({
+      doc,
+      history,
+      strokeIndex,
+      strokeIds,
+      toolState: { tool: "pen", pressureEnabled: true, penGestures: { scribbleErase: true, scribbleErasesAll: true } },
+      atFitZoom: (px: number) => px,
+      strokeSize: () => 3,
+      strokeColor: () => "#112233",
+      currentStyle: () => ({ color: "#112233", size: 3, tool: "pen" }),
+      penDownAt: null,
+      renderer: null,
+      debug: false,
+      inkChanged: vi.fn(),
+      dropSelection: vi.fn(),
+      endCrop: vi.fn(),
+      cancelImageDrag: vi.fn(),
+      cancelGroupDrag: vi.fn(),
+      layoutStale: () => false,
+      renderAll: vi.fn(),
+      reportTextEditing: vi.fn(),
+      changed: vi.fn(),
+      revealChange: vi.fn(),
+    });
+
+    const box = { index: 0, width: 800, height: 1000 };
+    const scribblePts = realScribbles.strokes[0].pts;
+    const erased = run<boolean>(surface, "scribbleErase", box, page, scribblePts);
+    expect(erased).toBe(true);
+    // Immediately after scribble: both erased stroke and scribble stroke are removed
+    expect(page.strokes).toHaveLength(0);
+    expect(history.canUndo()).toBe(true);
+
+    // 1st Undo: restores both the erased stroke and the scribble stroke (Goodnotes behavior)
+    run(surface, "undo");
+    expect(page.strokes).toHaveLength(2);
+    expect(page.strokes[0].id).toBe("s1");
+    expect(page.strokes[1].pts).toEqual(scribblePts);
+    expect(page.strokes[1].color).toBe("#112233");
+
+    // 2nd Undo: undoes the scribble stroke back to the initial state
+    run(surface, "undo");
+    expect(page.strokes).toHaveLength(1);
+    expect(page.strokes[0].id).toBe("s1");
+
+    // 1st Redo: restores the scribble stroke
+    run(surface, "redo");
+    expect(page.strokes).toHaveLength(2);
+    expect(page.strokes[0].id).toBe("s1");
+    expect(page.strokes[1].pts).toEqual(scribblePts);
+
+    // 2nd Redo: re-applies the scribble erase
+    run(surface, "redo");
+    expect(page.strokes).toHaveLength(0);
+  });
+});
+
