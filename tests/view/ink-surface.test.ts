@@ -22,6 +22,7 @@ import { type InkDocument, type Page, type Stroke, blankPage } from "../../src/m
 import { IdSequence, highestIdNumber, strokeIdsOf } from "../../src/view/id-sequence";
 import { PointerHud } from "../../src/view/pointer-hud";
 import { StrokeIndex } from "../../src/view/stroke-index";
+import { AddStrokeToPage } from "../../src/model/page-commands";
 import { SizeWait } from "../../src/view/surface-size";
 import realScribbles from "../ink/fixtures/real-scribbles-ipad.json";
 
@@ -1492,6 +1493,78 @@ describe("scribble to erase undo and redo", () => {
     // 2nd Redo: re-applies the scribble erase
     run(surface, "redo");
     expect(page.strokes).toHaveLength(0);
+  });
+
+  it("handles multiple interleaved strokes, preserves stroke properties, and invalidates redo upon new edits", () => {
+    const page = blankPage("p1");
+    const s0: Stroke = { id: "s0", color: "#000", size: 2, tool: "pen", pts: [50, 50, 0.5, 60, 50, 0.5] };
+    const s1: Stroke = { id: "s1", color: "#111", size: 3, tool: "pen", pts: [170, 130, 0.5, 185, 130, 0.5, 200, 130, 0.5] };
+    const s2: Stroke = { id: "s2", color: "#222", size: 3, tool: "pen", pts: [175, 145, 0.5, 190, 145, 0.5] };
+    const s3: Stroke = { id: "s3", color: "#333", size: 2, tool: "pen", pts: [400, 400, 0.5, 410, 400, 0.5] };
+    page.strokes = [s0, s1, s2, s3];
+    const doc = documentOf(page);
+    const history = new History();
+    const strokeIndex = new StrokeIndex();
+    strokeIndex.rebuild([page]);
+    const strokeIds = new IdSequence("s");
+    strokeIds.restart(strokeIdsOf(doc));
+    const surface = surfaceWith({
+      doc,
+      history,
+      strokeIndex,
+      strokeIds,
+      toolState: { tool: "pen", pressureEnabled: true, penGestures: { scribbleErase: true, scribbleErasesAll: true }, lineStyle: "dashed" },
+      atFitZoom: (px: number) => px,
+      strokeSize: () => 4,
+      strokeColor: () => "#ff0000",
+      currentStyle: () => ({ color: "#ff0000", size: 4, tool: "pen", lineStyle: "dashed" }),
+      penDownAt: 12345,
+      renderer: null,
+      debug: false,
+      inkChanged: vi.fn(),
+      dropSelection: vi.fn(),
+      endCrop: vi.fn(),
+      cancelImageDrag: vi.fn(),
+      cancelGroupDrag: vi.fn(),
+      layoutStale: () => false,
+      renderAll: vi.fn(),
+      reportTextEditing: vi.fn(),
+      changed: vi.fn(),
+      revealChange: vi.fn(),
+    });
+
+    const box = { index: 0, width: 800, height: 1000 };
+    const scribblePts = realScribbles.strokes[0].pts;
+    const erased = run<boolean>(surface, "scribbleErase", box, page, scribblePts);
+    expect(erased).toBe(true);
+
+    // Unaffected strokes remain on the page, erased strokes and scribble are removed
+    expect(page.strokes.map((s) => s.id)).toEqual(["s0", "s3"]);
+    expect(strokeIndex.get("s1")).toBeUndefined();
+    expect(strokeIndex.get("s2")).toBeUndefined();
+    expect(strokeIndex.get("s0")).toBeDefined();
+    expect(strokeIndex.get("s3")).toBeDefined();
+
+    // 1st Undo: restores s1, s2 in their original order, plus the scribble stroke at the end
+    run(surface, "undo");
+    expect(page.strokes.map((s) => s.id)).toEqual(["s0", "s1", "s2", "s3", "s4"]);
+    const restoredScribble = page.strokes[4];
+    expect(restoredScribble.pts).toEqual(scribblePts);
+    expect(restoredScribble.color).toBe("#ff0000");
+    expect(restoredScribble.size).toBe(4);
+    expect(restoredScribble.lineStyle).toBe("dashed");
+    expect(restoredScribble.tool).toBe("pen");
+    // Stroke index reflects restored strokes
+    expect(strokeIndex.get("s1")).toBeDefined();
+    expect(strokeIndex.get("s2")).toBeDefined();
+    expect(strokeIndex.get("s4")).toBeDefined();
+    expect(history.canRedo()).toBe(true);
+
+    // Making a new edit while on the 1st undo state clears redo
+    const newStroke: Stroke = { id: "s5", color: "#555", size: 2, tool: "pen", pts: [600, 600, 0.5, 610, 600, 0.5] };
+    history.push(doc, new AddStrokeToPage(page.id, newStroke));
+    expect(history.canRedo()).toBe(false);
+    expect(page.strokes.map((s) => s.id)).toEqual(["s0", "s1", "s2", "s3", "s4", "s5"]);
   });
 });
 
