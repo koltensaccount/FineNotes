@@ -247,6 +247,36 @@ describe("selection refinements integration", () => {
       s.selection = { pageId, ...elements };
     });
 
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      scale: vi.fn(),
+      translate: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(ctx),
+      toBlob: vi.fn((cb: (blob: Blob) => void, mime: string) => {
+        cb(new Blob(["png"], { type: mime }));
+      }),
+    };
+    vi.stubGlobal("document", {
+      createElement: (tag: string) => (tag === "canvas" ? canvas : {}),
+    });
+    class FakePath2D {
+      moveTo() {}
+      lineTo() {}
+      closePath() {}
+    }
+    vi.stubGlobal("Path2D", FakePath2D);
+
     const onCopySelection = vi.fn();
     s.callbacks = { onCopySelection };
 
@@ -255,6 +285,8 @@ describe("selection refinements integration", () => {
     const [pngPromise, marker] = onCopySelection.mock.calls[0];
     expect(marker).toMatch(/^FineNotes selection:/);
     expect(pngPromise).toBeInstanceOf(Promise);
+    const pngBlob = await pngPromise;
+    expect(pngBlob.type).toBe("image/png");
 
     const gate = new PasteGate();
     s.pasteGate = gate;

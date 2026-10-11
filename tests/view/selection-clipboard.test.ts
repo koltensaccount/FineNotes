@@ -174,10 +174,29 @@ describe("selection clipboard", () => {
     expect(entries[0]["text/plain"]).toBeInstanceOf(Blob);
   });
 
-  it("falls back to writeText when ClipboardItem writing rejects or fails", async () => {
-    const write = vi.fn().mockRejectedValue(new Error("Permission denied"));
+  it("falls back to writeText when ClipboardItem constructor throws synchronously", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { clipboard: { write, writeText } });
+    vi.stubGlobal("navigator", { clipboard: { write: vi.fn(), writeText } });
+
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        constructor() {
+          throw new Error("ClipboardItem unsupported");
+        }
+      },
+    );
+
+    const png = Promise.resolve(new Blob(["png-data"], { type: "image/png" }));
+    const marker = clipboardMarker(10);
+
+    copySelectionToSystemClipboard(png, marker);
+    expect(writeText).toHaveBeenCalledWith(marker);
+  });
+
+  it("calls onFailed when asynchronous clipboard write rejects", async () => {
+    const write = vi.fn().mockRejectedValue(new Error("Permission denied"));
+    vi.stubGlobal("navigator", { clipboard: { write } });
 
     vi.stubGlobal(
       "ClipboardItem",
@@ -188,11 +207,12 @@ describe("selection clipboard", () => {
 
     const png = Promise.resolve(new Blob(["png-data"], { type: "image/png" }));
     const marker = clipboardMarker(10);
+    const onFailed = vi.fn();
 
-    copySelectionToSystemClipboard(png, marker);
+    copySelectionToSystemClipboard(png, marker, onFailed);
 
     await Promise.resolve();
-    expect(writeText).toHaveBeenCalledWith(marker);
+    expect(onFailed).toHaveBeenCalledOnce();
   });
 
   it("falls back to writeText when navigator.clipboard.write is unavailable", () => {
@@ -226,5 +246,133 @@ describe("selection clipboard", () => {
     expect(content.elements.strokes).toHaveLength(1);
     expect(content.elements.strokes[0].id).toBe("s1");
     expect(content.elements.strokes[0].color).toBe("#123456");
+  });
+
+  it("releases canvas memory even if getContext fails", async () => {
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(null),
+    };
+    vi.stubGlobal("document", {
+      createElement: (tag: string) => (tag === "canvas" ? canvas : {}),
+    });
+
+    const bounds: Bounds = { minX: 10, minY: 10, maxX: 100, maxY: 100 };
+    await expect(
+      renderSelectionToPng({ strokes: [], images: [], textBoxes: [] }, bounds),
+    ).rejects.toThrow("Canvas 2D context unavailable");
+
+    expect(canvas.width).toBe(0);
+    expect(canvas.height).toBe(0);
+  });
+
+  it("guards against superseded clipboard writes when an older copy rejects", async () => {
+    let rejectA!: (err: Error) => void;
+    const writeA = new Promise<void>((_, reject) => (rejectA = reject));
+    const writeB = Promise.resolve();
+
+    const writeMock = vi.fn()
+      .mockImplementationOnce(() => writeA)
+      .mockImplementationOnce(() => writeB);
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+
+    vi.stubGlobal("navigator", {
+      clipboard: {
+        write: writeMock,
+        writeText: writeTextMock,
+      },
+    });
+
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        constructor() {}
+      },
+    );
+
+    const onFailedA = vi.fn();
+    const onFailedB = vi.fn();
+
+    // Start Copy A
+    copySelectionToSystemClipboard(
+      Promise.resolve(new Blob(["png-a"], { type: "image/png" })),
+      "marker-a",
+      onFailedA,
+    );
+
+    // Start Copy B (supersedes A)
+    copySelectionToSystemClipboard(
+      Promise.resolve(new Blob(["png-b"], { type: "image/png" })),
+      "marker-b",
+      onFailedB,
+    );
+
+    // Now Copy A rejects late
+    rejectA(new Error("Canceled by B"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Copy A was superseded, so its failure handler should not run and writeText should not be called with marker-a
+    expect(onFailedA).not.toHaveBeenCalled();
+    expect(writeTextMock).not.toHaveBeenCalledWith("marker-a");
+  });
+
+  it("renders from immutable snapshot even if original elements are mutated after copy", async () => {
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      scale: vi.fn(),
+      translate: vi.fn(),
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(ctx),
+      toBlob: vi.fn((cb: (blob: Blob) => void, mime: string) => {
+        cb(new Blob(["mock-png-bytes"], { type: mime }));
+      }),
+    };
+    vi.stubGlobal("document", {
+      createElement: (tag: string) => (tag === "canvas" ? canvas : {}),
+    });
+
+    const liveStroke: Stroke = {
+      id: "s1",
+      tool: "pen",
+      color: "#0000ff",
+      size: 2,
+      pts: [10, 10, 0.5, 50, 50, 0.5],
+    };
+
+    const clipboard = new InkClipboard();
+    clipboard.put(
+      { strokes: [liveStroke], images: [], textBoxes: [] },
+      { minX: 10, minY: 10, maxX: 50, maxY: 50 },
+    );
+    const snapshot = clipboard.content!;
+
+    // Mutate live stroke right after copying (e.g. user drags or changes color)
+    liveStroke.color = "#ff0000";
+    liveStroke.pts = [999, 999, 0.5];
+
+    // Render using snapshot
+    const blob = await renderSelectionToPng(snapshot.elements, snapshot.bounds, {
+      padding: 0,
+      scale: 1,
+    });
+
+    expect(blob.type).toBe("image/png");
+    // Verify translation used original bounds minX=10, minY=10, not 999
+    expect(ctx.translate).toHaveBeenCalledWith(-10, -10);
+    // Snapshot stroke retained original color #0000ff
+    expect(snapshot.elements.strokes[0].color).toBe("#0000ff");
   });
 });

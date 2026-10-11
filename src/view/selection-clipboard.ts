@@ -75,14 +75,15 @@ export async function renderSelectionToPng(
   if (!canvas) {
     throw new Error("Canvas is unavailable");
   }
-  canvas.width = Math.max(1, Math.round(w * scale));
-  canvas.height = Math.max(1, Math.round(h * scale));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    throw new Error("Canvas 2D context unavailable");
-  }
 
   try {
+    canvas.width = Math.max(1, Math.round(w * scale));
+    canvas.height = Math.max(1, Math.round(h * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Canvas 2D context unavailable");
+    }
+
     const pictures = elements.images ?? [];
     if (
       options.images &&
@@ -143,31 +144,45 @@ export async function renderSelectionToPng(
   }
 }
 
+/** Monotonically increasing ticket so older pending clipboard writes never overwrite newer ones. */
+let activeClipboardTicket = 0;
+
 /**
  * Write the rendered PNG alongside the FineNotes text marker to the system
  * clipboard. Must be invoked during the user gesture (before any await) so
  * engines such as iPadOS WebKit accept the clipboard item promise.
  *
- * If writing ClipboardItem fails (unsupported platform or permission denied),
- * falls back to writing just the plain text marker so internal paste still works.
+ * If writing ClipboardItem fails synchronously (unsupported platform or engine error),
+ * falls back immediately inside the user gesture to writing just the text marker.
+ * If rejected asynchronously (outside the gesture), delegates to `onFailed` rather than
+ * attempting an unprivileged delayed write that WebKit would reject or that would
+ * overwrite newer clipboard contents.
  */
-export function copySelectionToSystemClipboard(png: Promise<Blob>, marker: string): void {
+export function copySelectionToSystemClipboard(
+  png: Promise<Blob>,
+  marker: string,
+  onFailed?: (error: unknown) => void,
+): void {
+  const ticket = ++activeClipboardTicket;
   // Prevent unhandled rejections
   png.catch(() => undefined);
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    writeMarkerText(marker);
+    return;
+  }
   try {
-    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-      writeMarkerText(marker);
-      return;
-    }
     const item = new ClipboardItem({
       "image/png": png,
       "text/plain": new Blob([marker], { type: "text/plain" }),
     });
-    navigator.clipboard.write([item]).catch(() => {
-      writeMarkerText(marker);
+    navigator.clipboard.write([item]).catch((err) => {
+      if (ticket !== activeClipboardTicket) return;
+      onFailed?.(err);
     });
   } catch {
-    writeMarkerText(marker);
+    if (ticket === activeClipboardTicket) {
+      writeMarkerText(marker);
+    }
   }
 }
 

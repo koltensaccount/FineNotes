@@ -1170,7 +1170,7 @@ export class InkView extends TextFileView {
           return renderPdfRegion(structuredClone(page), region, this.pdfCache, this.images, this.toolState.pressureEnabled, this.settings.highlighterAlpha);
         },
         onCopyPdfClipboard: (png, marker) => copyPdfRegionToSystemClipboard(png, marker, message => new Notice(`FineNotes: ${message}`)),
-        onCopySelection: (png, marker) => copySelectionToSystemClipboard(png, marker),
+        onCopySelection: (png, marker) => copySelectionToSystemClipboard(png, marker, () => new Notice("FineNotes: System clipboard copy failed; use Paste inside FineNotes.")),
         onCopyImage: (image, marker) => copyPictureToSystemClipboard(this.app, image, marker),
         onPasteImage: (file, target) => void this.pastePictureFile(file, target),
         onNativePaste: (pasted) => {

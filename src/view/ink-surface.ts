@@ -5717,8 +5717,13 @@ export class InkSurface {
         textBoxes: group.textBoxes,
       };
       clipboard.put(elements, bounds);
+      const snapshot = clipboard.content;
+      if (!snapshot) {
+        this.syncActionBar();
+        return false;
+      }
       const marker = clipboardMarker(clipboard.version);
-      const png = renderSelectionToPng(elements, bounds, {
+      const png = renderSelectionToPng(snapshot.elements, snapshot.bounds, {
         pressure: this.toolState?.pressureEnabled !== false,
         highlighterAlpha: this.renderer?.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA,
         images: this.imagePainter,
