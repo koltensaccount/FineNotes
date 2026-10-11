@@ -1272,7 +1272,7 @@ export class InkSurface {
     outline.append(this.selectionPathEl);
     this.selectionFrameEl.append(outline);
     for (const handle of ["n", "s", "e", "w", "nw", "ne", "sw", "se", "start", "end"] as ShapeHandle[]) {
-      const button = this.selectionFrameEl.createEl("button", { cls: `goodobsidian-shape-handle is-${handle}`, attr: { "data-shape-handle": handle, "aria-label": `Shape ${handle} handle` } });
+      this.selectionFrameEl.createEl("button", { cls: `goodobsidian-shape-handle is-${handle}`, attr: { "data-shape-handle": handle, "aria-label": `Shape ${handle} handle` } });
       
     }
     this.selectionFrameEl.addEventListener("lostpointercapture", event => { if (event.pointerId === this.groupDrag?.pointerId && !this.selectionFrameEl.hasPointerCapture(event.pointerId) && (this.groupDrag.shape || this.groupDrag.ink)) this.endGroupDrag(false); });

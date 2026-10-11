@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PointerController, type PointerControllerCallbacks } from "../../src/input/pointer-controller";
-import { StrokeBuilder } from "../../src/ink/stroke-builder";
-import { presetGeometry } from "../../src/ink/shape-geometry";
 import { History } from "../../src/model/history";
 import { emptyDocument } from "../../src/model/document";
 import { StrokeIndex } from "../../src/view/stroke-index";

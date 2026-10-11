@@ -13,8 +13,6 @@
  * shown, not typed. (There is no eyedropper: iPad WebKit has no EyeDropper.)
  */
 
-import { setIcon } from "obsidian";
-
 import {
   COMMON_COLORS,
   type Hsv,

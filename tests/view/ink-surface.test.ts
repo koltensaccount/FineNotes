@@ -1,6 +1,5 @@
-import { presetGeometry, transformShape } from "../../src/ink/shape-geometry";
-import { rotateShape, adjustHeldShape } from "../../src/ink/shape-edit";
-import { constrainShape } from "../../src/ink/shape-constraint";
+import { presetGeometry } from "../../src/ink/shape-geometry";
+import { rotateShape } from "../../src/ink/shape-edit";
 /**
  * `src/view/ink-surface.ts` — characterisation of the parts of the surface
  * that can run without a DOM: the keyboard shortcuts, the pointer lines of
