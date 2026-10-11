@@ -376,3 +376,25 @@ describe("smoothLoop", () => {
     expect(square).toEqual(copy);
   });
 });
+
+describe("Any overlap selection", () => {
+  it("selects a tiny rectangle corner and a crossed stroke even with both endpoints outside", async () => {
+    const { strokeOverlapsLasso, polygonOf } = await import("../../src/canvas/lasso");
+    const corner=polygonOf([98,-2,102,-2,102,2,98,2])!;
+    expect(strokeOverlapsLasso({size:2,pts:[0,0,.5,100,0,.5,100,100,.5,0,100,.5,0,0,.5]},corner)).toBe(true);
+    expect(strokeOverlapsLasso({size:1,pts:[0,0,.5,200,0,.5]},corner)).toBe(true);
+  });
+  it("does not select empty space inside an outline's bounding box, but includes visible nib edges", async () => {
+    const { strokeOverlapsLasso, polygonOf } = await import("../../src/canvas/lasso");
+    const stroke={size:2,pts:[0,0,.5,100,0,.5,100,100,.5,0,100,.5,0,0,.5]};
+    expect(strokeOverlapsLasso(stroke,polygonOf([40,40,60,40,60,60,40,60])!)).toBe(false);
+    expect(strokeOverlapsLasso(stroke,polygonOf([40,.8,60,.8,60,3,40,3])!)).toBe(true);
+  });
+  it("uses rotated box edges and containment, not bounding-box overlap", async () => {
+    const { boxOverlapsLasso, polygonOf } = await import("../../src/canvas/lasso");
+    const box={x:0,y:0,w:100,h:100,rotation:Math.PI/4};
+    expect(boxOverlapsLasso(box,polygonOf([-20,-20,-10,-20,-10,-10,-20,-10])!)).toBe(false);
+    expect(boxOverlapsLasso(box,polygonOf([45,45,55,45,55,55,45,55])!)).toBe(true);
+    expect(boxOverlapsLasso(box,polygonOf([-50,-50,150,-50,150,150,-50,150])!)).toBe(true);
+  });
+});

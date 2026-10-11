@@ -32,6 +32,11 @@ export function shapeFrame(kind: ShapeKind, pts: readonly number[], angleHint?: 
     for (let i = 0; i < n * 3; i += 3) { const dx = pts[i] - x, dy = pts[i + 1] - y; xx += dx * dx; yy += dy * dy; xy += dx * dy; }
     angle = Math.abs(xx - yy) + Math.abs(xy) < 0.01 ? 0 : Math.atan2(2 * xy, xx - yy) / 2;
   }
+  if (kind === "rect" && angleHint === undefined && Math.abs(Math.sin(2 * angle)) < 1e-8) angle = 0;
+  if ((kind === "ellipse" || kind === "roundrect") && angleHint === undefined) {
+    // Width is the local horizontal axis, independent of which edge is longest.
+    angle -= Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+  }
   const c = Math.cos(angle), s = Math.sin(angle);
   let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
   for (let i = 0; i < pts.length; i += 3) {

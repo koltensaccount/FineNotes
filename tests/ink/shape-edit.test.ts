@@ -106,3 +106,24 @@ describe("new page-aligned creation and proportional outline scaling", () => {
     expect(scaledStrokeSize(3,NaN)).toBe(3); expect(scaledStrokeSize(3,10000)).toBe(1000); expect(scaledStrokeSize(3,.0001)).toBe(.1);
   });
 });
+
+describe("stable local dimensions", () => {
+  it.each(["ellipse","roundrect"] as const)("does not swap %s axes when height exceeds width", kind => {
+    const points=presetGeometry(kind,{x:0,y:0},{x:100,y:300},.5);
+    const frame=shapeFrame(kind,points)!;
+    expect(frame.w).toBeCloseTo(100,1); expect(frame.h).toBeCloseTo(300,1);
+    const resized=resizeShape(kind,points,frame,100,400);
+    const reopened=shapeFrame(kind,resized)!;
+    expect(reopened.w).toBeCloseTo(100,1); expect(reopened.h).toBeCloseTo(400,1);
+    expect(shapeFrame(kind,resized,reopened.angle)).toEqual(reopened);
+  });
+});
+
+it("measures an axis-aligned rectangle horizontally even when its first edge is vertical", () => {
+  const points=[0,0,.5,0,300,.5,100,300,.5,100,0,.5,0,0,.5];
+  const frame=shapeFrame("rect",points)!;
+  expect(frame.w).toBe(100); expect(frame.h).toBe(300); expect(frame.angle).toBe(0);
+  const changed=resizeShape("rect",points,frame,100,400);
+  expect(shapeFrame("rect",changed)!.h).toBe(400); expect(shapeFrame("rect",changed)!.w).toBe(100);
+  expect(points[4]).toBe(300);
+});

@@ -35,6 +35,8 @@ import { pickImageFile } from "./image-import";
 
 /** Options for placing a picture; every field is optional. */
 export interface InsertImageOptions {
+  /** A bounded source-rendered region PNG: retain its original pixels and PNG bytes. */
+  preservePng?: boolean;
   /** 0-based page to place it on. Default: the page in view. */
   pageIndex?: number;
   /** Stable page identity for asynchronous clipboard import. */

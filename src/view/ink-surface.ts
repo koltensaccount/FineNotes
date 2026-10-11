@@ -1,3 +1,4 @@
+import type { PdfRegion } from "./pdf-region-copy";
 import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
 import { adjustHeldShape, alignNewShape, scaledStrokeSize, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
 import { highlighterWetRuns } from "../ink/highlighter";
@@ -80,6 +81,9 @@ import {
   LassoPath,
   type Polygon,
   boxInLasso,
+  boxOverlapsLasso,
+  strokeOverlapsLasso,
+  lassoBehaviorOf,
   clampGroupDelta,
   lassoTakesStroke,
   polygonOf,
@@ -419,6 +423,8 @@ export interface InkSurfaceCallbacks {
    * page cleared, an undo or redo — and is due to be saved.
    */
   onChange: () => void;
+  onCopyPdfRegion?: (page: Page, region: PdfRegion) => Promise<File>;
+  onCopyPdfClipboard?: (png: Promise<File>, marker: string) => void;
   /** Something the host may display changed (stroke count, zoom, current page). */
   onStatus?: () => void;
   /**
@@ -890,6 +896,8 @@ export class InkSurface {
   // serves both. Frame, bar and menu are DOM over the page, like the text
   // boxes, so a finger works them as well as the Pencil.
   private selection: GroupSelection | null = null;
+  private pdfRegion: PdfRegion | null = null;
+  private pdfRegionCandidate: PdfRegion | null = null;
   /** A lasso has selected content; return only when its outside click dismisses it. */
   private selectionToolUsed = false;
   private lasso: LassoDraft | null = null;
@@ -1898,7 +1906,7 @@ export class InkSurface {
       return false;
     // Gone by other means (Delete, Cut, Undo): nothing is on screen to
     // dismiss, so this press is the lasso's again, as the toolbar shows.
-    if (!this.liveSelection() && !this.liveImageSelection()) {
+    if (!this.liveSelection() && !this.liveImageSelection() && !this.pdfRegion) {
       this.selectionToolUsed = false;
       return false;
     }
@@ -1943,7 +1951,7 @@ export class InkSurface {
       clipboard: () => this.clipboardKey(event),
       menuOpen: () => this.actionBar.isMenuOpen,
       imageSelected: () => this.liveImageSelection() !== null,
-      groupSelected: () => this.liveSelection() !== null,
+      groupSelected: () => this.liveSelection() !== null || !!this.pdfRegion,
       pressMenuOpen: () => this.pressMenu !== null,
       rowFitsPane: () => this.direction === "horizontal" && this.scroller.bounds.maxY <= 1,
     });
@@ -4958,21 +4966,30 @@ export class InkSurface {
     if (!page) return;
     const filter = lassoFilterFor(this.toolState);
     const near = this.strokeIndex.within(page.id, poly.bounds);
+    const overlap = lassoBehaviorOf(this.toolState.lassoBehavior) === "overlap";
     this.select(page.id, {
       strokes: page.strokes.filter(
         (stroke) =>
-          near.has(stroke.id) && lassoTakesStroke(stroke, filter) && strokeInLasso(stroke, poly),
+          (overlap || near.has(stroke.id)) && lassoTakesStroke(stroke, filter) && (overlap ? strokeOverlapsLasso(stroke, poly, this.toolState.pressureEnabled !== false) : strokeInLasso(stroke, poly)),
       ),
       // A locked picture is never picked up (until it is unlocked).
       images: filter.images
-        ? page.images.filter((image) => image.locked !== true && boxInLasso(image, poly))
+        ? page.images.filter((image) => image.locked !== true && (overlap ? boxOverlapsLasso(image, poly) : boxInLasso(image, poly)))
         : [],
       textBoxes: filter.textBoxes
         ? page.textBoxes.filter((textBox) =>
-            boxInLasso(this.textBoxFrameOf(page.id, textBox), poly),
+            (overlap ? boxOverlapsLasso(this.textBoxFrameOf(page.id, textBox), poly) : boxInLasso(this.textBoxFrameOf(page.id, textBox), poly)),
           )
         : [],
     });
+    if (page.backdrop.kind === "pdf" && this.callbacks.onCopyPdfRegion) {
+      const b = poly.bounds;
+      if (b.maxX > b.minX && b.maxY > b.minY) {
+        this.pdfRegionCandidate = { pageId: page.id, polygon: { pts: [...poly.pts], bounds: { ...b } }, rectangular: lassoModeFor(this.toolState) === "rect" };
+        if (!this.liveSelection() && !this.liveImageSelection()) this.pdfRegion = this.pdfRegionCandidate;
+        this.syncSelectionOverlay();
+      }
+    }
   }
 
   /**
@@ -5112,13 +5129,16 @@ export class InkSurface {
   /** Let go of the lasso selection, if any, and of the tap-and-hold bar. */
   private clearSelection(): void {
     this.cancelGroupDrag();
+    const hadRegion = !!this.pdfRegion;
+    this.pdfRegion = null; this.pdfRegionCandidate = null;
     const pressed = this.pressMenu !== null;
     this.pressMenu = null;
     this.selectionOutline = null;
     this.shapeMode = "resize";
     this.selectedShapeFrame = null;
     if (!this.selection) {
-      if (pressed) this.syncActionBar();
+      if (hadRegion) this.syncSelectionOverlay();
+      else if (pressed) this.syncActionBar();
       return;
     }
     this.selection = null;
@@ -5213,6 +5233,21 @@ export class InkSurface {
   }
 
   private syncSelectionOverlay(): void {
+    const region = this.pdfRegion;
+    if (region) {
+      const box = this.boxForPage(region.pageId), b = region.polygon.bounds, scale = this.unitScale;
+      this.selectionFrameEl.toggleClass("is-hidden", !box);
+      this.selectionFrameEl.toggleClass("is-shape", false);
+      for (const button of this.selectionFrameEl.querySelectorAll<HTMLElement>(".goodobsidian-shape-handle")) button.classList.add("is-hidden");
+      if (box) {
+        this.selectionFrameEl.setCssStyles({ left: `${(box.x+b.minX)*scale}px`, top: `${(box.y+b.minY)*scale}px`, width: `${(b.maxX-b.minX)*scale}px`, height: `${(b.maxY-b.minY)*scale}px`, transform: "" });
+        const pts=region.polygon.pts;
+        const path=pts.reduce((out,v,i)=>i%2 ? out : out+`${i===0?"M":"L"}${(v-b.minX)*scale},${(pts[i+1]-b.minY)*scale} `,"")+"Z";
+        this.selectionPathEl.setAttribute("d",path);
+        this.selectionFrameEl.addClass("has-outline");
+      }
+      this.syncActionBar(); return;
+    }
     const sel = this.liveSelection();
     const box = sel ? this.boxForPage(sel.pageId) : null;
     const bounds = sel && box ? this.groupBounds(sel) : null;
@@ -5270,24 +5305,27 @@ export class InkSurface {
     const group = crop ? null : this.liveSelection();
     const image = crop || group ? null : this.liveImageSelection();
     const press = crop || group || image ? null : this.pressMenu;
-    const pageId = crop?.pageId ?? group?.pageId ?? image?.pageId ?? press?.pageId ?? "";
+    const pageId = this.pdfRegion?.pageId ?? crop?.pageId ?? group?.pageId ?? image?.pageId ?? press?.pageId ?? "";
     const box = this.boxForPage(pageId);
     const dragging = this.groupDrag?.lifted === true || this.imageDrag?.lifted === true;
     let bounds: Bounds | null = null;
     let clearAbove = SELECTION_PAD_PX;
     let clearBelow = SELECTION_PAD_PX;
-    if (crop) {
+    if (this.pdfRegion) {
+      bounds = this.pdfRegion.polygon.bounds;
+      this.actionBar.setActions([{ id: "copy-pdf-region", icon: "copy", label: "Copy", group: "edit", bar: true, showLabel: true, run: () => this.copySelection() }, this.pasteAction(this.pdfRegion.pageId)]);
+    } else if (crop) {
       bounds = imageBounds(crop.full);
       clearAbove = clearBelow = IMAGE_CHROME_CLEAR_PX;
       this.actionBar.setActions(this.cropActions(crop));
     } else if (group) {
       bounds = this.groupBounds(group);
-      this.actionBar.setActions(this.groupActions(group));
+      this.actionBar.setActions(this.withPdfRegionAction(this.groupActions(group)));
     } else if (image) {
       // The picture and its rotate knob, wherever a turn has put the knob.
       bounds = this.imageChromeBounds(image.image);
       clearAbove = clearBelow = IMAGE_CHROME_CLEAR_PX;
-      this.actionBar.setActions(this.imageActions(image));
+      this.actionBar.setActions(this.withPdfRegionAction(this.imageActions(image)));
     } else if (press) {
       bounds = { minX: press.at.x, minY: press.at.y, maxX: press.at.x, maxY: press.at.y };
       // Clear of the pen tip or the fingertip resting on that spot.
@@ -5629,11 +5667,31 @@ export class InkSurface {
 
   /** Whether anything is selected that Cut or Copy could take. */
   private hasSelection(): boolean {
-    return this.liveSelection() !== null || this.liveImageSelection() !== null;
+    return this.liveSelection() !== null || this.liveImageSelection() !== null || !!this.pdfRegion;
+  }
+
+  private withPdfRegionAction(actions: SelectionAction[]): SelectionAction[] {
+    if (this.pdfRegionCandidate) actions.push({ id: "capture-pdf-region", icon: "scan", label: "Copy PDF region", group: "copy", run: () => {
+      const region=this.pdfRegionCandidate;
+      if (!region) return;
+      this.dropSelection(); this.pdfRegion=region; this.pdfRegionCandidate=region;
+      this.syncSelectionOverlay(); this.copySelection();
+    } });
+    return actions;
   }
 
   /** Copy the selection. A lone picture is offered to the host for the system clipboard too. */
   private copySelection(): boolean {
+    if (this.pdfRegion) {
+      const region=structuredClone(this.pdfRegion), page=this.doc.pages.find(p=>p.id===region.pageId);
+      if (!page || !this.callbacks.onCopyPdfRegion) return false;
+      const png=this.callbacks.onCopyPdfRegion(page,region);
+      clipboard.putRegion(png);
+      const version=clipboard.version;
+      this.callbacks.onCopyPdfClipboard?.(png,clipboardMarker(version));
+      void png.catch(error=>{ if(clipboard.version===version) clipboard.clear(); new Notice(`FineNotes: PDF region copy failed — ${error instanceof Error ? error.message : String(error)}`); this.syncActionBar(); });
+      this.syncActionBar(); return true;
+    }
     const group = this.liveSelection();
     if (group) {
       const bounds = this.groupBounds(group);
@@ -5683,6 +5741,15 @@ export class InkSurface {
    * not show them (no image painter set). Returns whether anything was pasted.
    */
   private paste(target: { pageId?: string; at?: Pt } = {}): boolean {
+    if (this.callbacks.isLocked?.()) return false;
+    const png=clipboard.regionPng;
+    if (png && this.imagesShown && this.callbacks.onPasteImage) {
+      const host=this.callbacks.onPasteImage;
+      const doc=this.doc;
+      const pageId=target.pageId ?? this.pdfRegion?.pageId ?? this.doc.pages[this.pageIndex]?.id;
+      void png.then(file=>{ if(this.doc===doc && !this.callbacks.isLocked?.() && doc.pages.some(p=>p.id===pageId)) host(file,{...target,pageId}); }).catch(()=>undefined);
+      return true;
+    }
     const entry = clipboard.content;
     if (!entry || !clipboard.canPaste(this.imagesShown)) return false;
     if (this.callbacks.isLocked?.()) return false;
@@ -5735,7 +5802,7 @@ export class InkSurface {
       if (this.cropping || !this.hasSelection()) return false;
       event.preventDefault();
       if (key === "c") this.copySelection();
-      else this.cutSelection();
+      else if (!this.pdfRegion) this.cutSelection();
       return true;
     }
     if (key !== "v" || this.cropping) return false;
@@ -5804,7 +5871,8 @@ export class InkSurface {
     if (!this.pasteGate.claim(request.ticket)) return false;
     request.completed = Date.now();
     if (this.callbacks.isLocked?.()) return true;
-    if (data.text === clipboardMarker(clipboard.version) && this.paste(request.target)) return true;
+    const ownedRegion = clipboard.regionPng && !clipboard.leftSinceCopy && !data.text && data.file?.type === "image/png";
+    if ((data.text === clipboardMarker(clipboard.version) || ownedRegion) && this.paste(request.target)) return true;
     if (data.file && this.imagesShown && this.callbacks.onPasteImage) {
       this.callbacks.onPasteImage(data.file, request.target);
       return true;
@@ -6095,6 +6163,10 @@ export class InkSurface {
    * share their files), as one undo step, and select the copy — GoodNotes'
    * Duplicate.
    */
+  private activateDuplicateSelection(): void {
+    if (this.toolState.tool !== "select") { this.setTool("select"); this.callbacks.onToolChange?.("select"); }
+    this.cancelPendingReturn();
+  }
   private duplicateSelection(): void {
     const sel = this.liveSelection();
     const box = sel ? this.boxForPage(sel.pageId) : null;
@@ -6107,6 +6179,7 @@ export class InkSurface {
     this.strokeIndex.rebuild(this.doc.pages);
     this.renderDry();
     this.syncTextBoxes();
+    this.activateDuplicateSelection();
     this.select(sel.pageId, copies);
     this.changed();
   }
@@ -6458,6 +6531,7 @@ export class InkSurface {
     if (!sel || !page || this.callbacks.isLocked?.()) return false;
     const copy = duplicateImage(this.doc, page.geometry, sel.image);
     this.applyCommand(new InsertImage(page.id, copy));
+    this.activateDuplicateSelection();
     this.setImageSelection(page.id, copy);
     return true;
   }

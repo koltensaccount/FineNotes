@@ -3,6 +3,8 @@ import type { Bounds, PageGeometry } from "../model/document";
 
 export interface PdfRenderArea {
   geometry: PageGeometry;
+  /** Source PDF DPI for clipboard capture, independent of notebook zoom. */
+  sourceDpi?: number;
   /** Absent for a whole-page thumbnail; supplied for the visible area of a settled, deeply zoomed page. */
   region?: Bounds;
 }
@@ -47,12 +49,12 @@ export function planPdfRaster(
   if (!(w > 0 && h > 0 && Number.isFinite(w * h))) throw new Error("PDF patch has no usable size");
   const detail = area.region !== undefined;
   const scale = Math.min(
-    deviceScale,
+    area.sourceDpi ? area.sourceDpi / (72 * fit) : deviceScale,
     (detail ? DETAIL_MAX_EDGE : MAX_PATCH_EDGE) / Math.max(w, h),
     Math.sqrt((detail ? DETAIL_MAX_PIXELS : MAX_PATCH_PIXELS) / (w * h)),
   );
-  const width = Math.max(1, Math.ceil(w * scale));
-  const height = Math.max(1, Math.ceil(h * scale));
+  const width = Math.max(1, (area.sourceDpi ? Math.floor : Math.ceil)(w * scale));
+  const height = Math.max(1, (area.sourceDpi ? Math.floor : Math.ceil)(h * scale));
   return {
     sourceScale: fit * scale,
     width,

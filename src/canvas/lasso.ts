@@ -19,6 +19,7 @@
  */
 
 import { type Bounds, type Stroke, type TextBoxElement, POINT_STRIDE } from "../model/document";
+import { radiusAt, penOptions } from "../ink/freehand";
 import type { ImageTransform } from "../model/commands";
 import { fromImageLocal, imageBounds, imageCentre } from "./image-geometry";
 
@@ -28,6 +29,9 @@ export interface Pt {
 }
 
 /** GoodNotes' two lasso types: drawn freehand (the default), or dragged out as a rectangle. */
+export type LassoBehavior = "default" | "overlap";
+export function lassoBehaviorOf(raw: unknown): LassoBehavior { return raw === "overlap" ? "overlap" : "default"; }
+
 export type LassoMode = "freehand" | "rect";
 
 export const LASSO_MODES: readonly LassoMode[] = ["freehand", "rect"];
@@ -423,4 +427,43 @@ export function textBoxFrame(box: TextBoxElement, measuredHeight: number): BoxFr
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/** Segment distance also admits visible nib edges without selecting empty bounding-box space. */
+function segmentDistance(a: Pt, b: Pt, c: Pt, d: Pt): number {
+  const cross = (p: Pt, q: Pt, t: Pt) => (q.x-p.x)*(t.y-p.y)-(q.y-p.y)*(t.x-p.x);
+  const dist = (p: Pt, q: Pt, t: Pt) => {
+    const dx=t.x-q.x, dy=t.y-q.y, den=dx*dx+dy*dy;
+    const u=den ? Math.max(0,Math.min(1,((p.x-q.x)*dx+(p.y-q.y)*dy)/den)) : 0;
+    return Math.hypot(p.x-q.x-u*dx,p.y-q.y-u*dy);
+  };
+  if (Math.max(a.x,b.x)>=Math.min(c.x,d.x) && Math.max(c.x,d.x)>=Math.min(a.x,b.x) && Math.max(a.y,b.y)>=Math.min(c.y,d.y) && Math.max(c.y,d.y)>=Math.min(a.y,b.y) && cross(a,b,c)*cross(a,b,d)<=0 && cross(c,d,a)*cross(c,d,b)<=0) return 0;
+  return Math.min(dist(a,c,d),dist(b,c,d),dist(c,a,b),dist(d,a,b));
+}
+function edgeOverlaps(a: Pt, b: Pt, poly: Polygon, radius=0): boolean {
+  const bounds=poly.bounds;
+  if (Math.max(a.x,b.x)+radius<bounds.minX || Math.min(a.x,b.x)-radius>bounds.maxX || Math.max(a.y,b.y)+radius<bounds.minY || Math.min(a.y,b.y)-radius>bounds.maxY) return false;
+  if (pointInPolygon(a.x,a.y,poly) || pointInPolygon(b.x,b.y,poly)) return true;
+  const p=poly.pts;
+  for(let i=0,j=p.length-2;i<p.length;j=i,i+=2) if(segmentDistance(a,b,{x:p[j],y:p[j+1]},{x:p[i],y:p[i+1]})<=radius+1e-8) return true;
+  return false;
+}
+export function strokeOverlapsLasso(stroke: Pick<Stroke,"pts"|"size"> & Partial<Pick<Stroke,"tool"|"shape">>, poly: Polygon, pressure=true): boolean {
+  const bounds=pointsBounds(stroke.pts), variable=pressure && stroke.tool!=="highlighter" && !stroke.shape, pen=penOptions(stroke.size,variable), r=radiusAt(variable?1:.5,pen);
+  if(!bounds || bounds.maxX+r<poly.bounds.minX || bounds.minX-r>poly.bounds.maxX || bounds.maxY+r<poly.bounds.minY || bounds.minY-r>poly.bounds.maxY) return false;
+  const p=stroke.pts;
+  for(let i=0;i+2<p.length;i+=3) {
+    const j=Math.max(0,i-3);
+    if(edgeOverlaps({x:p[j],y:p[j+1]},{x:p[i],y:p[i+1]},poly,Math.max(radiusAt(variable?p[j+2]:.5,pen),radiusAt(variable?p[i+2]:.5,pen)))) return true;
+  }
+  return false;
+}
+export function boxOverlapsLasso(box: ImageTransform, poly: Polygon): boolean {
+  const b=imageBounds(box);
+  if(b.maxX<poly.bounds.minX || b.minX>poly.bounds.maxX || b.maxY<poly.bounds.minY || b.minY>poly.bounds.maxY) return false;
+  const corners=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,y])=>fromImageLocal(box,{x:x*box.w/2,y:y*box.h/2}));
+  for(let i=0;i<4;i++) if(edgeOverlaps(corners[i],corners[(i+1)%4],poly)) return true;
+  const rectangle=polygonOf(corners.flatMap(p=>[p.x,p.y]))!;
+  for(let i=0;i<poly.pts.length;i+=2) if(pointInPolygon(poly.pts[i],poly.pts[i+1],rectangle)) return true;
+  return false;
 }

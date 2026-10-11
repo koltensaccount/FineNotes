@@ -28,7 +28,7 @@ import {
   PALETTE,
   SIZES,
 } from "./constants";
-import { DEFAULT_LASSO_FILTER, type LassoFilter, type LassoMode } from "./canvas/lasso";
+import { DEFAULT_LASSO_FILTER, type LassoFilter, type LassoMode, type LassoBehavior } from "./canvas/lasso";
 import { DEFAULT_PEN_GESTURES, type PenGestures } from "./ink/pen-gestures";
 import type { EraserFilter } from "./ink/stroke-eraser";
 import { DEFAULT_SHAPE_COLOR } from "./model/colors";
@@ -67,6 +67,7 @@ export interface GoodObsidianSettings {
   eraserFilter: EraserFilter;
   /** Freehand or rectangular lasso (0.5). Checked where it is read. */
   lassoMode: LassoMode;
+  lassoBehavior: LassoBehavior;
   /** What the lasso picks up (0.5). May hold anything; checked where it is read. */
   lassoFilter: LassoFilter;
   /** 0–1. The settings tab shows it as a percentage. */
@@ -175,6 +176,7 @@ export const DEFAULT_SETTINGS: GoodObsidianSettings = {
   eraserSize: DEFAULT_ERASER_SIZE,
   eraserFilter: "all",
   lassoMode: "freehand",
+  lassoBehavior: "default",
   lassoFilter: { ...DEFAULT_LASSO_FILTER },
   highlighterAlpha: DEFAULT_HIGHLIGHTER_ALPHA,
   paperWidth: DEFAULT_PAPER_WIDTH,

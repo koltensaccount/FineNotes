@@ -398,6 +398,7 @@ function onTap(button: HTMLButtonElement, action: () => void): void {
   });
   button.addEventListener("pointerup", (event) => {
     event.stopPropagation();
+    event.preventDefault();
     if (armed !== event.pointerId) return;
     armed = null;
     if (!button.disabled) action();

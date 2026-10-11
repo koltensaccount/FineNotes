@@ -134,6 +134,8 @@ import {
   LASSO_MODES,
   type LassoFilter,
   type LassoMode,
+  type LassoBehavior,
+  lassoBehaviorOf,
   lassoFilterOf,
   lassoModeOf,
 } from "../canvas/lasso";
@@ -305,6 +307,7 @@ export interface ToolbarState {
   eraserFilter?: EraserFilter;
   /** The lasso's type. `undefined` counts as freehand. */
   lassoMode?: LassoMode;
+  lassoBehavior?: LassoBehavior;
   /** What the lasso picks up. `undefined` counts as everything. */
   lassoFilter?: LassoFilter;
   /** The Text tool's style for new boxes. `undefined` counts as {@link DEFAULT_TEXT_STYLE}. */
@@ -344,7 +347,7 @@ export interface ToolbarCallbacks {
   /** "Erase highlighter only" / "Erase pen only" changed. Hosts persist it. */
   onEraserFilterChange?: (filter: EraserFilter) => void;
   /** The lasso's type, or what it picks up, changed. Hosts persist it. */
-  onLassoChange?: (mode: LassoMode, filter: LassoFilter) => void;
+  onLassoChange?: (mode: LassoMode, filter: LassoFilter, behavior: LassoBehavior) => void;
   /** Add a page; `anchor` is the button, for a popover to hang from. */
   onAddPage?: (anchor: HTMLElement) => void;
   onToggleThumbnails?: () => void;
@@ -1371,6 +1374,14 @@ export class Toolbar {
       });
     }
 
+    body.createDiv({ cls: "goodobsidian-popover-label", text: "Selection behavior" });
+    const behavior = body.createDiv({ cls: "goodobsidian-lasso-types" });
+    for (const [value, label] of [["default", "Default"], ["overlap", "Any overlap"]] as const) {
+      const button = behavior.createEl("button", { cls: "goodobsidian-lasso-type clickable-icon", text: label });
+      const active = lassoBehaviorOf(this.state.lassoBehavior) === value;
+      button.toggleClass("is-active", active); button.setAttribute("aria-pressed", String(active));
+      button.addEventListener("click", () => { this.state.lassoBehavior = value; this.saveLasso(); this.popoverRender?.(); });
+    }
     body.createDiv({ cls: "goodobsidian-popover-label", text: "What to include in the selection" });
     const list = body.createDiv({ cls: "goodobsidian-switch-list" });
     const filter = lassoFilterFor(this.state);
@@ -1384,7 +1395,7 @@ export class Toolbar {
   }
 
   private saveLasso(): void {
-    this.callbacks.onLassoChange?.(lassoModeFor(this.state), lassoFilterFor(this.state));
+    this.callbacks.onLassoChange?.(lassoModeFor(this.state), lassoFilterFor(this.state), lassoBehaviorOf(this.state.lassoBehavior));
   }
 
   /**

@@ -436,6 +436,13 @@ export class PdfBackdropCache {
     this.drain();
   }
 
+  /** A one-shot source render: never substitutes a viewport thumbnail or retains capture pixels. */
+  async captureRegion(path: string, page: number, area: PdfRenderArea): Promise<PdfEntry> {
+    if (this.destroyed) return { ok: false, reason: "PDF cache closed" };
+    try { return await this.rasterise(path, page, 1, area); }
+    catch (error) { return { ok: false, reason: errorMessage(error) }; }
+  }
+
   /** Cached entry, rasterising first if necessary. Never rejects. */
   resolve(
     path: string,

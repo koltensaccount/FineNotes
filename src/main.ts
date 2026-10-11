@@ -733,8 +733,9 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   /** Remember the lasso's type and what it picks up, for the next session. */
-  saveLasso(mode: LassoMode, filter: LassoFilter): void {
+  saveLasso(mode: LassoMode, filter: LassoFilter, behavior: import("./canvas/lasso").LassoBehavior = "default"): void {
     this.settings.lassoMode = mode;
+    this.settings.lassoBehavior = behavior;
     this.settings.lassoFilter = { ...filter };
     void this.saveSettings();
   }

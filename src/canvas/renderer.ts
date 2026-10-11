@@ -1308,7 +1308,7 @@ function paintStroke(
 }
 
 /** Trace one stroke from its points and paint it, in whatever space `ctx` is in. */
-function fillStroke(
+export function fillStroke(
   ctx: CanvasRenderingContext2D,
   points: number[],
   style: StrokeStyle,

@@ -102,6 +102,7 @@ import {
   prepareImageBytes,
   saveImageAttachment,
 } from "./image-import";
+import { renderPdfRegion, copyPdfRegionToSystemClipboard, isPdfRegionFile } from "./pdf-region-copy";
 import { copyPictureToSystemClipboard } from "./picture-clipboard";
 import {
   ImageMenuPopover,
@@ -154,7 +155,7 @@ import { DEFAULT_SHAPE_COLOR, parseHexColor, recentColorsOf } from "../model/col
 import { AddPagePopover, TemplatePickerModal } from "./template-picker";
 import { CoverPopover } from "./cover-picker";
 import { paperTheme } from "../canvas/backdrop";
-import { lassoFilterOf, lassoModeOf } from "../canvas/lasso";
+import { lassoFilterOf, lassoModeOf, lassoBehaviorOf } from "../canvas/lasso";
 import { eraserFilterOf } from "../ink/stroke-eraser";
 import {
   type PageAction,
@@ -212,6 +213,7 @@ function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
     eraserSize: s.eraserSize,
     eraserFilter: eraserFilterOf(s.eraserFilter),
     lassoMode: lassoModeOf(s.lassoMode),
+    lassoBehavior: lassoBehaviorOf(s.lassoBehavior),
     lassoFilter: lassoFilterOf(s.lassoFilter),
     textStyle: sanitizeTextStyle(s.textStyle),
     textPinned: s.textToolPinned === true,
@@ -1036,7 +1038,7 @@ export class InkView extends TextFileView {
         onPenTypeChange: () => this.toolbar?.syncActive(),
         onEraserChange: (mode, size) => this.plugin.saveEraser(mode, size),
         onEraserFilterChange: (filter) => this.plugin.saveEraserFilter(filter),
-        onLassoChange: (mode, filter) => this.plugin.saveLasso(mode, filter),
+        onLassoChange: (mode, filter, behavior) => this.plugin.saveLasso(mode, filter, behavior),
         onToggleThumbnails: () => this.toggleSidebar(),
         onTextStyle: (patch) => this.surface?.applyTextStyle(patch),
         onTextList: (kind) => void this.surface?.applyTextList(kind),
@@ -1162,6 +1164,11 @@ export class InkView extends TextFileView {
         onTextEditing: (style) => this.toolbar?.setTextTarget(style),
         // A copied picture also goes to the system clipboard, for other apps;
         // one pasted from there comes in as any other picture does.
+        onCopyPdfRegion: (page, region) => {
+          if (!this.pdfCache) return Promise.reject(new Error("PDF renderer unavailable"));
+          return renderPdfRegion(structuredClone(page), region, this.pdfCache, this.images, this.toolState.pressureEnabled, this.settings.highlighterAlpha);
+        },
+        onCopyPdfClipboard: (png, marker) => copyPdfRegionToSystemClipboard(png, marker, message => new Notice(`FineNotes: ${message}`)),
         onCopyImage: (image, marker) => copyPictureToSystemClipboard(this.app, image, marker),
         onPasteImage: (file, target) => void this.pastePictureFile(file, target),
         onNativePaste: (pasted) => {
@@ -2383,7 +2390,9 @@ export class InkView extends TextFileView {
     if (!note || !surface) return null;
     const progress = new Notice("FineNotes: adding the picture…", 0);
     try {
-      const prepared = await prepareImageBytes(bytes, mime);
+      const prepared = options.preservePng && mime === "image/png"
+        ? { bytes, mime, ext: "png", ...await measureImage(bytes, mime) }
+        : await prepareImageBytes(bytes, mime);
       const file = await saveImageAttachment(
         this.app,
         prepared,
@@ -2426,6 +2435,7 @@ export class InkView extends TextFileView {
       pageIndex,
       pageId: target.pageId,
       at: target.at,
+      ...(isPdfRegionFile(file) ? { preservePng: true } : {}),
     });
   }
 

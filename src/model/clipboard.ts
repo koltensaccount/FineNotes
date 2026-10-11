@@ -54,11 +54,15 @@ export interface ClipboardEntry {
 
 export class InkClipboard {
   private entry: ClipboardEntry | null = null;
+  private png: Promise<File> | null = null;
+  get regionPng(): Promise<File> | null { return this.png; }
+  putRegion(png: Promise<File>): void { this.clear(); this.png=png; }
   private left = false;
   private stamp = 0;
 
   /** Hold deep copies of `elements`. An empty selection clears the clipboard. */
   put(elements: PageElements, bounds: Bounds): void {
+    this.png = null;
     this.left = false;
     this.stamp++;
     if (isEmptySelection(elements)) {
@@ -92,7 +96,7 @@ export class InkClipboard {
    */
   canPaste(withImages = true): boolean {
     const e = this.entry?.elements;
-    if (!e) return false;
+    if (!e) return withImages && this.png !== null;
     return e.strokes.length > 0 || e.textBoxes.length > 0 || (withImages && e.images.length > 0);
   }
 
@@ -102,7 +106,7 @@ export class InkClipboard {
    * system clipboard is now likely the fresher of the two.
    */
   noteWindowLeft(): void {
-    if (this.entry) this.left = true;
+    if (this.entry || this.png) this.left = true;
   }
 
   /** Whether the window was left since the last copy (see {@link noteWindowLeft}). */
@@ -112,6 +116,7 @@ export class InkClipboard {
 
   clear(): void {
     this.entry = null;
+    this.png = null;
     this.left = false;
     this.stamp++;
   }
