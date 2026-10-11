@@ -222,4 +222,54 @@ describe("selection refinements integration", () => {
     history.redo(doc as never);
     expect(shapeFrame("ellipse", stroke.pts)!.h).toBeCloseTo(400, 1);
   });
+  it("copies drawing selection with rendered PNG and marker, and internal paste restores native editable strokes", async () => {
+    const { s, page } = fixture();
+    const stroke = {
+      id: "orig-stroke",
+      tool: "pen" as const,
+      color: "#ff0055",
+      size: 3,
+      pts: [100, 100, 0.5, 200, 200, 0.5],
+    };
+    page.strokes.push(stroke);
+    const selection = {
+      pageId: page.id,
+      strokes: [stroke],
+      images: [],
+      textBoxes: [],
+    };
+    s.selection = selection;
+    s.groupBounds = () => ({ minX: 100, minY: 100, maxX: 200, maxY: 200 });
+    s.pageLayout = { boxes: [{ index: 0, id: page.id }] };
+    s.visibleRegion = () => ({ minX: 0, minY: 0, maxX: 800, maxY: 1000 });
+    s.dropSelection = vi.fn();
+    s.select = vi.fn((pageId, elements) => {
+      s.selection = { pageId, ...elements };
+    });
+
+    const onCopySelection = vi.fn();
+    s.callbacks = { onCopySelection };
+
+    expect(call(s, "copySelection")).toBe(true);
+    expect(onCopySelection).toHaveBeenCalledOnce();
+    const [pngPromise, marker] = onCopySelection.mock.calls[0];
+    expect(marker).toMatch(/^FineNotes selection:/);
+    expect(pngPromise).toBeInstanceOf(Promise);
+
+    const gate = new PasteGate();
+    s.pasteGate = gate;
+    const request = {
+      ticket: gate.begin(),
+      target: { pageId: page.id },
+      completed: 0,
+    };
+    const pasted = call(s, "consumePaste", request, { file: null, text: marker });
+    expect(pasted).toBe(true);
+    expect(page.strokes).toHaveLength(2);
+    const copy = page.strokes[1];
+    expect(copy.id).not.toBe(stroke.id);
+    expect(copy.color).toBe(stroke.color);
+    expect(copy.size).toBe(stroke.size);
+    expect(s.select).toHaveBeenCalledWith(page.id, expect.objectContaining({ strokes: [copy] }));
+  });
 });

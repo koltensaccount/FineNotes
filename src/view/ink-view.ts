@@ -104,6 +104,7 @@ import {
 } from "./image-import";
 import { renderPdfRegion, copyPdfRegionToSystemClipboard, isPdfRegionFile } from "./pdf-region-copy";
 import { copyPictureToSystemClipboard } from "./picture-clipboard";
+import { copySelectionToSystemClipboard } from "./selection-clipboard";
 import {
   ImageMenuPopover,
   type ImageMenuContext,
@@ -1169,6 +1170,7 @@ export class InkView extends TextFileView {
           return renderPdfRegion(structuredClone(page), region, this.pdfCache, this.images, this.toolState.pressureEnabled, this.settings.highlighterAlpha);
         },
         onCopyPdfClipboard: (png, marker) => copyPdfRegionToSystemClipboard(png, marker, message => new Notice(`FineNotes: ${message}`)),
+        onCopySelection: (png, marker) => copySelectionToSystemClipboard(png, marker),
         onCopyImage: (image, marker) => copyPictureToSystemClipboard(this.app, image, marker),
         onPasteImage: (file, target) => void this.pastePictureFile(file, target),
         onNativePaste: (pasted) => {

@@ -1,4 +1,5 @@
 import type { PdfRegion } from "./pdf-region-copy";
+import { renderSelectionToPng, copySelectionToSystemClipboard } from "./selection-clipboard";
 import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
 import { adjustHeldShape, alignNewShape, scaledStrokeSize, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
 import { highlighterWetRuns } from "../ink/highlighter";
@@ -12,7 +13,6 @@ import {
   clipboardMarker,
   imageFileOf,
   readSystemClipboard,
-  writeSelectionMarker,
 } from "./clipboard-read";
 import { bindMultiTouchInput } from "./multitouch-input";
 import { bindScrollThumb } from "./scroll-thumb-drag";
@@ -57,6 +57,7 @@ import type { PdfRenderArea } from "../canvas/pdf-raster";
 
 import { Notice, Platform, setIcon } from "obsidian";
 import {
+  DEFAULT_HIGHLIGHTER_ALPHA,
   FALLBACK_PRESSURE,
   HOLD_MS,
   HOLD_RADIUS,
@@ -425,6 +426,7 @@ export interface InkSurfaceCallbacks {
   onChange: () => void;
   onCopyPdfRegion?: (page: Page, region: PdfRegion) => Promise<File>;
   onCopyPdfClipboard?: (png: Promise<File>, marker: string) => void;
+  onCopySelection?: (png: Promise<Blob>, marker: string) => void;
   /** Something the host may display changed (stroke count, zoom, current page). */
   onStatus?: () => void;
   /**
@@ -949,6 +951,7 @@ export class InkSurface {
   private lastPastePoint: ClipboardTarget = {};
   /** Whether a host set an image painter: without one, pictures are neither drawn nor pasted. */
   private imagesShown = false;
+  private imagePainter: ImagePainter | null = null;
   /** A finger went down and could still turn out to be a tap. */
   private fingerTap: { x: number; y: number; t: number } | null = null;
 
@@ -3101,6 +3104,7 @@ export class InkSurface {
    * Until one is set, images are not drawn.
    */
   setImagePainter(painter: ImagePainter | null): void {
+    this.imagePainter = painter;
     this.imagesShown = painter !== null;
     this.renderer?.setImagePainter(painter);
     this.requestFrame();
@@ -5707,15 +5711,25 @@ export class InkSurface {
     if (group) {
       const bounds = this.groupBounds(group);
       if (!bounds) return false;
-      clipboard.put(
-        {
-          strokes: group.strokes,
-          images: group.images.filter((image) => image.locked !== true),
-          textBoxes: group.textBoxes,
-        },
-        bounds,
-      );
-      writeSelectionMarker(clipboard.version);
+      const elements: PageElements = {
+        strokes: group.strokes,
+        images: group.images.filter((image) => image.locked !== true),
+        textBoxes: group.textBoxes,
+      };
+      clipboard.put(elements, bounds);
+      const marker = clipboardMarker(clipboard.version);
+      const png = renderSelectionToPng(elements, bounds, {
+        pressure: this.toolState?.pressureEnabled !== false,
+        highlighterAlpha: this.renderer?.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA,
+        images: this.imagePainter,
+      });
+      // Nobody else may be left holding an unhandled rejection.
+      png.catch(() => undefined);
+      if (this.callbacks.onCopySelection) {
+        this.callbacks.onCopySelection(png, marker);
+      } else {
+        copySelectionToSystemClipboard(png, marker);
+      }
       this.syncActionBar();
       return true;
     }
