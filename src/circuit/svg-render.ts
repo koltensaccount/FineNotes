@@ -12,6 +12,8 @@ import {
   type KirchhoffCircuit,
   getComponentPortPosition,
 } from "./ir";
+import { layoutComponentLabels, type PlacedComponentLabels } from "./label-layout";
+import { type RoutedTerminalLead, routeAllTerminalLeads } from "./layout";
 
 export interface SvgRenderOptions {
   theme?: "light" | "dark" | "paper";
@@ -28,7 +30,11 @@ export interface SvgRenderOptions {
 }
 
 /** Computes the bounding box of the circuit in grid units */
-export function computeCircuitBounds(circuit: KirchhoffCircuit): {
+export function computeCircuitBounds(
+  circuit: KirchhoffCircuit,
+  placedLabels?: Map<string, PlacedComponentLabels>,
+  routedLeads?: RoutedTerminalLead[],
+): {
   minX: number;
   minY: number;
   maxX: number;
@@ -70,6 +76,28 @@ export function computeCircuitBounds(circuit: KirchhoffCircuit): {
         hasPoints = true;
       }
     }
+  }
+
+  // Include routed terminal leads detour waypoints in bounds
+  const leads = routedLeads ?? routeAllTerminalLeads(circuit);
+  for (const lead of leads) {
+    for (const pt of lead.waypoints) {
+      minX = Math.min(minX, pt.x);
+      maxX = Math.max(maxX, pt.x);
+      minY = Math.min(minY, pt.y);
+      maxY = Math.max(maxY, pt.y);
+      hasPoints = true;
+    }
+  }
+
+  const gridSize = circuit.gridSize || 20;
+  const labels = placedLabels || layoutComponentLabels(circuit, leads);
+  for (const placed of labels.values()) {
+    minX = Math.min(minX, placed.bounds.minX / gridSize);
+    maxX = Math.max(maxX, placed.bounds.maxX / gridSize);
+    minY = Math.min(minY, placed.bounds.minY / gridSize);
+    maxY = Math.max(maxY, placed.bounds.maxY / gridSize);
+    hasPoints = true;
   }
 
   if (!hasPoints) {
@@ -323,8 +351,9 @@ export function renderCircuitToSvg(
   const wireColor = options.wireColor || (options.theme === "dark" ? "#94a3b8" : "#334155");
   const nodeColor = options.theme === "dark" ? "#38bdf8" : "#0284c7";
   const labelColor = options.theme === "dark" ? "#cbd5e1" : "#475569";
-
-  const bounds = computeCircuitBounds(circuit);
+  const routedTerminalLeads = routeAllTerminalLeads(circuit);
+  const placedLabels = layoutComponentLabels(circuit, routedTerminalLeads);
+  const bounds = computeCircuitBounds(circuit, placedLabels, routedTerminalLeads);
 
   const viewMinX = bounds.minX * gridSize - padding;
   const viewMinY = bounds.minY * gridSize - padding;
@@ -392,7 +421,7 @@ export function renderCircuitToSvg(
       for (const pt of wire.waypoints) {
         pathD += ` L ${pt.x * gridSize} ${pt.y * gridSize}`;
       }
-    } else if (Math.abs(x1 - x2) > 0.01 && Math.abs(y1 - y2) > 0.01) {
+    } else if (!wire.direct && Math.abs(x1 - x2) > 0.01 && Math.abs(y1 - y2) > 0.01) {
       // Orthogonal Manhattan routing: route horizontally then vertically
       pathD += ` L ${x2} ${y1}`;
     }
@@ -400,6 +429,13 @@ export function renderCircuitToSvg(
 
     svgParts.push(
       `<path d="${pathD}" fill="none" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`,
+    );
+  }
+
+  // Render component terminal leads to connected nodes
+  for (const lead of routedTerminalLeads) {
+    svgParts.push(
+      `<path d="${lead.pathD}" fill="none" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`,
     );
   }
 
@@ -419,24 +455,17 @@ export function renderCircuitToSvg(
     svgParts.push(`</g>`);
 
     // Render component label & value (in world orientation for readability)
-    const labelText = comp.label;
-    const valueText = comp.value;
-
-    if (labelText || valueText) {
-      // Offset text slightly above or to the side of the component
-      const def = COMPONENT_CATALOG[comp.type];
-      const textOffsetY = ((def ? def.height : 2) / 2 + 0.6) * gridSize;
-
-      svgParts.push(`<g font-family="system-ui, -apple-system, sans-serif" text-anchor="middle">`);
-      if (labelText) {
+    const placed = placedLabels.get(comp.id);
+    if (placed && (placed.labelText || placed.valueText)) {
+      svgParts.push(`<g font-family="system-ui, -apple-system, sans-serif" text-anchor="${placed.anchor}">`);
+      if (placed.labelText) {
         svgParts.push(
-          `<text x="${cx}" y="${cy - textOffsetY}" font-size="12" font-weight="600" fill="${strokeColor}">${escapeXml(labelText)}</text>`,
+          `<text x="${placed.labelX}" y="${placed.labelY}" font-size="12" font-weight="600" fill="${strokeColor}">${escapeXml(placed.labelText)}</text>`,
         );
       }
-      if (valueText) {
-        const valueY = labelText ? cy - textOffsetY - 13 : cy - textOffsetY;
+      if (placed.valueText && placed.valueX !== undefined && placed.valueY !== undefined) {
         svgParts.push(
-          `<text x="${cx}" y="${valueY}" font-size="11" font-weight="400" fill="${labelColor}">${escapeXml(valueText)}</text>`,
+          `<text x="${placed.valueX}" y="${placed.valueY}" font-size="11" font-weight="400" fill="${labelColor}">${escapeXml(placed.valueText)}</text>`,
         );
       }
       svgParts.push(`</g>`);

@@ -1167,6 +1167,13 @@ export class InkView extends TextFileView {
         onPen: (down) => this.penActivity(down),
         isLocked: () => this.isProtected(),
         getKeyStore: () => this.plugin.keys,
+        onRenderPageForAi: (page) => this.renderForAi(page),
+        confirmAiCircuit: () =>
+          this.plugin.confirmAiSend(
+            { vendor: "google", baseUrl: "" },
+            "Converting a circuit",
+            "the selected handwriting and an image of the current notebook page (to read surrounding equations, labels, and notes)",
+          ),
         returnToPenOnReselect: () => this.settings.returnToPenOnReselect === true,
         returnToPenAfterUse: () => this.settings.returnToPenAfterUse === true,
         onToolChange: (tool) => {

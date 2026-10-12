@@ -454,6 +454,8 @@ export interface InkSurfaceCallbacks {
    */
   isLocked?: () => boolean;
   getKeyStore?: () => import("../recognition/key-store").KeyStore | undefined;
+  onRenderPageForAi?: (page: Page) => Promise<import("../recognition/page-render").RenderedPage | null>;
+  confirmAiCircuit?: () => Promise<boolean>;
   /** A custom colour was picked (the lasso's recolour): the new recent list. */
   onRecentColors?: (colors: string[]) => void;
   /** A key press switched tools; the host's toolbar should show the new one. */
@@ -5783,30 +5785,49 @@ export class InkSurface {
     const strokesToConvert = [...sel.strokes];
     const docRef = this.doc;
 
-    // Dismiss selection immediately so user can freely write and navigate
-    this.clearSelection();
-
     const keyStore = this.callbacks.getKeyStore?.();
     if (!keyStore || !keyStore.get("google")?.trim()) {
       new Notice("Google Gemini API key not found. Please set your key in Settings -> FineNotes.");
       return;
     }
 
+    if (this.callbacks.confirmAiCircuit) {
+      const allowed = await this.callbacks.confirmAiCircuit();
+      if (!allowed) return;
+    }
+
+    // Dismiss selection immediately so user can freely write and navigate
+    this.clearSelection();
+
     new Notice("Converting circuit to CircuitikZ diagram...", 3000);
 
     try {
+      const page = pageById(this.doc, pageId);
+      let pageImageBase64: string | undefined;
+      if (page && this.callbacks.onRenderPageForAi) {
+        try {
+          const renderedPage = await this.callbacks.onRenderPageForAi(page);
+          if (renderedPage?.base64) {
+            pageImageBase64 = renderedPage.base64;
+          }
+        } catch {
+          // If page render fails, proceed with handwriting crop alone
+        }
+      }
+
       const ir = await runAiCircuitConversion({
         elements: { strokes: strokesToConvert, images: [], textBoxes: [] },
         bounds,
         keyStore,
+        pageImageBase64,
       });
 
       // Verification checks upon return
       if (this.doc !== docRef) return;
-      const page = pageById(this.doc, pageId);
-      if (!page) return;
+      const returnPage = pageById(this.doc, pageId);
+      if (!returnPage) return;
 
-      const currentStrokesSet = new Set(page.strokes);
+      const currentStrokesSet = new Set(returnPage.strokes);
       const intactStrokes = strokesToConvert.filter((s) => currentStrokesSet.has(s));
 
       const w = Math.max(80, bounds.maxX - bounds.minX);

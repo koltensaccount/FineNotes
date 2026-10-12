@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateAndNormalizeCircuit, KIRCHHOFF_IR_VERSION, type KirchhoffCircuit } from "../../src/circuit/ir";
-import { renderCircuitToSvg } from "../../src/circuit/svg-render";
+import { renderCircuitToSvg, computeCircuitBounds } from "../../src/circuit/svg-render";
+import { routeAllTerminalLeads } from "../../src/circuit/layout";
 
 describe("Circuit SVG rendering regressions", () => {
   it("renders a bridge rectifier circuit with correctly scaled symbol strokes and accurate junctions", () => {
@@ -202,4 +203,198 @@ describe("Circuit SVG rendering regressions", () => {
     // Check resistor zigzag stroke is scaled (0.09 instead of 1.8)
     expect(svg).toContain('stroke-width="0.09"');
   });
+
+  it("routes terminal leads of separated components sharing a node around intervening components", () => {
+    // Horizontal resistors centered at x=0 and x=12 sharing the first resistor's right port (at x=1, y=0)
+    // and the second's left port (at x=11, y=0). An intervening resistor is centered at x=5, y=0.
+    const separatedLeadCircuit: KirchhoffCircuit = {
+      version: KIRCHHOFF_IR_VERSION,
+      gridSize: 20,
+      components: {
+        r1: {
+          id: "r1",
+          type: "resistor",
+          x: 0,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "n_in", p2: "n_shared" },
+          label: "R1",
+        },
+        r_mid: {
+          id: "r_mid",
+          type: "resistor",
+          x: 5,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "n_mid1", p2: "n_mid2" },
+          label: "R_mid",
+        },
+        r2: {
+          id: "r2",
+          type: "resistor",
+          x: 12,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "n_shared", p2: "n_out" },
+          label: "R2",
+        },
+      },
+      nodes: {
+        n_in: { id: "n_in", x: -1.5, y: 0 },
+        // n_shared is located at R1's right port (x=1.5, y=0)
+        n_shared: { id: "n_shared", x: 1.5, y: 0 },
+        n_mid1: { id: "n_mid1", x: 3.5, y: 0 },
+        n_mid2: { id: "n_mid2", x: 6.5, y: 0 },
+        n_out: { id: "n_out", x: 13.5, y: 0 },
+      },
+      wires: [],
+    };
+
+    const circuit = validateAndNormalizeCircuit(separatedLeadCircuit);
+    const svg = renderCircuitToSvg(circuit);
+
+    // R2's left port is at x=10.5*20=210, y=0. n_shared is at x=1.5*20=30, y=0.
+    // The straight segment from (210, 0) to (30, 0) penetrates R_mid (centered at x=100, y=0).
+    // The rendered lead must NOT contain a straight line directly across y=0 through R_mid!
+    expect(svg).not.toContain("M 210 0 L 30 0");
+    // It should have routed with an orthogonal detour away from y = 0 around R_mid
+    expect(svg).toMatch(/M 210 0 L 210 -?[1-9]\d* L 30 -?[1-9]\d* L 30 0/);
+  });
+
+  it("includes routed terminal lead detours in SVG bounds to prevent clipping with zero padding", () => {
+    // Unlabeled resistor at (0,0), nodes at (-4,0)/(4,0), wire between them.
+    // Leads from component ports to nodes detour around the resistor body.
+    const c: KirchhoffCircuit = {
+      version: KIRCHHOFF_IR_VERSION,
+      gridSize: 20,
+      nodes: {
+        a: { id: "a", x: -4, y: 0 },
+        b: { id: "b", x: 4, y: 0 },
+      },
+      components: {
+        r: {
+          id: "r",
+          type: "resistor",
+          label: "R",
+          x: 0,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "a", p2: "b" },
+        },
+      },
+      wires: [{ id: "w", fromNode: "a", toNode: "b" }],
+    };
+
+    const bounds = computeCircuitBounds(c);
+    // maxY must be at least 1.5 to accommodate the terminal lead detour
+    expect(bounds.maxY).toBeGreaterThanOrEqual(1.5);
+
+    const svg = renderCircuitToSvg(c, { padding: 0 });
+    // viewBox must fully encompass y=30 (1.5 * 20) with zero padding
+    const viewBoxMatch = svg.match(/viewBox="([^"]+)"/);
+    expect(viewBoxMatch).not.toBeNull();
+    const [, minYStr, , heightStr] = viewBoxMatch![1].split(" ").map(Number);
+    expect(minYStr + heightStr).toBeGreaterThanOrEqual(30);
+  });
+
+  it("does not mutate circuit diagnostics during SVG rendering or bounds computation", () => {
+    const circuit: KirchhoffCircuit = {
+      version: KIRCHHOFF_IR_VERSION,
+      gridSize: 20,
+      diagnostics: [],
+      nodes: {
+        a: { id: "a", x: 0, y: 0 },
+        b: { id: "b", x: 10, y: 0 },
+      },
+      components: {
+        r: {
+          id: "r",
+          type: "resistor",
+          label: "R",
+          x: 5,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "a", p2: "b" },
+        },
+      },
+      wires: [],
+    };
+
+    // Render multiple times (as would happen on canvas paint or preview refreshes)
+    computeCircuitBounds(circuit);
+    renderCircuitToSvg(circuit);
+    computeCircuitBounds(circuit);
+    renderCircuitToSvg(circuit);
+
+    // Diagnostics array must NOT have been mutated or accumulated warnings
+    expect(circuit.diagnostics).toEqual([]);
+  });
+
+  it("routes terminal leads for different nets through non-overlapping channels when detouring around obstacles", () => {
+    const circuit: KirchhoffCircuit = {
+      version: KIRCHHOFF_IR_VERSION,
+      gridSize: 20,
+      nodes: {
+        na: { id: "na", x: -1.5, y: 0 },
+        nb: { id: "nb", x: 1.5, y: 0 },
+      },
+      components: {
+        r1: {
+          id: "r1",
+          type: "resistor",
+          label: "R1",
+          x: 0,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "na", p2: "nb" },
+        },
+        r2: {
+          id: "r2",
+          type: "resistor",
+          label: "R2",
+          x: 6,
+          y: 0,
+          rotation: 0,
+          ports: { p1: "na", p2: "nb" },
+        },
+      },
+      wires: [],
+    };
+
+    const leads = routeAllTerminalLeads(circuit);
+    expect(leads.length).toBeGreaterThan(0);
+
+    // Verify in SVG that distinct net leads do not share overlapping paths
+    const svg = renderCircuitToSvg(circuit);
+    expect(svg).toContain("<svg");
+
+    // Check that lead paths for na and nb do not have overlapping horizontal segments
+    const leadSegments: Array<{ netId: string; x1: number; y1: number; x2: number; y2: number }> = [];
+    for (const lead of leads) {
+      for (let i = 0; i < lead.points.length - 1; i++) {
+        const p1 = lead.points[i];
+        const p2 = lead.points[i + 1];
+        leadSegments.push({
+          netId: lead.nodeId,
+          x1: Math.min(p1.x, p2.x),
+          y1: Math.min(p1.y, p2.y),
+          x2: Math.max(p1.x, p2.x),
+          y2: Math.max(p1.y, p2.y),
+        });
+      }
+    }
+
+    // Between distinct nets na and nb, horizontal segments with the same Y must not overlap in X range
+    for (const s1 of leadSegments) {
+      for (const s2 of leadSegments) {
+        if (s1.netId !== s2.netId) {
+          if (Math.abs(s1.y1 - s1.y2) < 0.001 && Math.abs(s2.y1 - s2.y2) < 0.001 && Math.abs(s1.y1 - s2.y1) < 0.001) {
+            const overlap = Math.max(0, Math.min(s1.x2, s2.x2) - Math.max(s1.x1, s2.x1));
+            expect(overlap).toBeLessThan(0.01);
+          }
+        }
+      }
+    }
+  });
 });
+

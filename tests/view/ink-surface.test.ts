@@ -27,6 +27,7 @@ import { SizeWait } from "../../src/view/surface-size";
 import realScribbles from "../ink/fixtures/real-scribbles-ipad.json";
 
 vi.mock("obsidian", () => ({
+  Modal: class {},
   Notice: class {},
   Platform: {},
   setIcon: () => {},
@@ -1270,7 +1271,7 @@ describe("Pencil Circle-to-Lasso hold ownership", () => {
     expect(w.surface.circleLoop).not.toBeNull();
     run(w.surface, "watchCircleHold", boxOf(w.doc, 0), { x: 10, y: 10 });
     vi.advanceTimersByTime(1000);
-    expect(selected).toHaveBeenCalledWith("p1", { strokes: [inside], images: [], textBoxes: [] });
+    expect(selected).toHaveBeenCalledWith("p1", { strokes: [inside], images: [], textBoxes: [], circuits: [] });
     expect(ids(w.doc.pages[0])).toEqual(["s1"]);
     expect(paste).not.toHaveBeenCalled();
     vi.useRealTimers();

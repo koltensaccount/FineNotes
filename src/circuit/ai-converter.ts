@@ -13,16 +13,25 @@ import { type Bounds } from "../model/document";
 import { type PageElements } from "../model/selection-commands";
 import { renderSelectionToPng } from "../view/selection-clipboard";
 import { type KirchhoffCircuit, validateAndNormalizeCircuit } from "./ir";
+import { autoLayoutCircuit } from "./layout";
 
 export interface ConvertCircuitInput {
   elements: PageElements;
   bounds: Bounds;
   keyStore: KeyStore;
   modelOverride?: string;
+  pageImageBase64?: string;
 }
 
 const CIRCUIT_SYSTEM_PROMPT = `You are an expert electrical engineer and schematic recognition system.
 Analyze the provided handwritten electrical circuit diagram and convert it into a structured netlist following the kirchhoff-ir/1.0 schema.
+
+If two images are provided:
+- Image 1 is the high-resolution crop of the selected handwritten circuit diagram (this is the PRIMARY SOURCE OF TRUTH).
+- Image 2 is the surrounding notebook page containing handwritten notes, formulas, equations, or labels.
+- Use Image 2 ONLY to resolve ambiguity in the drawn circuit (such as illegible component values, formulas, or component types like BJT vs MOSFET).
+- NEVER invent or add components, wires, or connections that are not drawn in Image 1.
+- If any component, connection, or label is ambiguous, record a short note in the "uncertainties" array.
 
 Supported component types:
 - resistor (ports: p1, p2)
@@ -59,6 +68,7 @@ Respond ONLY with valid JSON matching the schema below. No markdown fences, no e
 {
   "version": "kirchhoff-ir/1.0",
   "title": "Circuit",
+  "uncertainties": [],
   "nodes": {
     "n1": { "id": "n1", "x": 0, "y": 0, "junction": false }
   },
@@ -122,6 +132,31 @@ export async function convertSelectionToCircuit(
   const isGemini15 = model.includes("1.5");
   const maxOutputTokens = isGemini15 ? 8192 : 32768;
 
+  const userParts: Array<{ inline_data?: { mime_type: string; data: string }; text?: string }> = [
+    {
+      inline_data: {
+        mime_type: "image/png",
+        data: base64Data,
+      },
+    },
+  ];
+
+  if (input.pageImageBase64) {
+    userParts.push({
+      inline_data: {
+        mime_type: "image/png",
+        data: input.pageImageBase64,
+      },
+    });
+    userParts.push({
+      text: "Image 1 is the selected handwritten electrical circuit (primary source of truth). Image 2 is the surrounding notebook page providing context (notes, formulas, headings). Analyze the circuit drawing and use the notebook page context to resolve any ambiguity in component types, labels, or values. Do NOT invent components not present in the drawing. Extract all electrical components, labels, values, nodes, and wire connections into kirchhoff-ir/1.0 JSON format. If any part of the circuit is ambiguous, add notes to the 'uncertainties' list. Output only the structured JSON immediately.",
+    });
+  } else {
+    userParts.push({
+      text: "Extract all electrical components, labels, values, nodes, and wire connections from this handwritten circuit diagram into kirchhoff-ir/1.0 JSON format. Output only the structured JSON immediately.",
+    });
+  }
+
   const body = {
     systemInstruction: {
       parts: [{ text: CIRCUIT_SYSTEM_PROMPT }],
@@ -129,17 +164,7 @@ export async function convertSelectionToCircuit(
     contents: [
       {
         role: "user",
-        parts: [
-          {
-            inline_data: {
-              mime_type: "image/png",
-              data: base64Data,
-            },
-          },
-          {
-            text: "Extract all electrical components, labels, values, nodes, and wire connections from this handwritten circuit diagram into kirchhoff-ir/1.0 JSON format. Output only the structured JSON immediately.",
-          },
-        ],
+        parts: userParts,
       },
     ],
     generationConfig: {
@@ -215,5 +240,8 @@ export async function convertSelectionToCircuit(
     throw new Error("No electrical components were recognized in the selection.");
   }
 
-  return normalized;
+  // Automatic clean layout, grid snapping, and orthogonal routing
+  const laidOut = autoLayoutCircuit(normalized);
+
+  return laidOut;
 }

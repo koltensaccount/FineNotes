@@ -385,6 +385,8 @@ export interface CircuitWire {
   toNode: string;
   /** Optional intermediate routing waypoints in grid coordinates */
   waypoints?: Array<{ x: number; y: number }>;
+  /** When true, renders directly between endpoints rather than defaulting to Manhattan L-bends */
+  direct?: boolean;
 }
 
 /** Complete structured representation matching kirchhoff-ir/1.0 */
@@ -395,6 +397,8 @@ export interface KirchhoffCircuit {
   nodes: Record<string, CircuitNode>;
   components: Record<string, CircuitComponent>;
   wires: CircuitWire[];
+  diagnostics?: CircuitDiagnostic[];
+  uncertainties?: string[];
 }
 
 /** Factory for an empty circuit */
@@ -415,6 +419,8 @@ export function cloneCircuit(circuit: KirchhoffCircuit): KirchhoffCircuit {
     version: KIRCHHOFF_IR_VERSION,
     title: circuit.title,
     gridSize: circuit.gridSize ?? 20,
+    diagnostics: circuit.diagnostics ? [...circuit.diagnostics] : undefined,
+    uncertainties: circuit.uncertainties ? [...circuit.uncertainties] : undefined,
     nodes: Object.fromEntries(
       Object.entries(circuit.nodes).map(([id, node]) => [id, { ...node }]),
     ),
@@ -572,13 +578,19 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
                     typeof pt === "object" && pt !== null && typeof pt.x === "number" && typeof pt.y === "number" && Number.isFinite(pt.x) && Number.isFinite(pt.y)
                   )
               : undefined,
+            direct: Boolean(wireObj.direct) ? true : undefined,
           });
         }
       }
     }
   }
 
-  // 4. Calculate node junctions based on degree (3 or more connected branches)
+  // 4. Ingest any flagged uncertainties
+  if (Array.isArray(obj.uncertainties)) {
+    circuit.uncertainties = obj.uncertainties.filter((u): u is string => typeof u === "string");
+  }
+
+  // 5. Calculate node junctions based on degree (3 or more connected branches)
   const connectionCounts: Record<string, number> = {};
   for (const wire of circuit.wires) {
     connectionCounts[wire.fromNode] = (connectionCounts[wire.fromNode] || 0) + 1;
@@ -593,5 +605,210 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
     node.junction = (connectionCounts[nId] || 0) >= 3;
   }
 
+  // 6. Run comprehensive electrical connectivity validation
+  circuit.diagnostics = validateCircuitConnectivity(circuit);
+
   return circuit;
+}
+
+export interface CircuitDiagnostic {
+  severity: "error" | "warning" | "info";
+  code:
+    | "DANGLING_WIRE"
+    | "MISSING_NODE"
+    | "INVALID_PORT"
+    | "DISCONNECTED_COMPONENT"
+    | "UNCONNECTED_TERMINAL"
+    | "INTENTIONALLY_OPEN_PORT"
+    | "ISOLATED_SUBCIRCUIT"
+    | "UNROUTABLE_OBSTRUCTION";
+  message: string;
+  componentId?: string;
+  nodeId?: string;
+  wireId?: string;
+  portId?: string;
+}
+
+/**
+ * Validates the electrical connectivity of a circuit netlist:
+ * - Detects dangling wire endpoints and dead-end stubs.
+ * - Validates component ports against COMPONENT_CATALOG.
+ * - Distinguishes intentionally open ports from failed connections.
+ * - Detects isolated/disconnected components and isolated subcircuits.
+ */
+export function validateCircuitConnectivity(circuit: KirchhoffCircuit): CircuitDiagnostic[] {
+  const diagnostics: CircuitDiagnostic[] = [];
+  const validNodeIds = new Set(Object.keys(circuit.nodes));
+
+  // 1. Check wires
+  const nodeWireCount: Record<string, number> = {};
+  for (const wire of circuit.wires) {
+    if (!validNodeIds.has(wire.fromNode)) {
+      diagnostics.push({
+        severity: "error",
+        code: "MISSING_NODE",
+        message: `Wire "${wire.id}" references nonexistent fromNode "${wire.fromNode}".`,
+        wireId: wire.id,
+        nodeId: wire.fromNode,
+      });
+    } else {
+      nodeWireCount[wire.fromNode] = (nodeWireCount[wire.fromNode] || 0) + 1;
+    }
+
+    if (!validNodeIds.has(wire.toNode)) {
+      diagnostics.push({
+        severity: "error",
+        code: "MISSING_NODE",
+        message: `Wire "${wire.id}" references nonexistent toNode "${wire.toNode}".`,
+        wireId: wire.id,
+        nodeId: wire.toNode,
+      });
+    } else {
+      nodeWireCount[wire.toNode] = (nodeWireCount[wire.toNode] || 0) + 1;
+    }
+  }
+
+  // 2. Check components and port mappings
+  const nodeComponentPorts: Record<string, Array<{ compId: string; portId: string }>> = {};
+  for (const comp of Object.values(circuit.components)) {
+    const def = COMPONENT_CATALOG[comp.type];
+    const catalogPortIds = new Set(def ? def.ports.map((p) => p.id) : []);
+
+    // Check for invalid ports
+    for (const [pId, nId] of Object.entries(comp.ports)) {
+      if (def && !catalogPortIds.has(pId)) {
+        diagnostics.push({
+          severity: "warning",
+          code: "INVALID_PORT",
+          message: `Component "${comp.id}" (${comp.type}) has unknown port "${pId}".`,
+          componentId: comp.id,
+          portId: pId,
+        });
+      }
+
+      if (!validNodeIds.has(nId)) {
+        diagnostics.push({
+          severity: "error",
+          code: "MISSING_NODE",
+          message: `Component "${comp.id}" port "${pId}" references nonexistent node "${nId}".`,
+          componentId: comp.id,
+          portId: pId,
+          nodeId: nId,
+        });
+      } else {
+        if (!nodeComponentPorts[nId]) nodeComponentPorts[nId] = [];
+        nodeComponentPorts[nId].push({ compId: comp.id, portId: pId });
+      }
+    }
+
+    // Check for missing/unconnected ports
+    if (def) {
+      const connectedPortIds = new Set(Object.keys(comp.ports));
+      for (const port of def.ports) {
+        if (!connectedPortIds.has(port.id)) {
+          // Distinguish intentionally open terminals
+          const isIntentionallyOpen =
+            (comp.type === "switch_spst" && port.id === "p2") ||
+            (comp.type === "opamp" && (port.id === "vcc" || port.id === "vee"));
+
+          if (isIntentionallyOpen) {
+            diagnostics.push({
+              severity: "info",
+              code: "INTENTIONALLY_OPEN_PORT",
+              message: `Component "${comp.id}" has intentionally open terminal "${port.name || port.id}".`,
+              componentId: comp.id,
+              portId: port.id,
+            });
+          } else {
+            diagnostics.push({
+              severity: "warning",
+              code: "UNCONNECTED_TERMINAL",
+              message: `Component "${comp.id}" (${comp.type}) has unconnected terminal "${port.name || port.id}".`,
+              componentId: comp.id,
+              portId: port.id,
+            });
+          }
+        }
+      }
+    }
+
+    // Check for completely disconnected components
+    const totalPorts = Object.keys(comp.ports).length;
+    if (totalPorts === 0) {
+      diagnostics.push({
+        severity: "error",
+        code: "DISCONNECTED_COMPONENT",
+        message: `Component "${comp.id}" (${comp.type}) has no connected terminals.`,
+        componentId: comp.id,
+      });
+    }
+  }
+
+  // 3. Check for dangling nodes (degree 1 with only a wire, no components)
+  for (const [nodeId, wireCount] of Object.entries(nodeWireCount)) {
+    const compPorts = nodeComponentPorts[nodeId] || [];
+    if (wireCount === 1 && compPorts.length === 0) {
+      diagnostics.push({
+        severity: "warning",
+        code: "DANGLING_WIRE",
+        message: `Node "${nodeId}" terminates with a dangling wire and no connected component.`,
+        nodeId,
+      });
+    }
+  }
+
+  // 4. Graph connectivity analysis (connected components)
+  const adj: Record<string, Set<string>> = {};
+  for (const nodeId of validNodeIds) {
+    adj[nodeId] = new Set();
+  }
+  for (const wire of circuit.wires) {
+    if (validNodeIds.has(wire.fromNode) && validNodeIds.has(wire.toNode)) {
+      adj[wire.fromNode].add(wire.toNode);
+      adj[wire.toNode].add(wire.fromNode);
+    }
+  }
+  for (const comp of Object.values(circuit.components)) {
+    const ports = Object.values(comp.ports).filter((nId) => validNodeIds.has(nId));
+    for (let i = 0; i < ports.length; i++) {
+      for (let j = i + 1; j < ports.length; j++) {
+        adj[ports[i]].add(ports[j]);
+        adj[ports[j]].add(ports[i]);
+      }
+    }
+  }
+
+  const visited = new Set<string>();
+  const subcircuits: string[][] = [];
+  for (const nodeId of validNodeIds) {
+    if (!visited.has(nodeId)) {
+      const componentNodes: string[] = [];
+      const queue = [nodeId];
+      visited.add(nodeId);
+      while (queue.length > 0) {
+        const curr = queue.shift()!;
+        componentNodes.push(curr);
+        for (const neighbor of adj[curr] || []) {
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+      }
+      subcircuits.push(componentNodes);
+    }
+  }
+
+  if (subcircuits.length > 1 && Object.keys(circuit.components).length > 1) {
+    for (let i = 1; i < subcircuits.length; i++) {
+      diagnostics.push({
+        severity: "warning",
+        code: "ISOLATED_SUBCIRCUIT",
+        message: `Subcircuit containing nodes [${subcircuits[i].join(", ")}] is electrically isolated from main circuit.`,
+        nodeId: subcircuits[i][0],
+      });
+    }
+  }
+
+  return diagnostics;
 }

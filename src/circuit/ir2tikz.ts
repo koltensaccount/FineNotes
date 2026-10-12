@@ -6,11 +6,15 @@
  */
 
 import {
+  type CircuitComponent,
   type ComponentType,
   type KirchhoffCircuit,
+  COMPONENT_CATALOG,
   createEmptyCircuit,
   validateAndNormalizeCircuit,
+  getComponentPortPosition,
 } from "./ir";
+import { routeAllTerminalLeads } from "./layout";
 
 /** Mapping of Kirchhoff component types to CircuitikZ bipole / symbol names */
 const TIKZ_TYPE_MAP: Record<string, string> = {
@@ -59,6 +63,80 @@ const REVERSE_TIKZ_TYPE_MAP: Record<string, ComponentType> = {
   lamp: "lamp",
 };
 
+/** Mapping from component port IDs to standard CircuitikZ named node anchors */
+const MULTI_TERMINAL_ANCHORS: Record<string, Record<string, string>> = {
+  opamp: {
+    in_inv: "-",
+    in_noninv: "+",
+    out: "out",
+    vcc: "up",
+    vee: "down",
+  },
+  transistor_npn: {
+    base: "B",
+    collector: "C",
+    emitter: "E",
+  },
+  transistor_pnp: {
+    base: "B",
+    collector: "C",
+    emitter: "E",
+  },
+  transistor_nmos: {
+    gate: "G",
+    drain: "D",
+    source: "S",
+  },
+  transistor_pmos: {
+    gate: "G",
+    drain: "D",
+    source: "S",
+  },
+};
+
+/** Reverse mapping from CircuitikZ node anchors to component port IDs */
+const REVERSE_MULTI_TERMINAL_ANCHORS: Record<string, Record<string, string>> = {
+  opamp: {
+    "-": "in_inv",
+    "+": "in_noninv",
+    out: "out",
+    up: "vcc",
+    down: "vee",
+  },
+  transistor_npn: {
+    B: "base",
+    b: "base",
+    C: "collector",
+    c: "collector",
+    E: "emitter",
+    e: "emitter",
+  },
+  transistor_pnp: {
+    B: "base",
+    b: "base",
+    C: "collector",
+    c: "collector",
+    E: "emitter",
+    e: "emitter",
+  },
+  transistor_nmos: {
+    G: "gate",
+    g: "gate",
+    D: "drain",
+    d: "drain",
+    S: "source",
+    s: "source",
+  },
+  transistor_pmos: {
+    G: "gate",
+    g: "gate",
+    D: "drain",
+    d: "drain",
+    S: "source",
+    s: "source",
+  },
+};
+
 /** Serialize a Kirchhoff circuit to standard CircuitikZ LaTeX */
 export function circuitToTikz(circuit: KirchhoffCircuit): string {
   const lines: string[] = [];
@@ -73,16 +151,26 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
   };
 
   const compVisited = new Set<string>();
+  const leadExcludedCompIds = new Set<string>();
 
   // Emit two-terminal and source components
   for (const comp of Object.values(circuit.components)) {
     const tikzType = TIKZ_TYPE_MAP[comp.type] || "generic";
 
     if (comp.type === "ground" || comp.type === "earth") {
-      const gndNode = comp.ports["gnd"] || comp.ports["earth"] || Object.values(comp.ports)[0];
+      const pId = comp.ports["gnd"] ? "gnd" : (comp.ports["earth"] ? "earth" : Object.keys(comp.ports)[0]);
+      const gndNode = pId ? comp.ports[pId] : undefined;
       const node = gndNode ? circuit.nodes[gndNode] : null;
-      const x = node ? node.x : comp.x;
-      const y = node ? -node.y : -comp.y; // Flip Y for standard Cartesian coordinates
+      const termPos = pId ? getComponentPortPosition(comp, pId) : null;
+
+      // Anchor CircuitikZ ground node at its terminal connection coordinate
+      const termX = termPos ? termPos.x : (node ? node.x : comp.x);
+      const termY = termPos ? termPos.y : (node ? node.y : comp.y);
+
+      const dist = node ? Math.hypot(termX - node.x, termY - node.y) : 0;
+      const x = dist > 0.05 ? termX : (node ? node.x : termX);
+      const y = dist > 0.05 ? -termY : (node ? -node.y : -termY);
+
       lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${comp.type}] {};`);
       compVisited.add(comp.id);
       continue;
@@ -91,8 +179,14 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
     if (comp.type === "opamp") {
       const x = comp.x;
       const y = -comp.y;
-      const label = comp.label ? `, l=${comp.label}` : "";
-      lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[op amp${label}] (${comp.id}) {};`);
+      const opts: string[] = ["op amp"];
+      if (comp.label) opts.push(`l=$${comp.label}$`);
+      if (comp.rotation) {
+        const tikzRot = ((-comp.rotation % 360) + 360) % 360;
+        if (tikzRot !== 0) opts.push(`rotate=${tikzRot}`);
+      }
+      if (comp.mirror) opts.push("xscale=-1");
+      lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${opts.join(", ")}] (${comp.id}) {};`);
       compVisited.add(comp.id);
       continue;
     }
@@ -105,7 +199,14 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       else if (comp.type === "transistor_nmos") qType = "nmos";
       else if (comp.type === "transistor_pmos") qType = "pmos";
 
-      lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${qType}] (${comp.id}) {};`);
+      const opts: string[] = [qType];
+      if (comp.label) opts.push(`l=$${comp.label}$`);
+      if (comp.rotation) {
+        const tikzRot = ((-comp.rotation % 360) + 360) % 360;
+        if (tikzRot !== 0) opts.push(`rotate=${tikzRot}`);
+      }
+      if (comp.mirror) opts.push("xscale=-1");
+      lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${opts.join(", ")}] (${comp.id}) {};`);
       compVisited.add(comp.id);
       continue;
     }
@@ -132,10 +233,38 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       const n1 = circuit.nodes[n1Id];
       const n2 = circuit.nodes[n2Id];
 
-      let x1 = n1 ? n1.x : comp.x - 1.5;
-      let y1 = n1 ? -n1.y : -comp.y;
-      let x2 = n2 ? n2.x : comp.x + 1.5;
-      let y2 = n2 ? -n2.y : -comp.y;
+      const p1pos = getComponentPortPosition(comp, p1Key);
+      const p2pos = getComponentPortPosition(comp, p2Key);
+
+      const compsAtN1 = Object.values(circuit.components).filter((c) =>
+        Object.values(c.ports).includes(n1Id),
+      );
+      const compsAtN2 = Object.values(circuit.components).filter((c) =>
+        Object.values(c.ports).includes(n2Id),
+      );
+
+      const dist1 = n1 && p1pos ? Math.hypot(p1pos.x - n1.x, p1pos.y - n1.y) : 0;
+      const dist2 = n2 && p2pos ? Math.hypot(p2pos.x - n2.x, p2pos.y - n2.y) : 0;
+
+      let x1: number;
+      let y1: number;
+      let x2: number;
+      let y2: number;
+
+      // If this is a lone component between n1 and n2 without shared branch nodes, draw directly between nodes
+      if (compsAtN1.length <= 1 && compsAtN2.length <= 1) {
+        x1 = n1 ? n1.x : (p1pos ? p1pos.x : comp.x - 1.5);
+        y1 = n1 ? -n1.y : (p1pos ? -p1pos.y : -comp.y);
+        x2 = n2 ? n2.x : (p2pos ? p2pos.x : comp.x + 1.5);
+        y2 = n2 ? -n2.y : (p2pos ? -p2pos.y : -comp.y);
+        leadExcludedCompIds.add(comp.id);
+      } else {
+        // Shared node(s): components with separated terminals use their actual port positions
+        x1 = dist1 > 0.05 && p1pos ? p1pos.x : (n1 ? n1.x : (p1pos ? p1pos.x : comp.x - 1.5));
+        y1 = dist1 > 0.05 && p1pos ? -p1pos.y : (n1 ? -n1.y : (p1pos ? -p1pos.y : -comp.y));
+        x2 = dist2 > 0.05 && p2pos ? p2pos.x : (n2 ? n2.x : (p2pos ? p2pos.x : comp.x + 1.5));
+        y2 = dist2 > 0.05 && p2pos ? -p2pos.y : (n2 ? -n2.y : (p2pos ? -p2pos.y : -comp.y));
+      }
 
       // Build options string
       const opts: string[] = [tikzType];
@@ -153,19 +282,56 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
     }
   }
 
+  // Emit routed terminal leads (connecting component ports to nodes when separated by layout)
+  const leads = routeAllTerminalLeads(circuit);
+  for (const lead of leads) {
+    if (leadExcludedCompIds.has(lead.componentId)) continue;
+    if (lead.points.length < 2) continue;
+    const comp = circuit.components[lead.componentId];
+    const anchor = comp ? MULTI_TERMINAL_ANCHORS[comp.type]?.[lead.portId] : undefined;
+    const startStr = anchor
+      ? `(${comp.id}.${anchor})`
+      : `(${toTikzCoord(lead.points[0].x)}, ${toTikzCoord(-lead.points[0].y)})`;
+    let pathStr = startStr;
+    for (let i = 1; i < lead.points.length; i++) {
+      pathStr += ` -- (${toTikzCoord(lead.points[i].x)}, ${toTikzCoord(-lead.points[i].y)})`;
+    }
+    lines.push(`  \\draw ${pathStr};`);
+  }
+
+  const getAnchorForNode = (nodeId: string): string | null => {
+    for (const comp of Object.values(circuit.components)) {
+      const anchors = MULTI_TERMINAL_ANCHORS[comp.type];
+      if (!anchors) continue;
+      for (const [pId, nId] of Object.entries(comp.ports)) {
+        if (nId === nodeId && anchors[pId]) {
+          const ppos = getComponentPortPosition(comp, pId);
+          const node = circuit.nodes[nodeId];
+          if (node && ppos && Math.hypot(ppos.x - node.x, ppos.y - node.y) <= 0.05) {
+            return `(${comp.id}.${anchors[pId]})`;
+          }
+        }
+      }
+    }
+    return null;
+  };
+
   // Emit wires
   for (const wire of circuit.wires) {
     const from = circuit.nodes[wire.fromNode];
     const to = circuit.nodes[wire.toNode];
     if (!from || !to) continue;
 
-    let pathStr = `(${toTikzCoord(from.x)}, ${toTikzCoord(-from.y)})`;
+    const fromAnchor = getAnchorForNode(wire.fromNode);
+    const toAnchor = getAnchorForNode(wire.toNode);
+
+    let pathStr = fromAnchor || `(${toTikzCoord(from.x)}, ${toTikzCoord(-from.y)})`;
     if (wire.waypoints) {
       for (const wp of wire.waypoints) {
         pathStr += ` -- (${toTikzCoord(wp.x)}, ${toTikzCoord(-wp.y)})`;
       }
     }
-    pathStr += ` -- (${toTikzCoord(to.x)}, ${toTikzCoord(-to.y)})`;
+    pathStr += ` -- ${toAnchor || `(${toTikzCoord(to.x)}, ${toTikzCoord(-to.y)})`}`;
 
     lines.push(`  \\draw ${pathStr};`);
   }
@@ -198,11 +364,18 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
   let wireCounter = 1;
 
   // Helper to find or create a node at coordinates
-  const getOrCreateNode = (x: number, y: number): string => {
+  const getOrCreateNode = (x: number, y: number, preferredId?: string): string => {
     for (const [id, n] of Object.entries(circuit.nodes)) {
       if (Math.abs(n.x - x) < 0.05 && Math.abs(n.y - y) < 0.05) {
         return id;
       }
+    }
+    if (preferredId && !circuit.nodes[preferredId]) {
+      circuit.nodes[preferredId] = { id: preferredId, x, y };
+      return preferredId;
+    }
+    while (circuit.nodes[`n${nodeCounter}`]) {
+      nodeCounter++;
     }
     const id = `n${nodeCounter++}`;
     circuit.nodes[id] = { id, x, y };
@@ -215,6 +388,42 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
     return Object.is(res, -0) ? 0 : res;
   };
 
+  // Pre-scan all explicit component names so generated IDs never collide with them
+  const reservedCompIds = new Set<string>();
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("%")) continue;
+    const nodeElemMatch = trimmed.match(
+      /^(?:\\draw\s*\(\s*-?[\d.]+\s*,\s*-?[\d.]+\s*\)\s*node\[[^\]]+\](?:\s*\(([a-zA-Z0-9_-]+)\))?|\\node\[[^\]]+\]\s*at\s*\(\s*-?[\d.]+\s*,\s*-?[\d.]+\s*\)(?:\s*\(([a-zA-Z0-9_-]+)\))?)\s*\{\s*\}\s*;/i,
+    );
+    if (nodeElemMatch) {
+      const explicitId = nodeElemMatch[1] ?? nodeElemMatch[2];
+      if (explicitId) reservedCompIds.add(explicitId);
+    }
+  }
+
+  const tikzNameToCompId = new Map<string, string>();
+
+  const getNextCompId = (preferredId?: string): string => {
+    if (preferredId && !circuit.components[preferredId]) {
+      return preferredId;
+    }
+    while (circuit.components[`c${compCounter}`] || reservedCompIds.has(`c${compCounter}`)) {
+      compCounter++;
+    }
+    return `c${compCounter++}`;
+  };
+
+  const getNextWireId = (): string => {
+    while (circuit.wires.some((w) => w.id === `w${wireCounter}`)) {
+      wireCounter++;
+    }
+    return `w${wireCounter++}`;
+  };
+
+  const handledLines = new Set<number>();
+
+  // Pass 1: Parse all components (bipoles, grounds, transistors, opamps)
   for (let lineNum = 1; lineNum <= lines.length; lineNum++) {
     const rawLine = lines[lineNum - 1].trim();
     if (!rawLine || rawLine.startsWith("%")) continue;
@@ -249,7 +458,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
       const n1Id = getOrCreateNode(x1, y1);
       const n2Id = getOrCreateNode(x2, y2);
 
-      const compId = `c${compCounter++}`;
+      const compId = getNextCompId();
       const cx = (x1 + x2) / 2;
       const cy = (y1 + y2) / 2;
 
@@ -261,7 +470,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
       circuit.components[compId] = {
         id: compId,
         type: compType,
-        label: label || `C${compCounter - 1}`,
+        label: label || `C${compId.replace(/\D/g, "") || compCounter}`,
         value: value || undefined,
         x: cx,
         y: cy,
@@ -271,56 +480,281 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
           p2: n2Id,
         },
       };
+      handledLines.add(lineNum);
       continue;
     }
 
-    // 2. Node element: \node[circ] at (x, y) {}; or \node[ground] at (x, y) {};
-    const nodeMatch = rawLine.match(
-      /\\node\[([^\]]+)\]\s*at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*\{\s*\}\s*;/i,
+    // 2. Node element: \node[circ] at (x, y) {}; or \draw (x, y) node[op amp...] (id) {};
+    const nodeElemMatch = rawLine.match(
+      /^(?:\\draw\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*node\[([^\]]+)\](?:\s*\(([a-zA-Z0-9_-]+)\))?|\\node\[([^\]]+)\]\s*at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)(?:\s*\(([a-zA-Z0-9_-]+)\))?)\s*\{\s*\}\s*;/i,
     );
-    if (nodeMatch) {
-      const type = nodeMatch[1].trim().toLowerCase();
-      const x = parseCoord(nodeMatch[2]);
-      const y = parseCoord(nodeMatch[3], true);
+    if (nodeElemMatch) {
+      const xStr = nodeElemMatch[1] ?? nodeElemMatch[6];
+      const yStr = nodeElemMatch[2] ?? nodeElemMatch[7];
+      const optsStr = nodeElemMatch[3] ?? nodeElemMatch[5];
+      const explicitId = nodeElemMatch[4] ?? nodeElemMatch[8];
+      const x = parseCoord(xStr);
+      const y = parseCoord(yStr, true);
 
-      if (type === "circ") {
+      const optTokens = optsStr.split(",").map((s) => s.trim());
+      const rawType = (optTokens[0] || "").toLowerCase();
+
+      if (rawType === "circ") {
         const nId = getOrCreateNode(x, y);
         circuit.nodes[nId].junction = true;
-      } else if (type === "ground" || type === "earth") {
+        handledLines.add(lineNum);
+      } else if (rawType === "ground" || rawType === "earth") {
+        const isEarth = rawType === "earth";
+        const pId = isEarth ? "earth" : "gnd";
         const nId = getOrCreateNode(x, y);
-        const compId = `gnd${compCounter++}`;
+        const compId = getNextCompId(explicitId || pId);
         circuit.components[compId] = {
           id: compId,
-          type: type === "earth" ? "earth" : "ground",
-          label: "GND",
+          type: isEarth ? "earth" : "ground",
+          label: isEarth ? "EARTH" : "GND",
           x,
-          y,
+          y: y + 0.8,
           rotation: 0,
-          ports: { gnd: nId },
+          ports: { [pId]: nId },
         };
+        if (explicitId) {
+          tikzNameToCompId.set(explicitId, compId);
+        }
+        handledLines.add(lineNum);
+      } else {
+        let multiType: ComponentType | undefined;
+        if (rawType === "op amp" || rawType === "opamp") {
+          multiType = "opamp";
+        } else if (rawType === "npn") {
+          multiType = "transistor_npn";
+        } else if (rawType === "pnp") {
+          multiType = "transistor_pnp";
+        } else if (rawType === "nmos") {
+          multiType = "transistor_nmos";
+        } else if (rawType === "pmos") {
+          multiType = "transistor_pmos";
+        }
+
+        if (multiType) {
+          let label = "";
+          let rotation = 0;
+          let mirror = false;
+          for (const opt of optTokens.slice(1)) {
+            const lMatch = opt.match(/^l\s*=\s*\$?([^$]+)\$?$/i);
+            if (lMatch) label = lMatch[1].trim();
+            const rMatch = opt.match(/^rotate\s*=\s*(-?\d+)$/i);
+            if (rMatch) {
+              const rawRot = parseInt(rMatch[1], 10);
+              rotation = ((-rawRot % 360) + 360) % 360;
+            }
+            if (/xscale\s*=\s*-1/i.test(opt)) mirror = true;
+          }
+
+          const compId = getNextCompId(explicitId);
+          const catalogEntry = COMPONENT_CATALOG[multiType];
+          const ports: Record<string, string> = {};
+
+          const comp: CircuitComponent = {
+            id: compId,
+            type: multiType,
+            label: label || catalogEntry?.defaultLabel || compId,
+            x,
+            y,
+            rotation,
+            mirror: mirror || undefined,
+            ports,
+          };
+
+          circuit.components[compId] = comp;
+          if (explicitId) {
+            tikzNameToCompId.set(explicitId, compId);
+          }
+          handledLines.add(lineNum);
+        }
       }
       continue;
     }
+  }
 
-    // 3. Simple wire: \draw (x1, y1) -- (x2, y2);
-    const wireMatch = rawLine.match(
-      /\\draw\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*--\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*;/i,
-    );
-    if (wireMatch) {
-      const x1 = parseCoord(wireMatch[1]);
-      const y1 = parseCoord(wireMatch[2], true);
-      const x2 = parseCoord(wireMatch[3]);
-      const y2 = parseCoord(wireMatch[4], true);
+  // Pass 2: Parse wires and record diagnostics for unsupported commands
+  for (let lineNum = 1; lineNum <= lines.length; lineNum++) {
+    const rawLine = lines[lineNum - 1].trim();
+    if (!rawLine || rawLine.startsWith("%")) continue;
+    if (rawLine.includes("\\begin{circuitikz}") || rawLine.includes("\\end{circuitikz}")) continue;
 
-      const n1Id = getOrCreateNode(x1, y1);
-      const n2Id = getOrCreateNode(x2, y2);
-
-      circuit.wires.push({
-        id: `w${wireCounter++}`,
-        fromNode: n1Id,
-        toNode: n2Id,
-      });
+    // Skip lines already successfully handled in Pass 1
+    if (handledLines.has(lineNum)) {
       continue;
+    }
+
+    // 3. Wire (simple or multi-segment with waypoints, preserving distinct subpaths):
+    // e.g. \draw (x1, y1) -- (x2, y2) (x3, y3) -- (x4, y4);
+    if (
+      rawLine.startsWith("\\draw") &&
+      (rawLine.includes("--") || rawLine.includes("-|") || rawLine.includes("|-")) &&
+      !rawLine.includes("to[") &&
+      !rawLine.includes("to [") &&
+      !rawLine.includes("node[")
+    ) {
+      const pathBody = rawLine.replace(/^\\draw(?:\s*\[[^\]]*\])?\s*/i, "");
+      const tokenRegex =
+        /\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)|\(\s*([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_+-]+)\s*\)|(--|-\||\|-)|(cycle)|(;)/gi;
+      const subpaths: Array<Array<{ x: number; y: number; nodeId?: string }>> = [];
+      let currentSubpath: Array<{ x: number; y: number; nodeId?: string }> = [];
+      let hasConnector = false;
+      let lastConnector: string | null = null;
+
+      let match: RegExpExecArray | null;
+      while ((match = tokenRegex.exec(pathBody)) !== null) {
+        if (match[1] !== undefined && match[2] !== undefined) {
+          // Coordinate (x, y)
+          const pt: { x: number; y: number; nodeId?: string } = {
+            x: parseCoord(match[1]),
+            y: parseCoord(match[2], true),
+          };
+          if (hasConnector && currentSubpath.length > 0) {
+            if (lastConnector === "-|") {
+              const prev = currentSubpath[currentSubpath.length - 1];
+              currentSubpath.push({ x: pt.x, y: prev.y });
+            } else if (lastConnector === "|-") {
+              const prev = currentSubpath[currentSubpath.length - 1];
+              currentSubpath.push({ x: prev.x, y: pt.y });
+            }
+            currentSubpath.push(pt);
+            hasConnector = false;
+            lastConnector = null;
+          } else {
+            // Move-to: starts a new subpath
+            if (currentSubpath.length >= 2) {
+              subpaths.push(currentSubpath);
+            }
+            currentSubpath = [pt];
+            hasConnector = false;
+            lastConnector = null;
+          }
+        } else if (match[3] !== undefined && match[4] !== undefined) {
+          // Named anchor (compId.anchor)
+          const rawCompName = match[3];
+          const anchor = match[4];
+          const resolvedCompId = tikzNameToCompId.get(rawCompName) || rawCompName;
+          const comp = circuit.components[resolvedCompId];
+          let pt: { x: number; y: number; nodeId?: string } | null = null;
+          if (comp) {
+            const portId = REVERSE_MULTI_TERMINAL_ANCHORS[comp.type]?.[anchor];
+            if (portId) {
+              if (!comp.ports[portId]) {
+                const portPos = getComponentPortPosition(comp, portId);
+                const pNodeId = getOrCreateNode(portPos ? portPos.x : comp.x, portPos ? portPos.y : comp.y);
+                comp.ports[portId] = pNodeId;
+              }
+              const node = circuit.nodes[comp.ports[portId]];
+              if (node) {
+                pt = { x: node.x, y: node.y, nodeId: node.id };
+              }
+            }
+          }
+          if (!pt) {
+            diagnostics.push({
+              line: lineNum,
+              message: `Unresolved component anchor: (${rawCompName}.${anchor})`,
+              severity: "error",
+            });
+            currentSubpath = [];
+            hasConnector = false;
+            lastConnector = null;
+            continue;
+          }
+          if (hasConnector && currentSubpath.length > 0) {
+            if (lastConnector === "-|") {
+              const prev = currentSubpath[currentSubpath.length - 1];
+              currentSubpath.push({ x: pt.x, y: prev.y });
+            } else if (lastConnector === "|-") {
+              const prev = currentSubpath[currentSubpath.length - 1];
+              currentSubpath.push({ x: prev.x, y: pt.y });
+            }
+            currentSubpath.push(pt);
+            hasConnector = false;
+            lastConnector = null;
+          } else {
+            if (currentSubpath.length >= 2) {
+              subpaths.push(currentSubpath);
+            }
+            currentSubpath = [pt];
+            hasConnector = false;
+            lastConnector = null;
+          }
+        } else if (match[5] !== undefined) {
+          // Connector: --, -|, or |-
+          if (currentSubpath.length > 0) {
+            hasConnector = true;
+            lastConnector = match[5];
+          }
+        } else if (match[6] !== undefined) {
+          // cycle
+          if (currentSubpath.length > 0) {
+            currentSubpath.push({ ...currentSubpath[0] });
+            subpaths.push(currentSubpath);
+            currentSubpath = [];
+            hasConnector = false;
+            lastConnector = null;
+          }
+        } else if (match[7] !== undefined) {
+          // Semicolon ;
+          if (currentSubpath.length >= 2) {
+            subpaths.push(currentSubpath);
+          }
+          currentSubpath = [];
+          hasConnector = false;
+          lastConnector = null;
+        }
+      }
+
+      if (currentSubpath.length >= 2) {
+        subpaths.push(currentSubpath);
+      }
+
+      if (subpaths.length > 0) {
+        for (const points of subpaths) {
+          const start = points[0];
+          const end = points[points.length - 1];
+          const isClosed = points.length >= 3 && Math.hypot(start.x - end.x, start.y - end.y) < 0.05;
+
+          if (isClosed) {
+            // Split closed polyline into distinct representable segments across its vertices
+            for (let i = 0; i < points.length - 1; i++) {
+              const p1 = points[i];
+              const p2 = points[i + 1];
+              const nFromId = p1.nodeId || getOrCreateNode(p1.x, p1.y);
+              const nToId = p2.nodeId || getOrCreateNode(p2.x, p2.y);
+              if (nFromId !== nToId) {
+                const isDiagonal = Math.abs(p1.x - p2.x) > 0.01 && Math.abs(p1.y - p2.y) > 0.01;
+                circuit.wires.push({
+                  id: getNextWireId(),
+                  fromNode: nFromId,
+                  toNode: nToId,
+                  direct: isDiagonal ? true : undefined,
+                });
+              }
+            }
+          } else {
+            const n1Id = start.nodeId || getOrCreateNode(start.x, start.y);
+            const n2Id = end.nodeId || getOrCreateNode(end.x, end.y);
+            const waypoints =
+              points.length > 2 ? points.slice(1, -1).map((p) => ({ x: p.x, y: p.y })) : undefined;
+            const isDiagonal =
+              !waypoints && Math.abs(start.x - end.x) > 0.01 && Math.abs(start.y - end.y) > 0.01;
+
+            circuit.wires.push({
+              id: getNextWireId(),
+              fromNode: n1Id,
+              toNode: n2Id,
+              waypoints,
+              direct: isDiagonal ? true : undefined,
+            });
+          }
+        }
+        continue;
+      }
     }
 
     // If a line is not recognized
@@ -330,6 +764,139 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
       severity: "warning",
     });
   }
+
+  // Post-pass: Split multi-segment wires at intermediate nodes referenced by components, other wire endpoints, or junctions
+  const referencedNodeCoords: Array<{ id: string; x: number; y: number }> = [];
+  for (const comp of Object.values(circuit.components)) {
+    for (const nId of Object.values(comp.ports)) {
+      const node = circuit.nodes[nId];
+      if (node && !referencedNodeCoords.some((r) => r.id === node.id)) {
+        referencedNodeCoords.push({ id: node.id, x: node.x, y: node.y });
+      }
+    }
+  }
+  for (const wire of circuit.wires) {
+    for (const nId of [wire.fromNode, wire.toNode]) {
+      const node = circuit.nodes[nId];
+      if (node && !referencedNodeCoords.some((r) => r.id === node.id)) {
+        referencedNodeCoords.push({ id: node.id, x: node.x, y: node.y });
+      }
+    }
+  }
+  for (const node of Object.values(circuit.nodes)) {
+    if (node.junction && !referencedNodeCoords.some((r) => r.id === node.id)) {
+      referencedNodeCoords.push({ id: node.id, x: node.x, y: node.y });
+    }
+  }
+
+  function pointLiesOnSegment(
+    px: number,
+    py: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+  ): boolean {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const segLenSq = dx * dx + dy * dy;
+    if (segLenSq < 0.0025) return false; // segLen < 0.05
+
+    // Project (px, py) onto the segment line: P_proj = (x1, y1) + t * (dx, dy)
+    const t = ((px - x1) * dx + (py - y1) * dy) / segLenSq;
+    const segLen = Math.sqrt(segLenSq);
+    const marginT = 0.05 / segLen;
+
+    // t must be strictly inside the segment interior (away from both endpoints)
+    if (t < marginT || t > 1 - marginT) return false;
+
+    // Perpendicular distance from (px, py) to the projection on the segment
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    const perpDist = Math.hypot(px - projX, py - projY);
+
+    return perpDist < 0.02;
+  }
+
+  const newWires: typeof circuit.wires = [];
+  for (const wire of circuit.wires) {
+    const fromNode = circuit.nodes[wire.fromNode];
+    const toNode = circuit.nodes[wire.toNode];
+    if (!fromNode || !toNode) {
+      newWires.push(wire);
+      continue;
+    }
+
+    // Build initial polyline path: fromNode -> waypoints -> toNode
+    const initialPoints: Array<{ x: number; y: number; nodeId?: string }> = [
+      { x: fromNode.x, y: fromNode.y, nodeId: fromNode.id },
+      ...(wire.waypoints || []).map((wp) => {
+        const exactMatch = referencedNodeCoords.find(
+          (rn) => Math.hypot(rn.x - wp.x, rn.y - wp.y) < 0.05,
+        );
+        return { x: wp.x, y: wp.y, nodeId: exactMatch?.id };
+      }),
+      { x: toNode.x, y: toNode.y, nodeId: toNode.id },
+    ];
+
+    // Expand segments with any referenced branch nodes lying along the segment
+    const expandedPoints: Array<{ x: number; y: number; nodeId?: string }> = [];
+    for (let i = 0; i < initialPoints.length - 1; i++) {
+      const p1 = initialPoints[i];
+      const p2 = initialPoints[i + 1];
+      expandedPoints.push(p1);
+
+      // Find any referenced nodes that lie strictly on the segment between p1 and p2
+      const onSegmentNodes: Array<{ id: string; x: number; y: number; dist: number }> = [];
+      for (const rn of referencedNodeCoords) {
+        if (
+          pointLiesOnSegment(rn.x, rn.y, p1.x, p1.y, p2.x, p2.y) &&
+          rn.id !== p1.nodeId &&
+          rn.id !== p2.nodeId
+        ) {
+          const dist = Math.hypot(rn.x - p1.x, rn.y - p1.y);
+          onSegmentNodes.push({ id: rn.id, x: rn.x, y: rn.y, dist });
+        }
+      }
+
+      onSegmentNodes.sort((a, b) => a.dist - b.dist);
+      for (const osn of onSegmentNodes) {
+        expandedPoints.push({ x: osn.x, y: osn.y, nodeId: osn.id });
+      }
+    }
+    expandedPoints.push(initialPoints[initialPoints.length - 1]);
+
+    // Split polyline into wires at each node reference
+    let currentFromId = wire.fromNode;
+    let currentWaypoints: Array<{ x: number; y: number }> = [];
+
+    for (let i = 1; i < expandedPoints.length; i++) {
+      const pt = expandedPoints[i];
+      if (pt.nodeId) {
+        const fromN = circuit.nodes[currentFromId];
+        const toN = circuit.nodes[pt.nodeId];
+        const isDiagonal =
+          currentWaypoints.length === 0 &&
+          fromN &&
+          toN &&
+          Math.abs(fromN.x - toN.x) > 0.01 &&
+          Math.abs(fromN.y - toN.y) > 0.01;
+
+        newWires.push({
+          id: getNextWireId(),
+          fromNode: currentFromId,
+          toNode: pt.nodeId,
+          waypoints: currentWaypoints.length > 0 ? currentWaypoints : undefined,
+          direct: wire.direct || isDiagonal ? true : undefined,
+        });
+        currentFromId = pt.nodeId;
+        currentWaypoints = [];
+      } else {
+        currentWaypoints.push({ x: pt.x, y: pt.y });
+      }
+    }
+  }
+  circuit.wires = newWires;
 
   return {
     circuit: validateAndNormalizeCircuit(circuit),
