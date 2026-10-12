@@ -99,9 +99,16 @@ function tryRenderWithObsidianMathJax(
     const targetH = vbH * scale;
 
     // Extract sanitized inner HTML (glyph defs and g elements)
-    const inner = svgEl.innerHTML
+    let inner = svgEl.innerHTML
       .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
       .replace(/on\w+="[^"]*"/g, "");
+
+    // Scope glyph IDs with a {{SCOPE}} placeholder to eliminate collisions across components
+    // and provide both modern href and legacy xlink:href for reliable PDF export.
+    inner = inner
+      .replace(/\bid="(MJX-[^"]+)"/g, 'id="{{SCOPE}}_$1"')
+      .replace(/\bhref="#(MJX-[^"]+)"/g, 'href="#{{SCOPE}}_$1" xlink:href="#{{SCOPE}}_$1"')
+      .replace(/\bxlink:href="#(MJX-[^"]+)"/g, 'xlink:href="#{{SCOPE}}_$1"');
 
     return {
       svgContent: `<g fill="${color}" stroke="${color}" transform="scale(${scale.toFixed(4)})">${inner}</g>`,
@@ -116,28 +123,32 @@ function tryRenderWithObsidianMathJax(
 
 /**
  * Parses LaTeX sub/superscripts and Greek symbols into vector SVG text with `<tspan>`.
+ * Raw text is safely escaped for XML before formatting tags are added.
  */
 export function formatSvgTextFallback(source: string): string {
   let text = stripMathDelimiters(source);
 
-  // 1. Replace common Greek macros
+  // 1. Safely escape raw text for XML first
+  text = escapeXml(text);
+
+  // 2. Replace common Greek macros with Unicode glyphs
   for (const [macro, glyph] of Object.entries(GREEK_SYMBOLS)) {
     text = text.split(macro).join(glyph);
   }
 
-  // 2. Simple fraction fallback: \frac{A}{B} -> A/B
+  // 3. Simple fraction fallback: \frac{A}{B} -> A/B
   text = text.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2");
   text = text.replace(/\\text\{([^{}]+)\}/g, "$1");
 
-  // 3. Handle subscripts X_{abc} or X_a
-  text = text.replace(/_\{([^{}]+)\}/g, (_, sub) => `<tspan baseline-shift="sub" font-size="0.75em">${escapeXml(sub)}</tspan>`);
-  text = text.replace(/_([a-zA-Z0-9])/g, (_, sub) => `<tspan baseline-shift="sub" font-size="0.75em">${escapeXml(sub)}</tspan>`);
+  // 4. Handle subscripts X_{abc} or X_a
+  text = text.replace(/_\{([^{}]+)\}/g, '<tspan baseline-shift="sub" font-size="0.75em">$1</tspan>');
+  text = text.replace(/_([a-zA-Z0-9])/g, '<tspan baseline-shift="sub" font-size="0.75em">$1</tspan>');
 
-  // 4. Handle superscripts X^{abc} or X^a
-  text = text.replace(/\^\{([^{}]+)\}/g, (_, sup) => `<tspan baseline-shift="super" font-size="0.75em">${escapeXml(sup)}</tspan>`);
-  text = text.replace(/\^([a-zA-Z0-9])/g, (_, sup) => `<tspan baseline-shift="super" font-size="0.75em">${escapeXml(sup)}</tspan>`);
+  // 5. Handle superscripts X^{abc} or X^a
+  text = text.replace(/\^\{([^{}]+)\}/g, '<tspan baseline-shift="super" font-size="0.75em">$1</tspan>');
+  text = text.replace(/\^([a-zA-Z0-9])/g, '<tspan baseline-shift="super" font-size="0.75em">$1</tspan>');
 
-  return escapeXmlExceptTspan(text);
+  return text;
 }
 
 /**
@@ -159,17 +170,24 @@ export function renderLatexLabelToSvg(
 
   const cleanSource = stripMathDelimiters(source);
   const cacheKey = `${cleanSource}:${fontSize}:${color}:${anchor}:${fontWeight}:${extraAttr}`;
+  const scopeId = `mjx_${Math.random().toString(36).slice(2, 8)}`;
 
   if (MATH_SVG_CACHE.has(cacheKey)) {
     const cached = MATH_SVG_CACHE.get(cacheKey)!;
-    return cached.replace(/\{\{X\}\}/g, String(x)).replace(/\{\{Y\}\}/g, String(y));
+    return cached
+      .replace(/\{\{X\}\}/g, String(x))
+      .replace(/\{\{Y\}\}/g, String(y))
+      .replace(/\{\{SCOPE\}\}/g, scopeId);
   }
 
   // If text doesn't contain math, render plain SVG text
   if (!isLatexMath(source)) {
     const svg = `<text x="{{X}}" y="{{Y}}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${color}" text-anchor="${anchor}"${extraAttr}>${escapeXml(cleanSource)}</text>`;
     MATH_SVG_CACHE.set(cacheKey, svg);
-    return svg.replace(/\{\{X\}\}/g, String(x)).replace(/\{\{Y\}\}/g, String(y));
+    return svg
+      .replace(/\{\{X\}\}/g, String(x))
+      .replace(/\{\{Y\}\}/g, String(y))
+      .replace(/\{\{SCOPE\}\}/g, scopeId);
   }
 
   // Attempt MathJax rendering if Obsidian environment is active
@@ -185,7 +203,10 @@ export function renderLatexLabelToSvg(
       `</g></g>`;
 
     MATH_SVG_CACHE.set(cacheKey, template);
-    return template.replace(/\{\{X\}\}/g, String(x)).replace(/\{\{Y\}\}/g, String(y));
+    return template
+      .replace(/\{\{X\}\}/g, String(x))
+      .replace(/\{\{Y\}\}/g, String(y))
+      .replace(/\{\{SCOPE\}\}/g, scopeId);
   }
 
   // Fallback vector SVG with `<tspan>`
@@ -193,7 +214,10 @@ export function renderLatexLabelToSvg(
   const svgFallback = `<text x="{{X}}" y="{{Y}}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${color}" text-anchor="${anchor}"${extraAttr} data-latex-source="${escapeXml(cleanSource)}">${formatted}</text>`;
 
   MATH_SVG_CACHE.set(cacheKey, svgFallback);
-  return svgFallback.replace(/\{\{X\}\}/g, String(x)).replace(/\{\{Y\}\}/g, String(y));
+  return svgFallback
+    .replace(/\{\{X\}\}/g, String(x))
+    .replace(/\{\{Y\}\}/g, String(y))
+    .replace(/\{\{SCOPE\}\}/g, scopeId);
 }
 
 function escapeXml(unsafe: string): string {
@@ -203,16 +227,4 @@ function escapeXml(unsafe: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function escapeXmlExceptTspan(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/<(?!tspan|\/tspan)/g, "&lt;")
-    .replace(/>/g, (_match, offset, str) => {
-      const before = str.slice(Math.max(0, offset - 7), offset + 1);
-      if (before.endsWith("<tspan") || before.endsWith("</tspan>")) return ">";
-      if (str.slice(Math.max(0, offset - 60), offset + 1).includes("<tspan") && before.endsWith(">")) return ">";
-      return "&gt;";
-    });
 }

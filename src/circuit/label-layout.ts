@@ -211,12 +211,12 @@ export function layoutComponentLabels(
 
     const isHorizontal = comp.rotation % 180 === 0;
 
-    // Honor manual label placement if user moved labels on schematic
+    // Honor manual label placement if user moved labels on schematic (offsets stored in grid units)
     if (comp.labelOffset?.manual || comp.valueOffset?.manual) {
-      const labelX = comp.labelOffset ? cx + comp.labelOffset.x : cx;
-      const labelY = comp.labelOffset ? cy + comp.labelOffset.y : cy - effH / 2 - 10;
-      const valueX = comp.valueOffset ? cx + comp.valueOffset.x : (valueText ? labelX : undefined);
-      const valueY = comp.valueOffset ? cy + comp.valueOffset.y : (valueText ? labelY + 14 : undefined);
+      const labelX = comp.labelOffset ? cx + comp.labelOffset.x * gridSize : cx;
+      const labelY = comp.labelOffset ? cy + comp.labelOffset.y * gridSize : cy - effH / 2 - 10;
+      const valueX = comp.valueOffset ? cx + comp.valueOffset.x * gridSize : (valueText ? labelX : undefined);
+      const valueY = comp.valueOffset ? cy + comp.valueOffset.y * gridSize : (valueText ? labelY + 14 : undefined);
       const rect: Rect = {
         minX: Math.min(labelX, valueX ?? labelX) - textW / 2,
         maxX: Math.max(labelX, valueX ?? labelX) + textW / 2,

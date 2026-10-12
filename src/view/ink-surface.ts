@@ -5357,8 +5357,16 @@ export class InkSurface {
         width: `${(bounds.maxX - bounds.minX) * scale + 2 * SELECTION_PAD_PX}px`,
         height: `${(bounds.maxY - bounds.minY) * scale + 2 * SELECTION_PAD_PX}px`,
       });
-      this.selectionFrameEl.toggleClass("is-dragging", drag !== null);
       if (singleCircuit) {
+        const cBox = this.groupDrag?.circuit?.draft ?? singleCircuit;
+        const cx = (box.x + cBox.x + (drag?.dx ?? 0)) * scale - SELECTION_PAD_PX;
+        const cy = (box.y + cBox.y + (drag?.dy ?? 0)) * scale - SELECTION_PAD_PX;
+        this.selectionFrameEl.setCssStyles({
+          left: `${cx}px`,
+          top: `${cy}px`,
+          width: `${cBox.w * scale + 2 * SELECTION_PAD_PX}px`,
+          height: `${cBox.h * scale + 2 * SELECTION_PAD_PX}px`,
+        });
         for (const handle of ["nw", "ne", "sw", "se"] as const) {
           this.selectionFrameEl.querySelector(`.is-${handle}`)?.classList.remove("is-hidden");
         }
@@ -6557,7 +6565,7 @@ export class InkSurface {
     const drag = this.groupDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     event.stopPropagation();
-    this.endGroupDrag(!(drag.shape || drag.ink) || event.type !== "pointercancel");
+    this.endGroupDrag(!(drag.shape || drag.ink || drag.circuit) || event.type !== "pointercancel");
   };
 
   /**
@@ -6581,7 +6589,10 @@ export class InkSurface {
     if (!drag?.lifted || !box) return;
     const { images } = drag.selection;
     const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts, size: drag.shape.size ?? drag.shape.stroke.size }] : drag.ink?.draft ?? drag.selection.strokes;
-    if (drag.selection.circuits && drag.selection.circuits.length > 0) {
+    const circuitsToDraw = drag.circuit
+      ? [{ ...drag.circuit.circuit, ...drag.circuit.draft }]
+      : drag.selection.circuits;
+    if (circuitsToDraw && circuitsToDraw.length > 0) {
       this.renderer?.renderSelectionDraft(
         box.index,
         strokes,
@@ -6589,7 +6600,7 @@ export class InkSurface {
         drag.dx,
         drag.dy,
         this.toolState.pressureEnabled,
-        drag.selection.circuits,
+        circuitsToDraw,
       );
     } else {
       this.renderer?.renderSelectionDraft(
@@ -6633,13 +6644,14 @@ export class InkSurface {
       this.selectionFrameEl.releasePointerCapture(drag.pointerId);
     }
     if (!commit) {
-      if (drag.circuit) {
-        drag.circuit.circuit.x = drag.circuit.start.x;
-        drag.circuit.circuit.y = drag.circuit.start.y;
-        drag.circuit.circuit.w = drag.circuit.start.w;
-        drag.circuit.circuit.h = drag.circuit.start.h;
+      if (drag.lifted) {
+        this.renderer?.setHiddenStrokes(NO_STROKES);
+        this.renderer?.setHiddenImages(NO_IMAGES);
+        this.renderer?.setHiddenCircuits?.(NO_CIRCUITS);
+        this.renderer?.clearWet();
+        const box = this.boxForPage(drag.selection.pageId);
+        if (box) this.renderer?.invalidateRegion(box.index, drag.bounds);
       }
-      this.cancelGroupDrag();
       this.renderDry();
       this.syncSelectionOverlay();
       return;
@@ -6666,7 +6678,7 @@ export class InkSurface {
         const c = drag.circuit.circuit;
         const draft = drag.circuit.draft;
         const updated: CircuitElement = { ...c, x: draft.x, y: draft.y, w: draft.w, h: draft.h };
-        this.history.push(this.doc, new UpdateCircuitCommand(pageId, c.id, updated, "Resize circuit"));
+        this.history.push(this.doc, new UpdateCircuitCommand(pageId, c.id, updated, "Resize circuit", c));
       } else if (drag.ink) {
         this.history.push(this.doc, new TransformSelectedInk(pageId, drag.ink.draft.map((draft,index) => ({ stroke: drag.selection.strokes[index], pts: draft.pts, size: draft.size })), drag.ink.mode === "scale" ? "Scale drawing" : "Resize drawing"));
         this.shapeMode = "resize";
@@ -6703,12 +6715,8 @@ export class InkSurface {
     const clampedP = { x: Math.max(0, Math.min(box.width, p.x)), y: Math.max(0, Math.min(box.height, p.y)) };
     const next = dragImageHandle(edit.start, handle, clampedP, 20);
     edit.draft = next;
-    edit.circuit.x = next.x;
-    edit.circuit.y = next.y;
-    edit.circuit.w = next.w;
-    edit.circuit.h = next.h;
     if (!drag.lifted) this.liftSelection(drag, box);
-    this.renderDry();
+    this.renderGroupDraft();
     this.syncSelectionOverlay();
   }
 

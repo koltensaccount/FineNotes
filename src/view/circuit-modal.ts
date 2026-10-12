@@ -13,6 +13,8 @@ import {
   type ComponentType,
   COMPONENT_CATALOG,
   type KirchhoffCircuit,
+  type CircuitWire,
+  type CircuitNode,
   cloneCircuit,
   getComponentPortPosition,
   validateCircuitConnectivity,
@@ -23,7 +25,7 @@ import { circuitToTikz, tikzToCircuit } from "../circuit/ir2tikz";
 import { layoutCircuit, rerouteCircuitWires, routeAllTerminalLeads } from "../circuit/layout";
 import { buildWirePathD, renderCircuitToSvg } from "../circuit/svg-render";
 import {
-  dragCircuitWireSegment,
+  dragWireSegment,
   hitTestCircuitWireSegment,
   isMovableJunction,
   simplifyCircuitWire,
@@ -143,6 +145,8 @@ export class CircuitModal extends Modal {
     segmentIndex: number;
     isHorizontal: boolean;
     fromPoint: { x: number; y: number };
+    initialWire: CircuitWire;
+    initialNodes: Record<string, CircuitNode>;
   } | null = null;
   private draggingJunctionNodeId: string | null = null;
   private draggingLabel: {
@@ -905,9 +909,12 @@ export class CircuitModal extends Modal {
         this.draggingLabel = { compId, kind };
         const comp = this.circuit.components[compId];
         const off = kind === "label" ? comp.labelOffset : comp.valueOffset;
+        const gridSize = this.circuit.gridSize || 20;
+        const offX = off?.x ?? (parseFloat(labelEl.getAttribute("data-label-offset-x") || "0") / gridSize);
+        const offY = off?.y ?? (parseFloat(labelEl.getAttribute("data-label-offset-y") || "0") / gridSize);
         this.dragOffset = {
-          x: gridX - (comp.x + (off?.x ?? 0)),
-          y: gridY - (comp.y + (off?.y ?? 0)),
+          x: gridX - (comp.x + offX),
+          y: gridY - (comp.y + offY),
         };
         this.renderVisualView();
         return;
@@ -1072,22 +1079,27 @@ export class CircuitModal extends Modal {
     // 3. Check hit on wire segments (direct LTspice-style segment dragging)
     const segmentHit = hitTestCircuitWireSegment(this.circuit, gridX, gridY, 0.45);
     if (segmentHit) {
-      try {
-        this.visualStageEl.setPointerCapture(ev.pointerId);
-        this.capturedPointerId = ev.pointerId;
-      } catch { /* Pointer capture may already be released by the browser. */ }
-      this.dragInitialSnapshot = cloneCircuit(this.circuit);
-      this.selectedWireId = segmentHit.wireId;
-      this.selectedComponentId = null;
-      this.selectedNodeId = null;
-      this.draggingWireSegment = {
-        wireId: segmentHit.wireId,
-        segmentIndex: segmentHit.segmentIndex,
-        isHorizontal: segmentHit.isHorizontal,
-        fromPoint: { x: gridX, y: gridY },
-      };
-      this.renderVisualView();
-      return;
+      const wire = this.circuit.wires.find((w) => w.id === segmentHit.wireId);
+      if (wire) {
+        try {
+          this.visualStageEl.setPointerCapture(ev.pointerId);
+          this.capturedPointerId = ev.pointerId;
+        } catch { /* Pointer capture may already be released by the browser. */ }
+        this.dragInitialSnapshot = cloneCircuit(this.circuit);
+        this.selectedWireId = segmentHit.wireId;
+        this.selectedComponentId = null;
+        this.selectedNodeId = null;
+        this.draggingWireSegment = {
+          wireId: segmentHit.wireId,
+          segmentIndex: segmentHit.segmentIndex,
+          isHorizontal: segmentHit.isHorizontal,
+          fromPoint: { x: gridX, y: gridY },
+          initialWire: structuredClone(wire),
+          initialNodes: structuredClone(this.circuit.nodes),
+        };
+        this.renderVisualView();
+        return;
+      }
     }
 
     // 4. Fallback check hit on wires
@@ -1161,17 +1173,18 @@ export class CircuitModal extends Modal {
 
     // Track dragging wire segment
     if (this.draggingWireSegment) {
-      const { wireId, segmentIndex, isHorizontal } = this.draggingWireSegment;
+      const { wireId, segmentIndex, isHorizontal, initialWire, initialNodes } = this.draggingWireSegment;
       const wire = this.circuit.wires.find((w) => w.id === wireId);
       if (wire) {
         const targetCoord = isHorizontal
           ? Math.round(gridY * 2) / 2
           : Math.round(gridX * 2) / 2;
-        const updated = dragCircuitWireSegment(this.circuit, wireId, segmentIndex, targetCoord);
-        if (updated) {
-          this.didDragMove = true;
-          this.updateWireSegmentDragVisual(wireId);
-        }
+        const newWaypoints = dragWireSegment(initialWire, initialNodes, segmentIndex, targetCoord);
+        wire.waypoints = newWaypoints.length > 0 ? newWaypoints : undefined;
+        wire.direct = false;
+        wire.userEdited = true;
+        this.didDragMove = true;
+        this.updateWireSegmentDragVisual(wireId);
       }
       return;
     }

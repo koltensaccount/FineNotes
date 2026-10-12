@@ -96,8 +96,12 @@ export class UpdateCircuitCommand implements Command {
     private readonly circuitId: string,
     private readonly next: CircuitElement,
     label = "Edit circuit",
+    previous?: CircuitElement,
   ) {
     this.label = label;
+    if (previous) {
+      this.previousSnapshot = structuredClone(previous);
+    }
   }
 
   apply(doc: InkDocument): void {
@@ -107,7 +111,9 @@ export class UpdateCircuitCommand implements Command {
     const circuit = page.circuits.find((c) => c.id === this.circuitId);
     if (!circuit) return;
 
-    this.previousSnapshot = structuredClone(circuit);
+    if (!this.previousSnapshot) {
+      this.previousSnapshot = structuredClone(circuit);
+    }
     circuit.x = this.next.x;
     circuit.y = this.next.y;
     circuit.w = this.next.w;
@@ -135,8 +141,6 @@ export class UpdateCircuitCommand implements Command {
     circuit.ir = structuredClone(this.previousSnapshot.ir);
     circuit.tikz = this.previousSnapshot.tikz;
     circuit.svg = this.previousSnapshot.svg;
-
-    this.previousSnapshot = null;
   }
 }
 
