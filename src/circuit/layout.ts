@@ -787,7 +787,7 @@ export function autoLayoutCircuit(
 export function rerouteCircuitWires(
   circuit: KirchhoffCircuit,
   wireIds?: string[],
-  options: { snapGrid?: number } = {},
+  options: { snapGrid?: number; forceAll?: boolean } = {},
 ): KirchhoffCircuit {
   const result = cloneCircuit(circuit);
   const snapStep = options.snapGrid ?? 0.5;
@@ -803,6 +803,7 @@ export function rerouteCircuitWires(
 
   for (const wire of result.wires) {
     if (targetIds && !targetIds.has(wire.id)) continue;
+    if (!targetIds && !options.forceAll && wire.userEdited) continue;
 
     const fromNode = result.nodes[wire.fromNode];
     const toNode = result.nodes[wire.toNode];

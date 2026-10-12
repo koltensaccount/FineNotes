@@ -210,6 +210,36 @@ export function layoutComponentLabels(
     const textH = lines === 2 ? 26 : 14;
 
     const isHorizontal = comp.rotation % 180 === 0;
+
+    // Honor manual label placement if user moved labels on schematic
+    if (comp.labelOffset?.manual || comp.valueOffset?.manual) {
+      const labelX = comp.labelOffset ? cx + comp.labelOffset.x : cx;
+      const labelY = comp.labelOffset ? cy + comp.labelOffset.y : cy - effH / 2 - 10;
+      const valueX = comp.valueOffset ? cx + comp.valueOffset.x : (valueText ? labelX : undefined);
+      const valueY = comp.valueOffset ? cy + comp.valueOffset.y : (valueText ? labelY + 14 : undefined);
+      const rect: Rect = {
+        minX: Math.min(labelX, valueX ?? labelX) - textW / 2,
+        maxX: Math.max(labelX, valueX ?? labelX) + textW / 2,
+        minY: Math.min(labelY, valueY ?? labelY) - 10,
+        maxY: Math.max(labelY, valueY ?? labelY) + 10,
+      };
+      const manualPlacement: PlacedComponentLabels = {
+        componentId: comp.id,
+        position: "top",
+        labelText,
+        valueText,
+        labelX,
+        labelY,
+        valueX,
+        valueY,
+        anchor: "middle",
+        bounds: rect,
+      };
+      placed.set(comp.id, manualPlacement);
+      placedRects.push(rect);
+      continue;
+    }
+
     const candidates: Array<"top" | "bottom" | "right" | "left"> = isHorizontal
       ? ["top", "bottom", "right", "left"]
       : ["right", "left", "top", "bottom"];

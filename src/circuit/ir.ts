@@ -376,6 +376,10 @@ export interface CircuitComponent {
    * e.g. { "p1": "n1", "p2": "n2" } or { "pos": "n1", "neg": "n2" }
    */
   ports: Record<string, string>;
+  /** Manual label position offset relative to component center (px) */
+  labelOffset?: { x: number; y: number; manual?: boolean };
+  /** Manual value position offset relative to component center (px) */
+  valueOffset?: { x: number; y: number; manual?: boolean };
 }
 
 /** Wire connecting nodes */
@@ -387,6 +391,8 @@ export interface CircuitWire {
   waypoints?: Array<{ x: number; y: number }>;
   /** When true, renders directly between endpoints rather than defaulting to Manhattan L-bends */
   direct?: boolean;
+  /** True when wire geometry was manually adjusted or placed by user */
+  userEdited?: boolean;
 }
 
 /** Complete structured representation matching kirchhoff-ir/1.0 */
@@ -430,12 +436,15 @@ export function cloneCircuit(circuit: KirchhoffCircuit): KirchhoffCircuit {
         {
           ...comp,
           ports: { ...comp.ports },
+          labelOffset: comp.labelOffset ? { ...comp.labelOffset } : undefined,
+          valueOffset: comp.valueOffset ? { ...comp.valueOffset } : undefined,
         },
       ]),
     ),
     wires: circuit.wires.map((wire) => ({
       ...wire,
       waypoints: wire.waypoints ? wire.waypoints.map((pt) => ({ ...pt })) : undefined,
+      userEdited: wire.userEdited,
     })),
   };
 }

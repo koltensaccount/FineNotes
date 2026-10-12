@@ -22,6 +22,28 @@ import type { CircuitRecognitionReview } from "../circuit/ai-converter";
 import { circuitToTikz, tikzToCircuit } from "../circuit/ir2tikz";
 import { layoutCircuit, rerouteCircuitWires, routeAllTerminalLeads } from "../circuit/layout";
 import { buildWirePathD, renderCircuitToSvg } from "../circuit/svg-render";
+import {
+  dragCircuitWireSegment,
+  hitTestCircuitWireSegment,
+  isMovableJunction,
+  simplifyCircuitWire,
+} from "../circuit/wire-geometry";
+
+const COMMON_COMPONENT_ORDER: ComponentType[] = [
+  "resistor",
+  "capacitor",
+  "inductor",
+  "diode",
+  "vsource_dc",
+  "vsource",
+  "isource",
+  "ground",
+  "transistor_nmos",
+  "transistor_pmos",
+  "transistor_npn",
+  "transistor_pnp",
+  "opamp",
+];
 
 export type CircuitEditorTab = "visual" | "blocks" | "code";
 export type InteractionMode = "select" | "wire";
@@ -101,9 +123,32 @@ export class CircuitModal extends Modal {
   private codeDiagnostics: Array<{ line: number; message: string; severity: "error" | "warning" }> = [];
   private parseDebounceTimer: number | null = null;
 
+  // Component Picker Popover & Tap-to-Place
+  private showComponentPicker: boolean = false;
+  private componentPickerSearch: string = "";
+  private pendingPlaceType: ComponentType | null = null;
+
+  // Zoom & Pan Viewport State
+  private zoomScale: number = 1.0;
+  private panOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private isPanning: boolean = false;
+  private panStart: { x: number; y: number } = { x: 0, y: 0 };
+  private panInitial: { x: number; y: number } = { x: 0, y: 0 };
+
   // Visual interaction drag state
   private draggingCompId: string | null = null;
   private draggingWaypoint: { wireId: string; index: number } | null = null;
+  private draggingWireSegment: {
+    wireId: string;
+    segmentIndex: number;
+    isHorizontal: boolean;
+    fromPoint: { x: number; y: number };
+  } | null = null;
+  private draggingJunctionNodeId: string | null = null;
+  private draggingLabel: {
+    compId: string;
+    kind: "label" | "value";
+  } | null = null;
   private dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   private didDragMove: boolean = false;
   private dragInitialSnapshot: KirchhoffCircuit | null = null;
@@ -325,6 +370,10 @@ export class CircuitModal extends Modal {
     }
     this.draggingWaypoint = null;
     this.draggingCompId = null;
+    this.draggingWireSegment = null;
+    this.draggingJunctionNodeId = null;
+    this.draggingLabel = null;
+    this.isPanning = false;
     this.dragInitialSnapshot = null;
     this.didDragMove = false;
   }
@@ -338,9 +387,19 @@ export class CircuitModal extends Modal {
       } catch { /* Pointer capture may already be released by the browser. */ }
       this.capturedPointerId = null;
     }
-    const hadDrag = Boolean(this.draggingWaypoint || this.draggingCompId);
+    const hadDrag = Boolean(
+      this.draggingWaypoint ||
+      this.draggingCompId ||
+      this.draggingWireSegment ||
+      this.draggingJunctionNodeId ||
+      this.draggingLabel
+    );
     this.draggingWaypoint = null;
     this.draggingCompId = null;
+    this.draggingWireSegment = null;
+    this.draggingJunctionNodeId = null;
+    this.draggingLabel = null;
+    this.isPanning = false;
 
     if (hadDrag && this.didDragMove && this.dragInitialSnapshot) {
       this.pushHistory(this.dragInitialSnapshot);
@@ -482,18 +541,18 @@ export class CircuitModal extends Modal {
       this.renderVisualView();
     };
 
-    // 2. Add Component Palette
-    const addSelect = this.visualToolbarEl.createEl("select", { cls: "dropdown goodobsidian-circuit-select" });
-    addSelect.createEl("option", { text: "+ Add Component...", value: "" });
-    for (const [type, def] of Object.entries(COMPONENT_CATALOG)) {
-      addSelect.createEl("option", { text: `${def.description} (${def.labelPrefix})`, value: type });
-    }
-    addSelect.onchange = () => {
-      const type = addSelect.value as ComponentType;
-      if (type) {
-        this.addComponent(type);
-        addSelect.value = "";
-      }
+    // 2. Add Component Button (toggles compact searchable component picker)
+    const addCompBtn = this.visualToolbarEl.createEl("button", {
+      cls: `goodobsidian-circuit-btn ${this.showComponentPicker || this.pendingPlaceType ? "is-active" : ""}`,
+      title: "Add a component symbol to the schematic",
+    });
+    const addIcon = addCompBtn.createSpan({ cls: "goodobsidian-btn-icon" });
+    setIcon(addIcon, "plus");
+    addCompBtn.createSpan({ text: "Component" });
+    addCompBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.showComponentPicker = !this.showComponentPicker;
+      this.renderVisualView();
     };
 
     // 3. Undo / Redo controls
@@ -516,8 +575,16 @@ export class CircuitModal extends Modal {
     redoBtn.setAttribute("aria-label", "Redo");
     redoBtn.onclick = () => this.redo();
 
-    // 5. Global Schematic Clean & Layout Actions
+    // 5. Global Schematic Clean, Layout & Zoom Actions
     const layoutGroup = this.visualToolbarEl.createDiv({ cls: "goodobsidian-circuit-btn-group is-right" });
+
+    const fitBtn = layoutGroup.createEl("button", {
+      cls: "goodobsidian-circuit-btn",
+      title: "Zoom to fit entire circuit",
+    });
+    setIcon(fitBtn, "maximize");
+    fitBtn.createSpan({ text: "Fit" });
+    fitBtn.onclick = () => this.zoomToFit();
 
     const cleanWiresBtn = layoutGroup.createEl("button", {
       cls: "goodobsidian-circuit-btn",
@@ -538,6 +605,22 @@ export class CircuitModal extends Modal {
 
   private renderVisualBanner(): void {
     this.visualBannerEl.empty();
+    if (this.pendingPlaceType) {
+      const banner = this.visualBannerEl.createDiv({ cls: "goodobsidian-circuit-banner" });
+      const def = COMPONENT_CATALOG[this.pendingPlaceType];
+      banner.createSpan({
+        text: `Tap schematic to place ${def?.description || this.pendingPlaceType} (or Esc to cancel)`,
+      });
+      const cancelPlace = banner.createEl("button", {
+        text: "Cancel",
+        cls: "goodobsidian-circuit-btn-mini",
+      });
+      cancelPlace.onclick = () => {
+        this.pendingPlaceType = null;
+        this.renderVisualView();
+      };
+      return;
+    }
     if (this.interactionMode !== "wire") return;
 
     const banner = this.visualBannerEl.createDiv({ cls: "goodobsidian-circuit-banner" });
@@ -570,6 +653,8 @@ export class CircuitModal extends Modal {
   private renderVisualStage(): void {
     const svgMarkup = renderCircuitToSvg(this.circuit, {
       theme: "light",
+      strokeColor: "#0f172a",
+      wireColor: "#1e293b",
       showGrid: true,
       showNodes: true,
       showPorts: true,
@@ -584,8 +669,179 @@ export class CircuitModal extends Modal {
     this.visualStageEl.replaceChildren(this.visualStageEl.ownerDocument.importNode(parsedSvg.documentElement, true));
     const svgEl = this.visualStageEl.querySelector("svg");
     if (svgEl) {
-      svgEl.style.cursor = this.interactionMode === "wire" ? "crosshair" : "default";
+      svgEl.setAttribute("data-original-viewbox", svgEl.getAttribute("viewBox") || "");
+      svgEl.style.cursor = this.pendingPlaceType ? "copy" : this.interactionMode === "wire" ? "crosshair" : "default";
+      this.applyViewBox();
     }
+
+    if (this.showComponentPicker) {
+      this.renderComponentPickerPopover();
+    }
+    this.renderZoomControls();
+  }
+
+  private applyViewBox(): void {
+    const svgEl = this.visualStageEl.querySelector("svg");
+    if (!svgEl) return;
+    const origVb = svgEl.getAttribute("data-original-viewbox") || svgEl.getAttribute("viewBox");
+    if (!origVb) return;
+    if (!svgEl.hasAttribute("data-original-viewbox")) {
+      svgEl.setAttribute("data-original-viewbox", origVb);
+    }
+    const parts = origVb.split(/[\s,]+/).map(Number);
+    if (parts.length === 4 && !isNaN(parts[2]) && !isNaN(parts[3])) {
+      const [minX, minY, w, h] = parts;
+      const scaledW = w / this.zoomScale;
+      const scaledH = h / this.zoomScale;
+      const centerX = minX + w / 2 - this.panOffset.x;
+      const centerY = minY + h / 2 - this.panOffset.y;
+      svgEl.setAttribute(
+        "viewBox",
+        `${(centerX - scaledW / 2).toFixed(2)} ${(centerY - scaledH / 2).toFixed(2)} ${scaledW.toFixed(2)} ${scaledH.toFixed(2)}`,
+      );
+    }
+  }
+
+  private zoomToFit(): void {
+    this.zoomScale = 1.0;
+    this.panOffset = { x: 0, y: 0 };
+    this.renderVisualStage();
+    new Notice("Zoom reset to fit circuit.");
+  }
+
+  private renderZoomControls(): void {
+    const controls = this.visualStageEl.createDiv({ cls: "goodobsidian-circuit-zoom-controls" });
+    const zoomOutBtn = controls.createEl("button", {
+      cls: "goodobsidian-circuit-zoom-btn",
+      title: "Zoom Out",
+      text: "-",
+    });
+    zoomOutBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomScale = Math.max(0.35, Math.round((this.zoomScale / 1.25) * 100) / 100);
+      this.applyViewBox();
+    };
+
+    const fitBtn = controls.createEl("button", {
+      cls: "goodobsidian-circuit-zoom-btn",
+      title: "Zoom to Fit",
+    });
+    const fitIcon = fitBtn.createSpan({ cls: "goodobsidian-btn-icon" });
+    setIcon(fitIcon, "maximize");
+    fitBtn.createSpan({ text: `${Math.round(this.zoomScale * 100)}%` });
+    fitBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomToFit();
+    };
+
+    const zoomInBtn = controls.createEl("button", {
+      cls: "goodobsidian-circuit-zoom-btn",
+      title: "Zoom In",
+      text: "+",
+    });
+    zoomInBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomScale = Math.min(3.5, Math.round((this.zoomScale * 1.25) * 100) / 100);
+      this.applyViewBox();
+    };
+  }
+
+  private renderComponentPickerPopover(): void {
+    const popover = this.visualStageEl.createDiv({ cls: "goodobsidian-comp-picker-popover" });
+    popover.onclick = (e) => e.stopPropagation();
+
+    const searchContainer = popover.createDiv({ cls: "goodobsidian-comp-picker-search" });
+    const searchInput = searchContainer.createEl("input", {
+      type: "text",
+      placeholder: "Search symbols (R, C, Diode, NMOS...)",
+      value: this.componentPickerSearch,
+    });
+    setTimeout(() => searchInput.focus(), 25);
+
+    const listContainer = popover.createDiv({ cls: "goodobsidian-comp-picker-list" });
+
+    const populateList = () => {
+      listContainer.empty();
+      const q = this.componentPickerSearch.toLowerCase().trim();
+      const allTypes = Object.keys(COMPONENT_CATALOG) as ComponentType[];
+
+      const matches = (type: ComponentType): boolean => {
+        if (!q) return true;
+        const def = COMPONENT_CATALOG[type];
+        return (
+          type.toLowerCase().includes(q) ||
+          def.labelPrefix.toLowerCase().includes(q) ||
+          def.description.toLowerCase().includes(q) ||
+          def.defaultLabel.toLowerCase().includes(q)
+        );
+      };
+
+      const selectType = (type: ComponentType) => {
+        this.showComponentPicker = false;
+        this.componentPickerSearch = "";
+        this.pendingPlaceType = type;
+        this.renderVisualView();
+        new Notice(`Tap on the schematic to place ${COMPONENT_CATALOG[type]?.description || type}.`);
+      };
+
+      if (q) {
+        const filtered = allTypes.filter(matches);
+        if (filtered.length === 0) {
+          listContainer.createDiv({ cls: "goodobsidian-blocks-empty", text: "No components match search." });
+          return;
+        }
+        for (const type of filtered) {
+          const def = COMPONENT_CATALOG[type];
+          const item = listContainer.createEl("button", { cls: "goodobsidian-comp-picker-item" });
+          item.createSpan({ text: def.description });
+          item.createSpan({ cls: "comp-code", text: def.labelPrefix });
+          item.onclick = () => selectType(type);
+        }
+        return;
+      }
+
+      listContainer.createDiv({ cls: "goodobsidian-comp-picker-section", text: "Common Symbols" });
+      for (const type of COMMON_COMPONENT_ORDER) {
+        if (matches(type)) {
+          const def = COMPONENT_CATALOG[type];
+          const item = listContainer.createEl("button", { cls: "goodobsidian-comp-picker-item" });
+          item.createSpan({ text: def.description });
+          item.createSpan({ cls: "comp-code", text: def.labelPrefix });
+          item.onclick = () => selectType(type);
+        }
+      }
+
+      const otherTypes = allTypes.filter((t) => !COMMON_COMPONENT_ORDER.includes(t));
+      if (otherTypes.length > 0) {
+        listContainer.createDiv({ cls: "goodobsidian-comp-picker-section", text: "More Symbols" });
+        for (const type of otherTypes) {
+          if (matches(type)) {
+            const def = COMPONENT_CATALOG[type];
+            const item = listContainer.createEl("button", { cls: "goodobsidian-comp-picker-item" });
+            item.createSpan({ text: def.description });
+            item.createSpan({ cls: "comp-code", text: def.labelPrefix });
+            item.onclick = () => selectType(type);
+          }
+        }
+      }
+    };
+
+    searchInput.oninput = () => {
+      this.componentPickerSearch = searchInput.value;
+      populateList();
+    };
+
+    searchInput.onkeydown = (e) => {
+      if (e.key === "Escape") {
+        this.showComponentPicker = false;
+        this.renderVisualView();
+      } else if (e.key === "Enter") {
+        const first = listContainer.querySelector<HTMLElement>(".goodobsidian-comp-picker-item");
+        if (first) first.click();
+      }
+    };
+
+    populateList();
   }
 
   private handleStagePointerDown(ev: PointerEvent): void {
@@ -600,6 +856,16 @@ export class CircuitModal extends Modal {
     const gridY = pt.y / gridSize;
 
     this.didDragMove = false;
+
+    // 0. Tap to place pending component
+    if (this.pendingPlaceType) {
+      const snapX = Math.round(gridX * 2) / 2;
+      const snapY = Math.round(gridY * 2) / 2;
+      this.addComponent(this.pendingPlaceType, snapX, snapY);
+      this.pendingPlaceType = null;
+      this.renderVisualView();
+      return;
+    }
 
     // A. Check waypoint handle hits on currently selected wire
     const target = ev.target as HTMLElement | SVGElement | null;
@@ -622,7 +888,33 @@ export class CircuitModal extends Modal {
       }
     }
 
-    // B. Interaction Mode: Draw Wire
+    // B. Check direct label hit test
+    const labelEl = target?.closest?.("[data-label-comp][data-label-kind]") as HTMLElement | SVGElement | null;
+    if (labelEl) {
+      const compId = labelEl.getAttribute("data-label-comp");
+      const kind = (labelEl.getAttribute("data-label-kind") || "label") as "label" | "value";
+      if (compId && this.circuit.components[compId]) {
+        try {
+          this.visualStageEl.setPointerCapture(ev.pointerId);
+          this.capturedPointerId = ev.pointerId;
+        } catch { /* Pointer capture may already be released by the browser. */ }
+        this.dragInitialSnapshot = cloneCircuit(this.circuit);
+        this.selectedComponentId = compId;
+        this.selectedWireId = null;
+        this.selectedNodeId = null;
+        this.draggingLabel = { compId, kind };
+        const comp = this.circuit.components[compId];
+        const off = kind === "label" ? comp.labelOffset : comp.valueOffset;
+        this.dragOffset = {
+          x: gridX - (comp.x + (off?.x ?? 0)),
+          y: gridY - (comp.y + (off?.y ?? 0)),
+        };
+        this.renderVisualView();
+        return;
+      }
+    }
+
+    // C. Interaction Mode: Draw Wire
     if (this.interactionMode === "wire") {
       // Validate that pending starting endpoint still exists in circuit; if not, cancel it gracefully
       if (this.wireDrawStart) {
@@ -730,7 +1022,7 @@ export class CircuitModal extends Modal {
       return;
     }
 
-    // C. Interaction Mode: Select & Move
+    // D. Interaction Mode: Select & Move
     // 1. Check hit on components
     for (const comp of Object.values(this.circuit.components)) {
       const def = COMPONENT_CATALOG[comp.type];
@@ -757,17 +1049,48 @@ export class CircuitModal extends Modal {
       }
     }
 
-    // 2. Check hit on nodes
+    // 2. Check hit on nodes (distinguish movable junctions vs terminal nodes)
     const hitNode = this.hitTestNode(gridX, gridY);
     if (hitNode) {
       this.selectedNodeId = hitNode;
       this.selectedComponentId = null;
       this.selectedWireId = null;
+      if (isMovableJunction(this.circuit, hitNode)) {
+        try {
+          this.visualStageEl.setPointerCapture(ev.pointerId);
+          this.capturedPointerId = ev.pointerId;
+        } catch { /* Pointer capture may already be released by the browser. */ }
+        this.dragInitialSnapshot = cloneCircuit(this.circuit);
+        this.draggingJunctionNodeId = hitNode;
+        const node = this.circuit.nodes[hitNode];
+        this.dragOffset = { x: gridX - node.x, y: gridY - node.y };
+      }
       this.renderVisualView();
       return;
     }
 
-    // 3. Check hit on wires
+    // 3. Check hit on wire segments (direct LTspice-style segment dragging)
+    const segmentHit = hitTestCircuitWireSegment(this.circuit, gridX, gridY, 0.45);
+    if (segmentHit) {
+      try {
+        this.visualStageEl.setPointerCapture(ev.pointerId);
+        this.capturedPointerId = ev.pointerId;
+      } catch { /* Pointer capture may already be released by the browser. */ }
+      this.dragInitialSnapshot = cloneCircuit(this.circuit);
+      this.selectedWireId = segmentHit.wireId;
+      this.selectedComponentId = null;
+      this.selectedNodeId = null;
+      this.draggingWireSegment = {
+        wireId: segmentHit.wireId,
+        segmentIndex: segmentHit.segmentIndex,
+        isHorizontal: segmentHit.isHorizontal,
+        fromPoint: { x: gridX, y: gridY },
+      };
+      this.renderVisualView();
+      return;
+    }
+
+    // 4. Fallback check hit on wires
     const hitWire = this.hitTestWire(gridX, gridY);
     if (hitWire) {
       this.selectedWireId = hitWire;
@@ -777,7 +1100,10 @@ export class CircuitModal extends Modal {
       return;
     }
 
-    // 4. Clicked blank canvas: deselect all
+    // 5. Blank canvas: pan viewport
+    this.isPanning = true;
+    this.panStart = { x: ev.clientX, y: ev.clientY };
+    this.panInitial = { ...this.panOffset };
     this.selectedComponentId = null;
     this.selectedWireId = null;
     this.selectedNodeId = null;
@@ -788,7 +1114,28 @@ export class CircuitModal extends Modal {
     if (this.capturedPointerId !== null && ev.pointerId !== this.capturedPointerId) {
       return;
     }
-    if (!this.draggingWaypoint && !this.draggingCompId) return;
+
+    // Canvas panning
+    if (this.isPanning) {
+      const dx = (ev.clientX - this.panStart.x) / this.zoomScale;
+      const dy = (ev.clientY - this.panStart.y) / this.zoomScale;
+      this.panOffset = {
+        x: this.panInitial.x + dx,
+        y: this.panInitial.y + dy,
+      };
+      this.applyViewBox();
+      return;
+    }
+
+    if (
+      !this.draggingWaypoint &&
+      !this.draggingCompId &&
+      !this.draggingWireSegment &&
+      !this.draggingJunctionNodeId &&
+      !this.draggingLabel
+    ) {
+      return;
+    }
 
     const pt = this.svgPoint(ev);
     const gridSize = this.circuit.gridSize || 20;
@@ -808,6 +1155,62 @@ export class CircuitModal extends Modal {
           wire.waypoints[index].y = nextY;
           this.updateWaypointDragVisual(wireId, index);
         }
+      }
+      return;
+    }
+
+    // Track dragging wire segment
+    if (this.draggingWireSegment) {
+      const { wireId, segmentIndex, isHorizontal } = this.draggingWireSegment;
+      const wire = this.circuit.wires.find((w) => w.id === wireId);
+      if (wire) {
+        const targetCoord = isHorizontal
+          ? Math.round(gridY * 2) / 2
+          : Math.round(gridX * 2) / 2;
+        const updated = dragCircuitWireSegment(this.circuit, wireId, segmentIndex, targetCoord);
+        if (updated) {
+          this.didDragMove = true;
+          this.updateWireSegmentDragVisual(wireId);
+        }
+      }
+      return;
+    }
+
+    // Track dragging movable junction
+    if (this.draggingJunctionNodeId) {
+      const nodeId = this.draggingJunctionNodeId;
+      const node = this.circuit.nodes[nodeId];
+      if (node) {
+        const rawX = gridX - this.dragOffset.x;
+        const rawY = gridY - this.dragOffset.y;
+        const snappedX = Math.round(rawX * 2) / 2;
+        const snappedY = Math.round(rawY * 2) / 2;
+        if (node.x !== snappedX || node.y !== snappedY) {
+          this.didDragMove = true;
+          node.x = snappedX;
+          node.y = snappedY;
+          this.updateJunctionDragVisual(nodeId);
+        }
+      }
+      return;
+    }
+
+    // Track dragging label
+    if (this.draggingLabel) {
+      const { compId, kind } = this.draggingLabel;
+      const comp = this.circuit.components[compId];
+      if (comp) {
+        const rawOffX = gridX - this.dragOffset.x - comp.x;
+        const rawOffY = gridY - this.dragOffset.y - comp.y;
+        const snapOffX = Math.round(rawOffX * 5) / 5;
+        const snapOffY = Math.round(rawOffY * 5) / 5;
+        if (kind === "label") {
+          comp.labelOffset = { x: snapOffX, y: snapOffY, manual: true };
+        } else {
+          comp.valueOffset = { x: snapOffX, y: snapOffY, manual: true };
+        }
+        this.didDragMove = true;
+        this.updateLabelDragVisual(compId, kind);
       }
       return;
     }
@@ -855,6 +1258,60 @@ export class CircuitModal extends Modal {
         this.updateComponentDragVisual(comp.id);
       }
       return;
+    }
+  }
+
+  private updateWireSegmentDragVisual(wireId: string): void {
+    const wire = this.circuit.wires.find((w) => w.id === wireId);
+    if (!wire) return;
+    const gridSize = this.circuit.gridSize || 20;
+    const pathD = buildWirePathD(wire, this.circuit.nodes, gridSize);
+    const wirePaths = this.visualStageEl.querySelectorAll(`path[data-wire-id="${wireId}"]`);
+    for (let i = 0; i < wirePaths.length; i++) {
+      wirePaths[i].setAttribute("d", pathD);
+    }
+  }
+
+  private updateJunctionDragVisual(nodeId: string): void {
+    const node = this.circuit.nodes[nodeId];
+    if (!node) return;
+    const gridSize = this.circuit.gridSize || 20;
+
+    const nodeDots = this.visualStageEl.querySelectorAll(`circle[data-node-id="${nodeId}"]`);
+    for (let i = 0; i < nodeDots.length; i++) {
+      nodeDots[i].setAttribute("cx", `${node.x * gridSize}`);
+      nodeDots[i].setAttribute("cy", `${node.y * gridSize}`);
+    }
+
+    for (const wire of this.circuit.wires) {
+      if (wire.fromNode === nodeId || wire.toNode === nodeId) {
+        const pathD = buildWirePathD(wire, this.circuit.nodes, gridSize);
+        const paths = this.visualStageEl.querySelectorAll(`path[data-wire-id="${wire.id}"]`);
+        for (let i = 0; i < paths.length; i++) {
+          paths[i].setAttribute("d", pathD);
+        }
+      }
+    }
+  }
+
+  private updateLabelDragVisual(compId: string, kind: "label" | "value"): void {
+    const comp = this.circuit.components[compId];
+    if (!comp) return;
+    const gridSize = this.circuit.gridSize || 20;
+    const off = kind === "label" ? comp.labelOffset : comp.valueOffset;
+    const offX = (off?.x ?? 0) * gridSize;
+    const offY = (off?.y ?? 0) * gridSize;
+    const posX = comp.x * gridSize + offX;
+    const posY = comp.y * gridSize + offY;
+
+    const el = this.visualStageEl.querySelector(`[data-label-comp="${compId}"][data-label-kind="${kind}"]`);
+    if (el) {
+      if (el.tagName.toLowerCase() === "text") {
+        el.setAttribute("x", `${posX}`);
+        el.setAttribute("y", `${posY}`);
+      } else {
+        el.setAttribute("transform", `translate(${posX}, ${posY})`);
+      }
     }
   }
 
@@ -968,13 +1425,17 @@ export class CircuitModal extends Modal {
     }
 
     // 5. Update component labels
-    const labelTexts = this.visualStageEl.querySelectorAll(`[data-label-comp="${compId}"] text`);
-    for (let i = 0; i < labelTexts.length; i++) {
-      const t = labelTexts[i];
-      const offX = parseFloat(t.getAttribute("data-label-offset-x") || "0");
-      const offY = parseFloat(t.getAttribute("data-label-offset-y") || "0");
-      t.setAttribute("x", `${cx + offX}`);
-      t.setAttribute("y", `${cy + offY}`);
+    const labelEls = this.visualStageEl.querySelectorAll(`[data-label-comp="${compId}"][data-label-kind]`);
+    for (let i = 0; i < labelEls.length; i++) {
+      const el = labelEls[i];
+      const offX = parseFloat(el.getAttribute("data-label-offset-x") || "0");
+      const offY = parseFloat(el.getAttribute("data-label-offset-y") || "0");
+      if (el.tagName.toLowerCase() === "text") {
+        el.setAttribute("x", `${cx + offX}`);
+        el.setAttribute("y", `${cy + offY}`);
+      } else {
+        el.setAttribute("transform", `translate(${cx + offX}, ${cy + offY})`);
+      }
     }
 
     // 6. Update connected wires
@@ -995,15 +1456,32 @@ export class CircuitModal extends Modal {
       if (ev && ev.pointerId !== this.capturedPointerId) {
         return;
       }
-    } else if (ev && (this.draggingWaypoint || this.draggingCompId)) {
+    } else if (
+      ev &&
+      (this.draggingWaypoint ||
+        this.draggingCompId ||
+        this.draggingWireSegment ||
+        this.draggingJunctionNodeId ||
+        this.draggingLabel)
+    ) {
       return;
     }
 
-    const hadDrag = Boolean(this.draggingWaypoint || this.draggingCompId);
+    const wireSegmentId = this.draggingWireSegment?.wireId;
+    const hadDrag = Boolean(
+      this.draggingWaypoint ||
+      this.draggingCompId ||
+      this.draggingWireSegment ||
+      this.draggingJunctionNodeId ||
+      this.draggingLabel
+    );
     const hadMove = this.didDragMove;
     this.finishActiveDrag();
 
     if (hadDrag && hadMove) {
+      if (wireSegmentId) {
+        simplifyCircuitWire(this.circuit, wireSegmentId);
+      }
       this.mutateCircuit(() => {}, false);
     }
   }
@@ -1013,7 +1491,14 @@ export class CircuitModal extends Modal {
       if (ev && ev.pointerId !== this.capturedPointerId) {
         return;
       }
-    } else if (ev && (this.draggingWaypoint || this.draggingCompId)) {
+    } else if (
+      ev &&
+      (this.draggingWaypoint ||
+        this.draggingCompId ||
+        this.draggingWireSegment ||
+        this.draggingJunctionNodeId ||
+        this.draggingLabel)
+    ) {
       return;
     }
 
@@ -1102,7 +1587,7 @@ export class CircuitModal extends Modal {
 
   // --- Actions & Manipulations --------------------------------------------
 
-  private addComponent(type: ComponentType): void {
+  private addComponent(type: ComponentType, customX?: number, customY?: number): void {
     const def = COMPONENT_CATALOG[type];
     const prefix = def?.labelPrefix || "C";
 
@@ -1113,12 +1598,14 @@ export class CircuitModal extends Modal {
     const id = `${prefix.toLowerCase()}${counter}`;
     const label = `${prefix}${counter}`;
 
-    let cx = 0;
-    let cy = 0;
-    const compCount = Object.keys(this.circuit.components).length;
-    if (compCount > 0) {
-      cx = (compCount % 4) * 4;
-      cy = Math.floor(compCount / 4) * 4;
+    let cx = customX !== undefined ? customX : 0;
+    let cy = customY !== undefined ? customY : 0;
+    if (customX === undefined || customY === undefined) {
+      const compCount = Object.keys(this.circuit.components).length;
+      if (compCount > 0) {
+        cx = (compCount % 4) * 4;
+        cy = Math.floor(compCount / 4) * 4;
+      }
     }
 
     this.selectedComponentId = id;
@@ -1204,6 +1691,26 @@ export class CircuitModal extends Modal {
     });
 
     new Notice("Component deleted");
+  }
+
+  private disconnectComponent(compId: string): void {
+    this.mutateCircuit((c) => {
+      const comp = c.components[compId];
+      if (!comp) return;
+      const def = COMPONENT_CATALOG[comp.type];
+      if (!def) return;
+      for (const port of def.ports) {
+        const ppos = getComponentPortPosition(comp, port.id) || { x: comp.x, y: comp.y };
+        let newNId = `n_${comp.id}_${port.id}_disc`;
+        let counter = 1;
+        while (c.nodes[newNId]) {
+          newNId = `n_${comp.id}_${port.id}_disc_${counter++}`;
+        }
+        c.nodes[newNId] = { id: newNId, x: ppos.x, y: ppos.y };
+        comp.ports[port.id] = newNId;
+      }
+    });
+    new Notice("Component disconnected from circuit terminals.");
   }
 
   private deleteWire(wireId: string): void {
@@ -1369,6 +1876,17 @@ export class CircuitModal extends Modal {
         if (!this.selectedComponentId) return;
         this.rotateComponent(this.selectedComponentId);
       };
+
+      const disconnectBtn = actionGroup.createEl("button", {
+        cls: "goodobsidian-circuit-btn",
+        title: "Disconnect component from all nodes and wires",
+      });
+      setIcon(disconnectBtn, "scissors");
+      disconnectBtn.createSpan({ text: "Disconnect" });
+      disconnectBtn.onclick = () => {
+        if (!this.selectedComponentId) return;
+        this.disconnectComponent(this.selectedComponentId);
+      };
     }
 
     if (this.selectedWireId) {
@@ -1476,7 +1994,7 @@ export class CircuitModal extends Modal {
     // Component Type
     const typeGroup = inspector.createDiv({ cls: "setting-item" });
     typeGroup.createDiv({ cls: "setting-item-name", text: "Component Type" });
-    const typeSelect = typeGroup.createEl("select", { cls: "dropdown goodobsidian-circuit-select" });
+    const typeSelect = typeGroup.createEl("select", { cls: "goodobsidian-circuit-select" });
     for (const [t, d] of Object.entries(COMPONENT_CATALOG)) {
       const opt = typeSelect.createEl("option", { text: d.description, value: t });
       if (t === selectedComp.type) opt.selected = true;
@@ -1515,7 +2033,7 @@ export class CircuitModal extends Modal {
     // Rotation (Exact degree assignment)
     const rotGroup = inspector.createDiv({ cls: "setting-item" });
     rotGroup.createDiv({ cls: "setting-item-name", text: "Rotation" });
-    const rotSelect = rotGroup.createEl("select", { cls: "dropdown goodobsidian-circuit-select" });
+    const rotSelect = rotGroup.createEl("select", { cls: "goodobsidian-circuit-select" });
     for (const deg of [0, 90, 180, 270]) {
       const opt = rotSelect.createEl("option", { text: `${deg}°`, value: `${deg}` });
       if (deg === selectedComp.rotation) opt.selected = true;
@@ -1537,6 +2055,26 @@ export class CircuitModal extends Modal {
       });
     };
 
+    // Reset Label Placement if manually adjusted
+    if (selectedComp.labelOffset?.manual || selectedComp.valueOffset?.manual) {
+      const resetLabelGroup = inspector.createDiv({ cls: "setting-item" });
+      resetLabelGroup.createDiv({ cls: "setting-item-name", text: "Label Position" });
+      const resetLabelBtn = resetLabelGroup.createEl("button", {
+        text: "Reset Label to Auto Position",
+        cls: "goodobsidian-circuit-btn",
+      });
+      resetLabelBtn.onclick = () => {
+        this.mutateCircuit((c) => {
+          const comp = c.components[selectedComp.id];
+          if (comp) {
+            comp.labelOffset = undefined;
+            comp.valueOffset = undefined;
+          }
+        });
+        new Notice("Label positions reset to automatic.");
+      };
+    }
+
     // Terminals & Connections
     inspector.createEl("h4", { text: "Terminals & Node Connections" });
     const portsList = inspector.createDiv({ cls: "goodobsidian-ports-list" });
@@ -1546,7 +2084,7 @@ export class CircuitModal extends Modal {
         const portItem = portsList.createDiv({ cls: "goodobsidian-port-item" });
         portItem.createSpan({ cls: "goodobsidian-port-name", text: `Terminal ${port.name}:` });
 
-        const nodeSelect = portItem.createEl("select", { cls: "dropdown goodobsidian-circuit-select" });
+        const nodeSelect = portItem.createEl("select", { cls: "goodobsidian-circuit-select" });
         const currentNodeId = selectedComp.ports[port.id];
 
         for (const node of Object.values(this.circuit.nodes)) {

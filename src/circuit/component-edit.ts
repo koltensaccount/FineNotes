@@ -19,9 +19,16 @@ export function changeComponentType(
   const ports: Record<string, string> = {};
   for (let i = 0; i < newDef.ports.length; i++) {
     const port = newDef.ports[i];
-    const oldId =
-      oldDef.ports.length === 2 && newDef.ports.length === 2 ? oldDef.ports[i].id : port.id;
-    const nodeId = oldPorts[oldId];
+    // Match by exact port name first, or fallback to ordinal index if terminal counts match
+    let oldId: string | undefined;
+    if (oldPorts[port.id]) {
+      oldId = port.id;
+    } else if (oldDef.ports.length === newDef.ports.length && oldDef.ports[i]) {
+      oldId = oldDef.ports[i].id;
+    } else if (oldDef.ports.length === 2 && newDef.ports.length === 2 && oldDef.ports[i]) {
+      oldId = oldDef.ports[i].id;
+    }
+    const nodeId = oldId ? oldPorts[oldId] : undefined;
     if (nodeId && circuit.nodes[nodeId]) ports[port.id] = nodeId;
   }
   comp.type = type;

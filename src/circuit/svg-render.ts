@@ -16,6 +16,7 @@ import {
 } from "./ir";
 import { layoutComponentLabels, type PlacedComponentLabels } from "./label-layout";
 import { type RoutedTerminalLead, routeAllTerminalLeads } from "./layout";
+import { renderLatexLabelToSvg } from "./math-label";
 
 export interface SvgRenderOptions {
   theme?: "light" | "dark" | "paper";
@@ -502,21 +503,33 @@ export function renderCircuitToSvg(
     const placed = placedLabels.get(comp.id);
     if (placed && (placed.labelText || placed.valueText)) {
       const labelDataAttr = options.interactiveOverlay ? ` data-label-comp="${escapeXml(comp.id)}"` : "";
-      svgParts.push(`<g font-family="system-ui, -apple-system, sans-serif" text-anchor="${placed.anchor}"${labelDataAttr}>`);
+      svgParts.push(`<g font-family="system-ui, -apple-system, sans-serif"${labelDataAttr}>`);
       if (placed.labelText) {
         const textDataAttr = options.interactiveOverlay
-          ? ` data-label-offset-x="${placed.labelX - cx}" data-label-offset-y="${placed.labelY - cy}"`
+          ? `data-label-comp="${escapeXml(comp.id)}" data-label-kind="label" data-label-offset-x="${placed.labelX - cx}" data-label-offset-y="${placed.labelY - cy}" style="cursor: grab;"`
           : "";
         svgParts.push(
-          `<text x="${placed.labelX}" y="${placed.labelY}" font-size="12" font-weight="600" fill="${strokeColor}"${textDataAttr}>${escapeXml(placed.labelText)}</text>`,
+          renderLatexLabelToSvg(placed.labelText, placed.labelX, placed.labelY, {
+            fontSize: 12,
+            fontWeight: "600",
+            color: strokeColor,
+            anchor: placed.anchor,
+            extraAttributes: textDataAttr,
+          }),
         );
       }
       if (placed.valueText && placed.valueX !== undefined && placed.valueY !== undefined) {
         const textDataAttr = options.interactiveOverlay
-          ? ` data-label-offset-x="${placed.valueX - cx}" data-label-offset-y="${placed.valueY - cy}"`
+          ? `data-label-comp="${escapeXml(comp.id)}" data-label-kind="value" data-label-offset-x="${placed.valueX - cx}" data-label-offset-y="${placed.valueY - cy}" style="cursor: grab;"`
           : "";
         svgParts.push(
-          `<text x="${placed.valueX}" y="${placed.valueY}" font-size="11" font-weight="400" fill="${labelColor}"${textDataAttr}>${escapeXml(placed.valueText)}</text>`,
+          renderLatexLabelToSvg(placed.valueText, placed.valueX, placed.valueY, {
+            fontSize: 11,
+            fontWeight: "400",
+            color: labelColor,
+            anchor: placed.anchor,
+            extraAttributes: textDataAttr,
+          }),
         );
       }
       svgParts.push(`</g>`);
@@ -550,7 +563,7 @@ export function renderCircuitToSvg(
 
     if (isJunction) {
       // Standard junction dot
-      const juncDataAttr = options.interactiveOverlay ? ` data-node-id="${escapeXml(node.id)}"` : "";
+      const juncDataAttr = options.interactiveOverlay ? ` data-node-id="${escapeXml(node.id)}" data-junction="true" style="cursor: grab;"` : "";
       svgParts.push(`<circle cx="${nx}" cy="${ny}" r="3.5" fill="${wireColor}"${juncDataAttr} />`);
     }
 

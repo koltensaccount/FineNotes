@@ -268,3 +268,13 @@ export const MarkdownRenderer = {
     return Promise.resolve();
   },
 };
+
+export function renderMath(source: string, _display?: boolean): FakeEl {
+  const container = new FakeEl("mjx-container");
+  const svg = container.createEl("svg");
+  svg.text = source;
+  return container;
+}
+
+export function finishRenderMath(): void {}
+

@@ -98,6 +98,7 @@ import {
 } from "../canvas/lasso";
 import {
   HANDLE_HIT_RADIUS_PX,
+  type ImageCorner,
   IMAGE_CORNERS,
   IMAGE_EDGES,
   type ImagePart,
@@ -731,6 +732,12 @@ interface GroupDrag {
   lifted: boolean;
   ink?: { base: Stroke[]; draft: Stroke[]; frame: ShapeFrame; preview: ShapeFrame; handle: ShapeHandle; mode: "resize" | "scale" };
   shape?: { stroke: Stroke; frame: ShapeFrame; handle: ShapeHandle; mode: "resize" | "scale"; pts: number[]; originalSize: number; size: number; factor: number };
+  circuit?: {
+    circuit: CircuitElement;
+    start: { x: number; y: number; w: number; h: number; rotation?: number };
+    draft: { x: number; y: number; w: number; h: number; rotation?: number };
+    handle: ShapeHandle;
+  };
 }
 
 export class InkSurface {
@@ -5270,6 +5277,13 @@ export class InkSurface {
   private editableInk(sel: GroupSelection | null): boolean {
     return !!sel && (sel.strokes?.length ?? 0) > 0 && !sel.images?.length && !sel.textBoxes?.length && !sel.circuits?.length;
   }
+  private singleCircuitIn(sel: GroupSelection | null): CircuitElement | null {
+    if (!sel) return null;
+    if ((sel.circuits?.length ?? 0) === 1 && !sel.strokes?.length && !sel.images?.length && !sel.textBoxes?.length) {
+      return sel.circuits![0];
+    }
+    return null;
+  }
   private frameForInk(sel: GroupSelection): ShapeFrame | null {
     const bounds = this.groupBounds(sel); if (!bounds) return null;
     return { cx: (bounds.minX + bounds.maxX) / 2, cy: (bounds.minY + bounds.maxY) / 2, w: Math.max(4, bounds.maxX - bounds.minX), h: Math.max(4, bounds.maxY - bounds.minY), angle: 0 };
@@ -5328,7 +5342,8 @@ export class InkSurface {
     this.selectionFrameEl.toggleClass("is-hidden", !box || !bounds);
     const shape = this.editableShape(sel);
     const ink = !shape && this.editableInk(sel);
-    this.selectionFrameEl.toggleClass("is-shape", !!shape || ink);
+    const singleCircuit = !shape && !ink ? this.singleCircuitIn(sel) : null;
+    this.selectionFrameEl.toggleClass("is-shape", !!shape || ink || !!singleCircuit);
     this.selectionFrameEl.style.transform = "";
     for (const button of this.selectionFrameEl.querySelectorAll<HTMLElement>(".goodobsidian-shape-handle")) button.classList.add("is-hidden");
     if (box && bounds) {
@@ -5343,7 +5358,11 @@ export class InkSurface {
         height: `${(bounds.maxY - bounds.minY) * scale + 2 * SELECTION_PAD_PX}px`,
       });
       this.selectionFrameEl.toggleClass("is-dragging", drag !== null);
-      if (shape || ink) {
+      if (singleCircuit) {
+        for (const handle of ["nw", "ne", "sw", "se"] as const) {
+          this.selectionFrameEl.querySelector(`.is-${handle}`)?.classList.remove("is-hidden");
+        }
+      } else if (shape || ink) {
         const transform = drag?.shape;
         const frame = shape ? (transform ? shapeFrame(shape.shape!, transform.pts, transform.frame.angle)! : this.frameForShape(shape)) : (drag?.ink?.preview ?? this.frameForInk(sel!)!);
         const h = Math.max(frame.h * scale, 12);
@@ -6472,13 +6491,16 @@ export class InkSurface {
     } catch {
       // A synthetic pointer (a test harness) cannot be captured; moves still arrive.
     }
+    const singleCircuit = this.singleCircuitIn(sel);
     const stroke = this.editableShape(sel);
     const handle = (event.target as HTMLElement).closest<HTMLElement>("[data-shape-handle]")?.dataset.shapeHandle as ShapeHandle | undefined;
-    const inkFrame = !stroke && handle && this.editableInk(sel) ? this.frameForInk(sel) : null;
+    const inkFrame = !stroke && !singleCircuit && handle && this.editableInk(sel) ? this.frameForInk(sel) : null;
     const base = inkFrame ? sel.strokes.map(s => ({ ...s, pts: s.pts.slice() })) : [];
+    const isCircuitCorner = Boolean(singleCircuit && handle && ["nw", "ne", "sw", "se"].includes(handle));
     this.groupDrag = {
       ...(inkFrame && handle ? { ink: { base, draft: base, frame: inkFrame, preview: inkFrame, handle, mode: this.shapeMode } } : {}),
       ...(stroke && handle ? { shape: { stroke, frame: this.frameForShape(stroke), handle, mode: this.shapeMode, pts: stroke.pts.slice(), originalSize: stroke.size, size: stroke.size, factor: 1 } } : {}),
+      ...(isCircuitCorner && singleCircuit ? { circuit: { circuit: singleCircuit, start: { x: singleCircuit.x, y: singleCircuit.y, w: singleCircuit.w, h: singleCircuit.h, rotation: singleCircuit.rotation }, draft: { x: singleCircuit.x, y: singleCircuit.y, w: singleCircuit.w, h: singleCircuit.h, rotation: singleCircuit.rotation }, handle: handle! } } : {}),
       pointerId: event.pointerId,
       selection: sel,
       bounds,
@@ -6504,7 +6526,8 @@ export class InkSurface {
     const box = this.boxForPage(drag.selection.pageId);
     if (!box) return;
     const point = this.pagePoint(box, event.clientX, event.clientY);
-    if (drag.ink) this.moveInkHandle(drag, box, point);
+    if (drag.circuit) this.moveCircuitHandle(drag, box, point);
+    else if (drag.ink) this.moveInkHandle(drag, box, point);
     else if (drag.shape) this.moveShapeHandle(drag, box, point);
     else {
       this.selectionDragPointer = { x: event.clientX, y: event.clientY };
@@ -6609,6 +6632,18 @@ export class InkSurface {
     if (this.selectionFrameEl.hasPointerCapture(drag.pointerId)) {
       this.selectionFrameEl.releasePointerCapture(drag.pointerId);
     }
+    if (!commit) {
+      if (drag.circuit) {
+        drag.circuit.circuit.x = drag.circuit.start.x;
+        drag.circuit.circuit.y = drag.circuit.start.y;
+        drag.circuit.circuit.w = drag.circuit.start.w;
+        drag.circuit.circuit.h = drag.circuit.start.h;
+      }
+      this.cancelGroupDrag();
+      this.renderDry();
+      this.syncSelectionOverlay();
+      return;
+    }
     if (!drag.lifted) {
       this.syncSelectionOverlay();
       return;
@@ -6619,14 +6654,20 @@ export class InkSurface {
     this.renderer?.clearWet();
     const { pageId } = drag.selection;
     const box = this.boxForPage(pageId);
+    const circuitChanged = !!drag.circuit && (drag.circuit.draft.w !== drag.circuit.start.w || drag.circuit.draft.h !== drag.circuit.start.h || drag.circuit.draft.x !== drag.circuit.start.x || drag.circuit.draft.y !== drag.circuit.start.y);
     const inkChanged = !!drag.ink && drag.ink.draft.some((draft, index) => draft.size !== drag.selection.strokes[index].size || draft.pts.some((v, i) => v !== drag.selection.strokes[index].pts[i]));
     const geometryChanged = !!drag.shape && (drag.shape.pts.some((v, i) => v !== drag.shape!.stroke.pts[i]) || (drag.shape.size !== undefined && drag.shape.size !== drag.shape.stroke.size));
     const moved =
       commit &&
-      (inkChanged || geometryChanged || drag.dx !== 0 || drag.dy !== 0 || (drag.targetPageId !== undefined && drag.targetPageId !== pageId)) &&
+      (circuitChanged || inkChanged || geometryChanged || drag.dx !== 0 || drag.dy !== 0 || (drag.targetPageId !== undefined && drag.targetPageId !== pageId)) &&
       this.doc.pages.some((page) => page.id === pageId);
     if (moved) {
-      if (drag.ink) {
+      if (drag.circuit) {
+        const c = drag.circuit.circuit;
+        const draft = drag.circuit.draft;
+        const updated: CircuitElement = { ...c, x: draft.x, y: draft.y, w: draft.w, h: draft.h };
+        this.history.push(this.doc, new UpdateCircuitCommand(pageId, c.id, updated, "Resize circuit"));
+      } else if (drag.ink) {
         this.history.push(this.doc, new TransformSelectedInk(pageId, drag.ink.draft.map((draft,index) => ({ stroke: drag.selection.strokes[index], pts: draft.pts, size: draft.size })), drag.ink.mode === "scale" ? "Scale drawing" : "Resize drawing"));
         this.shapeMode = "resize";
       } else if (drag.shape) {
@@ -6654,6 +6695,21 @@ export class InkSurface {
     this.syncTextBoxes();
     this.syncSelectionOverlay();
     if (moved) this.changed();
+  }
+
+  private moveCircuitHandle(drag: GroupDrag, box: PageBox, p: Pt): void {
+    const edit = drag.circuit!;
+    const handle = edit.handle as ImageCorner;
+    const clampedP = { x: Math.max(0, Math.min(box.width, p.x)), y: Math.max(0, Math.min(box.height, p.y)) };
+    const next = dragImageHandle(edit.start, handle, clampedP, 20);
+    edit.draft = next;
+    edit.circuit.x = next.x;
+    edit.circuit.y = next.y;
+    edit.circuit.w = next.w;
+    edit.circuit.h = next.h;
+    if (!drag.lifted) this.liftSelection(drag, box);
+    this.renderDry();
+    this.syncSelectionOverlay();
   }
 
   private moveInkHandle(drag: GroupDrag, box: PageBox, p: Pt): void {
