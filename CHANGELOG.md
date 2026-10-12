@@ -6,6 +6,23 @@ documented here. The format follows
 [semver](https://semver.org/). The GitHub Release notes for each tag are
 extracted from the matching section of this file by `release.yml`.
 
+## [Unreleased]
+
+### Beta 41 — circuit recognition and review
+
+- Handwritten circuit conversion now opens a review before replacing ink. Compare the original crop with the editable result, inspect recognition uncertainties and electrical warnings, and correct the diagram before committing. Cancellation and failures preserve the original drawing; Undo restores it after conversion.
+- Recognition uses a complete RC example, catalog-derived terminal/orientation guidance, explicit diode-polarity and crossing rules, and structured JSON output on modern Gemini models. Layout is checked for changes to electrical connectivity.
+- Component type changes remap terminals safely. CircuitikZ import now uses the correct source/diode/capacitor terminal names and rotations, and rejects unsupported component types rather than substituting resistors.
+- Wire routing avoids unrelated terminals, including the opposite pin of a component sharing a net. Shorted components and recognition repairs are reported visibly.
+- Visual editing has contextual properties alongside the canvas (a bottom panel on smaller screens), readable connection names, editable wire endpoints, and larger touch controls. Recognition debug reports can be copied locally on request.
+- Old saved SVGs are refreshed in memory using the corrected renderer, without changing stored notebook data. Ink edited during recognition or review is preserved alongside the new circuit.
+
+### Validation notes
+
+- Targeted circuit tests cover RC and bridge-rectifier topology/polarity, CircuitikZ round trips, crossings/junctions, symbol stroke scaling, old SVG refresh, and the review/undo lifecycle.
+- Responsive browser checks cover landscape, portrait and phone layouts, type changes, undo/redo, save and cancel. Physical iPad/Apple Pencil and live Gemini recognition accuracy still need on-device verification.
+- The unchanged beta 40 baseline already has 19 failing tests and one suite that cannot load, plus existing lint findings. These were reproduced before release; this change introduces no additional failing tests.
+
 ## [1.5.0] - 2026-10-07
 
 ### Added
