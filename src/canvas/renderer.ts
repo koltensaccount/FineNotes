@@ -45,6 +45,7 @@ import { type InkRun, type PenOptions, inkRuns, penOptions, traceRun } from "../
 import {
   type Backdrop,
   type Bounds,
+  type CircuitElement,
   type ImageCrop,
   type ImageElement,
   type InkDocument,
@@ -359,6 +360,8 @@ export class Renderer {
    * wet layer instead, so a move re-rasterises nothing until it ends.
    */
   private hiddenImages: ReadonlySet<ImageElement> = new Set();
+  /** Circuits left out of tiles and previews: a lasso selection being dragged. */
+  private hiddenCircuits: ReadonlySet<CircuitElement> = new Set();
   /** Strokes (by id) left out of tiles and previews: a lasso selection being dragged. */
   private hiddenStrokes: ReadonlySet<string> = new Set();
 
@@ -451,6 +454,10 @@ export class Renderer {
    */
   setHiddenImages(images: ReadonlySet<ImageElement>): void {
     this.hiddenImages = images;
+  }
+
+  setHiddenCircuits(circuits: ReadonlySet<CircuitElement>): void {
+    this.hiddenCircuits = circuits;
   }
 
   /**
@@ -990,6 +997,7 @@ export class Renderer {
   ): void {
     if (!page.circuits || page.circuits.length === 0) return;
     for (const circuit of page.circuits) {
+      if (this.hiddenCircuits.has(circuit)) continue;
       if (!overlaps(imageBounds(circuit), region)) continue;
       drawPlacedCircuit(ctx, circuit, () => this.invalidateAll());
     }
@@ -1106,6 +1114,7 @@ export class Renderer {
     dx: number,
     dy: number,
     usePressure: boolean,
+    circuits?: readonly CircuitElement[],
   ): void {
     const box = this.layout.boxes[pageIndex];
     const ctx = this.wet.ctx;
@@ -1117,6 +1126,11 @@ export class Renderer {
     if (this.imagePainter) {
       for (const image of images) {
         drawPlacedImage(ctx, image, this.imagePainter, this.deviceScale);
+      }
+    }
+    if (circuits) {
+      for (const circuit of circuits) {
+        drawPlacedCircuit(ctx, circuit);
       }
     }
     for (const stroke of strokes) {

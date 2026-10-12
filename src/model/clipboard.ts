@@ -24,7 +24,7 @@
  * result always keeps the pasted group's centre on the page.
  */
 
-import type { Bounds, ImageElement, PageGeometry, Stroke, TextBoxElement } from "./document";
+import type { Bounds, CircuitElement, ImageElement, PageGeometry, Stroke, TextBoxElement } from "./document";
 import { DUPLICATE_OFFSET } from "./images";
 import {
   type ElementLists,
@@ -229,10 +229,20 @@ export function sameSpotTaken(
         near(e.pts[last + 1], c.pts[last + 1] + dy),
     );
   };
+  const circuitTaken = (c: CircuitElement): boolean =>
+    (page.circuits ?? []).some(
+      (e) =>
+        e.id === c.id &&
+        near(e.x, c.x + dx) &&
+        near(e.y, c.y + dy) &&
+        near(e.w, c.w) &&
+        near(e.h, c.h),
+    );
   return (
     copies.images.some(imageTaken) ||
     copies.textBoxes.some(textTaken) ||
-    copies.strokes.some(strokeTaken)
+    copies.strokes.some(strokeTaken) ||
+    (copies.circuits ?? []).some(circuitTaken)
   );
 }
 

@@ -71,8 +71,17 @@ describe("Kirchhoff IR", () => {
     // Unknown component falls back to generic_box
     expect(normalized.components.bad.type).toBe("generic_box");
     expect(normalized.components.bad.x).toBe(0);
-    expect(normalized.wires).toHaveLength(1);
-    expect(normalized.wires[0].id).toBe("w1");
+    // Dangling wire to nonexistent n2 must be rejected
+    expect(normalized.wires).toHaveLength(0);
+
+    // Valid wire between existing nodes must survive
+    const withValidWire = {
+      ...raw,
+      nodes: { n1: { x: 0, y: 0 }, n2: { x: 5, y: 0 } },
+    };
+    const normalizedValid = validateAndNormalizeCircuit(withValidWire);
+    expect(normalizedValid.wires).toHaveLength(1);
+    expect(normalizedValid.wires[0].id).toBe("w1");
   });
 
   it("clones circuit deeply without sharing mutable references", () => {

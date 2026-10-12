@@ -688,6 +688,7 @@ interface PressMenu {
 
 const NO_IMAGES: ReadonlySet<ImageElement> = new Set();
 const NO_STROKES: ReadonlySet<string> = new Set();
+const NO_CIRCUITS: ReadonlySet<CircuitElement> = new Set();
 
 /** A lasso selection: strokes, images and text boxes on one page, held by identity. */
 interface GroupSelection extends ElementLists {
@@ -5012,7 +5013,7 @@ export class InkSurface {
     if (!sel || !bounds || loop.length < 6) return;
     this.selectionOutline = {
       loop: loop.map((v, i) => v - (i % 2 === 0 ? bounds.minX : bounds.minY)),
-      count: sel.strokes.length + sel.images.length + sel.textBoxes.length,
+      count: sel.strokes.length + sel.images.length + sel.textBoxes.length + (sel.circuits?.length ?? 0),
     };
     this.syncSelectionOverlay();
   }
@@ -5036,6 +5037,11 @@ export class InkSurface {
       textBoxes: filter.textBoxes
         ? page.textBoxes.filter((textBox) =>
             (overlap ? boxOverlapsLasso(this.textBoxFrameOf(page.id, textBox), poly) : boxInLasso(this.textBoxFrameOf(page.id, textBox), poly)),
+          )
+        : [],
+      circuits: filter.images
+        ? (page.circuits ?? []).filter((circuit) =>
+            circuit.locked !== true && (overlap ? boxOverlapsLasso(circuit, poly) : boxInLasso(circuit, poly)),
           )
         : [],
     });
@@ -5077,6 +5083,13 @@ export class InkSurface {
     const stroke = this.strokeAt(page, p, tolerance, filter);
     if (stroke) {
       this.select(page.id, { strokes: [stroke], images: [], textBoxes: [] });
+      return;
+    }
+    // A tap on an editable circuit selects it
+    const unlockedCircuits = (page.circuits ?? []).filter((candidate) => candidate.locked !== true);
+    const circuit = filter.images ? topImageAt(unlockedCircuits, p, tolerance) : null;
+    if (circuit) {
+      this.select(page.id, { strokes: [], images: [], textBoxes: [], circuits: [circuit] });
       return;
     }
     // A locked picture is passed over, as if it were part of the paper.
@@ -5146,9 +5159,10 @@ export class InkSurface {
     this.deselectImage();
     const { strokes, textBoxes } = elements;
     const images = elements.images.filter((image) => image.locked !== true);
-    if (isEmptySelection({ strokes, images, textBoxes })) return;
+    const circuits = (elements.circuits ?? []).filter((circuit) => circuit.locked !== true);
+    if (isEmptySelection({ strokes, images, textBoxes, circuits })) return;
     if (this.toolState.tool === "select") this.selectionToolUsed = true;
-    if (strokes.length === 0 && textBoxes.length === 0 && images.length === 1) {
+    if (strokes.length === 0 && textBoxes.length === 0 && circuits.length === 0 && images.length === 1) {
       this.setImageSelection(pageId, images[0]);
       return;
     }
@@ -5163,6 +5177,7 @@ export class InkSurface {
       strokes: [...strokes],
       images: [...images],
       textBoxes: [...textBoxes],
+      circuits: [...circuits],
     };
     const shape = this.editableShape(this.selection);
     if (shape && !independentlyResizable(shape.shape!) && !["line", "arrow", "circle"].includes(shape.shape!)) this.shapeMode = "scale";
@@ -5253,7 +5268,7 @@ export class InkSurface {
 
   /** Put the selection's dashed frame where it is (or where a drag has it), and its bar. */
   private editableInk(sel: GroupSelection | null): boolean {
-    return !!sel && (sel.strokes?.length ?? 0) > 0 && !sel.images?.length && !sel.textBoxes?.length;
+    return !!sel && (sel.strokes?.length ?? 0) > 0 && !sel.images?.length && !sel.textBoxes?.length && !sel.circuits?.length;
   }
   private frameForInk(sel: GroupSelection): ShapeFrame | null {
     const bounds = this.groupBounds(sel); if (!bounds) return null;
@@ -5261,7 +5276,7 @@ export class InkSurface {
   }
 
   private editableShape(sel: GroupSelection | null): Stroke | null {
-    if (!sel || !sel.strokes || sel.strokes.length !== 1 || (sel.images && sel.images.length) || (sel.textBoxes && sel.textBoxes.length)) return null;
+    if (!sel || !sel.strokes || sel.strokes.length !== 1 || (sel.images && sel.images.length) || (sel.textBoxes && sel.textBoxes.length) || (sel.circuits && sel.circuits.length)) return null;
     const stroke = sel.strokes[0];
     if (!stroke.shape || !shapeFrame(stroke.shape, stroke.pts)) return null;
     // Tables are ungrouped ink. Conservatively retain group behavior for connected
@@ -5729,6 +5744,7 @@ export class InkSurface {
       strokes: sel.strokes,
       images: sel.images.filter((image) => image.locked !== true),
       textBoxes: sel.textBoxes,
+      circuits: (sel.circuits ?? []).filter((circuit) => circuit.locked !== true),
     };
     this.clearSelection();
     this.history.push(this.doc, new RemoveElements(sel.pageId, elements, label));
@@ -5902,6 +5918,7 @@ export class InkSurface {
         strokes: group.strokes,
         images: group.images.filter((image) => image.locked !== true),
         textBoxes: group.textBoxes,
+        circuits: (group.circuits ?? []).filter((circuit) => circuit.locked !== true),
       };
       clipboard.put(elements, bounds);
       const snapshot = clipboard.content;
@@ -5983,6 +6000,7 @@ export class InkSurface {
       strokes: entry.elements.strokes,
       images: withImages ? entry.elements.images : [],
       textBoxes: entry.elements.textBoxes,
+      circuits: entry.elements.circuits ? [...entry.elements.circuits] : [],
     };
     const d = pastePlacement({
       bounds: entry.bounds,
@@ -6516,6 +6534,7 @@ export class InkSurface {
     if (this.direction === "horizontal" && !this.turnsPages) this.ensurePaperSize();
     this.renderer?.setHiddenStrokes(new Set(drag.selection.strokes.map((stroke) => stroke.id)));
     this.renderer?.setHiddenImages(new Set(drag.selection.images));
+    this.renderer?.setHiddenCircuits?.(new Set(drag.selection.circuits ?? []));
     this.renderer?.invalidateRegion(box.index, drag.bounds);
     this.renderDry();
   }
@@ -6526,14 +6545,26 @@ export class InkSurface {
     if (!drag?.lifted || !box) return;
     const { images } = drag.selection;
     const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts, size: drag.shape.size ?? drag.shape.stroke.size }] : drag.ink?.draft ?? drag.selection.strokes;
-    this.renderer?.renderSelectionDraft(
-      box.index,
-      strokes,
-      images,
-      drag.dx,
-      drag.dy,
-      this.toolState.pressureEnabled,
-    );
+    if (drag.selection.circuits && drag.selection.circuits.length > 0) {
+      this.renderer?.renderSelectionDraft(
+        box.index,
+        strokes,
+        images,
+        drag.dx,
+        drag.dy,
+        this.toolState.pressureEnabled,
+        drag.selection.circuits,
+      );
+    } else {
+      this.renderer?.renderSelectionDraft(
+        box.index,
+        strokes,
+        images,
+        drag.dx,
+        drag.dy,
+        this.toolState.pressureEnabled,
+      );
+    }
   }
 
   /** Move just the dragged text boxes' frames; a full sync waits for the lift. */
@@ -6571,6 +6602,7 @@ export class InkSurface {
     }
     this.renderer?.setHiddenStrokes(NO_STROKES);
     this.renderer?.setHiddenImages(NO_IMAGES);
+    this.renderer?.setHiddenCircuits?.(NO_CIRCUITS);
     this.renderer?.clearWet();
     const { pageId } = drag.selection;
     const box = this.boxForPage(pageId);

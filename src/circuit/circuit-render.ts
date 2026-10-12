@@ -12,12 +12,26 @@ import { imageBounds, rotationOf } from "../canvas/image-geometry";
 interface CachedCircuitBitmap {
   svg: string;
   image: HTMLImageElement | null;
+  blobUrl?: string;
   ready: boolean;
   timestamp: number;
 }
 
 const BITMAP_CACHE = new Map<string, CachedCircuitBitmap>();
 const MAX_CACHE_ENTRIES = 100;
+
+function hashContent(str: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c64e6d;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
 
 /** Computes the axis-aligned bounding box of a placed circuit */
 export function circuitBounds(circuit: CircuitElement): Bounds {
@@ -30,7 +44,7 @@ export function getCircuitImage(
   onReady?: () => void,
 ): HTMLImageElement | null {
   const svg = circuit.svg || renderCircuitToSvg(circuit.ir);
-  const cacheKey = `${circuit.id}:${svg.length}:${circuit.ir.wires.length}:${Object.keys(circuit.ir.components).length}`;
+  const cacheKey = `${circuit.id}:${hashContent(svg)}`;
 
   const cached = BITMAP_CACHE.get(cacheKey);
   if (cached && cached.image && cached.ready) {
@@ -44,10 +58,13 @@ export function getCircuitImage(
 
   // Create new image outside the pencil loop
   try {
+    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const img = new Image();
     const entry: CachedCircuitBitmap = {
       svg,
       image: img,
+      blobUrl: url,
       ready: false,
       timestamp: Date.now(),
     };
@@ -58,11 +75,12 @@ export function getCircuitImage(
       if (onReady) onReady();
     };
     img.onerror = () => {
+      if (entry.blobUrl) {
+        URL.revokeObjectURL(entry.blobUrl);
+      }
       BITMAP_CACHE.delete(cacheKey);
     };
 
-    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
     img.src = url;
 
     // Prune cache if exceeded
@@ -75,7 +93,13 @@ export function getCircuitImage(
           oldestKey = k;
         }
       }
-      if (oldestKey) BITMAP_CACHE.delete(oldestKey);
+      if (oldestKey) {
+        const evicted = BITMAP_CACHE.get(oldestKey);
+        if (evicted?.blobUrl) {
+          URL.revokeObjectURL(evicted.blobUrl);
+        }
+        BITMAP_CACHE.delete(oldestKey);
+      }
     }
   } catch {
     return null;
@@ -99,8 +123,21 @@ export function drawPlacedCircuit(
   ctx.translate(-circuit.w / 2, -circuit.h / 2);
 
   const img = getCircuitImage(circuit, onReady);
-  if (img && img.complete && img.naturalWidth > 0) {
-    ctx.drawImage(img, 0, 0, circuit.w, circuit.h);
+  if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    const imgAspect = img.naturalWidth / img.naturalHeight;
+    const boxAspect = circuit.w / circuit.h;
+    let drawW = circuit.w;
+    let drawH = circuit.h;
+    let drawX = 0;
+    let drawY = 0;
+    if (imgAspect > boxAspect) {
+      drawH = circuit.w / imgAspect;
+      drawY = (circuit.h - drawH) / 2;
+    } else {
+      drawW = circuit.h * imgAspect;
+      drawX = (circuit.w - drawW) / 2;
+    }
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
   } else {
     // Subtle placeholder box while decoding
     ctx.save();

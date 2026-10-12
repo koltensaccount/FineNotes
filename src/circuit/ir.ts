@@ -479,74 +479,118 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
     wires: [],
   };
 
+  // 1. Ingest nodes
   if (typeof obj.nodes === "object" && obj.nodes !== null) {
     for (const [id, n] of Object.entries(obj.nodes as Record<string, unknown>)) {
       if (typeof n === "object" && n !== null) {
         const nodeObj = n as Record<string, unknown>;
-        circuit.nodes[id] = {
-          id: typeof nodeObj.id === "string" ? nodeObj.id : id,
-          x: typeof nodeObj.x === "number" ? nodeObj.x : 0,
-          y: typeof nodeObj.y === "number" ? nodeObj.y : 0,
+        const nodeId = typeof nodeObj.id === "string" && nodeObj.id.trim() ? nodeObj.id.trim() : id.trim();
+        if (!nodeId) continue;
+        circuit.nodes[nodeId] = {
+          id: nodeId,
+          x: typeof nodeObj.x === "number" && Number.isFinite(nodeObj.x) ? nodeObj.x : 0,
+          y: typeof nodeObj.y === "number" && Number.isFinite(nodeObj.y) ? nodeObj.y : 0,
           label: typeof nodeObj.label === "string" ? nodeObj.label : undefined,
-          junction: Boolean(nodeObj.junction),
+          junction: false,
         };
       }
     }
   }
 
+  // 2. Ingest components & auto-create missing nodes for mapped ports
   if (typeof obj.components === "object" && obj.components !== null) {
     for (const [id, c] of Object.entries(obj.components as Record<string, unknown>)) {
       if (typeof c === "object" && c !== null) {
         const compObj = c as Record<string, unknown>;
+        const compId = typeof compObj.id === "string" && compObj.id.trim() ? compObj.id.trim() : id.trim();
+        if (!compId) continue;
+
         const rawType = String(compObj.type || "resistor");
         const type: ComponentType = (rawType in COMPONENT_CATALOG)
           ? (rawType as ComponentType)
           : "generic_box";
 
-        const ports: Record<string, string> = {};
+        const comp: CircuitComponent = {
+          id: compId,
+          type,
+          label: typeof compObj.label === "string" ? compObj.label : (COMPONENT_CATALOG[type]?.defaultLabel || "C"),
+          value: typeof compObj.value === "string" ? compObj.value : undefined,
+          x: typeof compObj.x === "number" && Number.isFinite(compObj.x) ? compObj.x : 0,
+          y: typeof compObj.y === "number" && Number.isFinite(compObj.y) ? compObj.y : 0,
+          rotation: typeof compObj.rotation === "number" ? ((compObj.rotation % 360) + 360) % 360 : 0,
+          mirror: Boolean(compObj.mirror),
+          ports: {},
+        };
+
         if (typeof compObj.ports === "object" && compObj.ports !== null) {
           for (const [pId, nId] of Object.entries(compObj.ports as Record<string, unknown>)) {
-            if (typeof nId === "string") {
-              ports[pId] = nId;
+            if (typeof nId === "string" && nId.trim()) {
+              const targetNodeId = nId.trim();
+              if (!circuit.nodes[targetNodeId]) {
+                const portPos = getComponentPortPosition(comp, pId) ?? { x: comp.x, y: comp.y };
+                circuit.nodes[targetNodeId] = {
+                  id: targetNodeId,
+                  x: portPos.x,
+                  y: portPos.y,
+                  junction: false,
+                };
+              }
+              comp.ports[pId] = targetNodeId;
             }
           }
         }
 
-        circuit.components[id] = {
-          id: typeof compObj.id === "string" ? compObj.id : id,
-          type,
-          label: typeof compObj.label === "string" ? compObj.label : (COMPONENT_CATALOG[type]?.defaultLabel || "C"),
-          value: typeof compObj.value === "string" ? compObj.value : undefined,
-          x: typeof compObj.x === "number" ? compObj.x : 0,
-          y: typeof compObj.y === "number" ? compObj.y : 0,
-          rotation: typeof compObj.rotation === "number" ? (compObj.rotation % 360 + 360) % 360 : 0,
-          mirror: Boolean(compObj.mirror),
-          ports,
-        };
+        circuit.components[compId] = comp;
       }
     }
   }
 
+  // 3. Ingest wires and discard dangling references, duplicate wires, and self-loops
+  const seenWires = new Set<string>();
   if (Array.isArray(obj.wires)) {
     let wireIdx = 1;
     for (const w of obj.wires) {
       if (typeof w === "object" && w !== null) {
         const wireObj = w as Record<string, unknown>;
-        if (typeof wireObj.fromNode === "string" && typeof wireObj.toNode === "string") {
+        const fromNode = typeof wireObj.fromNode === "string" ? wireObj.fromNode.trim() : "";
+        const toNode = typeof wireObj.toNode === "string" ? wireObj.toNode.trim() : "";
+
+        // Reject nonexistent nodes, empty strings, or self loops
+        if (fromNode && toNode && fromNode !== toNode && circuit.nodes[fromNode] && circuit.nodes[toNode]) {
+          const wireKey = `${fromNode}--${toNode}`;
+          const reverseKey = `${toNode}--${fromNode}`;
+          if (seenWires.has(wireKey) || seenWires.has(reverseKey)) continue;
+          seenWires.add(wireKey);
+
           circuit.wires.push({
-            id: typeof wireObj.id === "string" ? wireObj.id : `w${wireIdx++}`,
-            fromNode: wireObj.fromNode,
-            toNode: wireObj.toNode,
+            id: typeof wireObj.id === "string" && wireObj.id.trim() ? wireObj.id.trim() : `w${wireIdx++}`,
+            fromNode,
+            toNode,
             waypoints: Array.isArray(wireObj.waypoints)
               ? wireObj.waypoints
                   .filter((pt): pt is { x: number; y: number } =>
-                    typeof pt === "object" && pt !== null && typeof pt.x === "number" && typeof pt.y === "number"
+                    typeof pt === "object" && pt !== null && typeof pt.x === "number" && typeof pt.y === "number" && Number.isFinite(pt.x) && Number.isFinite(pt.y)
                   )
               : undefined,
           });
         }
       }
     }
+  }
+
+  // 4. Calculate node junctions based on degree (3 or more connected branches)
+  const connectionCounts: Record<string, number> = {};
+  for (const wire of circuit.wires) {
+    connectionCounts[wire.fromNode] = (connectionCounts[wire.fromNode] || 0) + 1;
+    connectionCounts[wire.toNode] = (connectionCounts[wire.toNode] || 0) + 1;
+  }
+  for (const comp of Object.values(circuit.components)) {
+    for (const nId of Object.values(comp.ports)) {
+      connectionCounts[nId] = (connectionCounts[nId] || 0) + 1;
+    }
+  }
+  for (const [nId, node] of Object.entries(circuit.nodes)) {
+    node.junction = (connectionCounts[nId] || 0) >= 3;
   }
 
   return circuit;

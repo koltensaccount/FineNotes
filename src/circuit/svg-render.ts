@@ -94,10 +94,13 @@ function renderComponentSymbol(
   comp: CircuitComponent,
   strokeColor: string,
   isHighlighted: boolean,
+  gridSize = 20,
 ): string {
   const parts: string[] = [];
   const type = comp.type;
-  const strokeW = isHighlighted ? 2.5 : 1.8;
+  const strokeW = Number(((isHighlighted ? 2.5 : 1.8) / gridSize).toFixed(4));
+  const strokeThick = Number(((isHighlighted ? 3.0 : 2.2) / gridSize).toFixed(4));
+  const strokeFine = Number(((isHighlighted ? 2.0 : 1.4) / gridSize).toFixed(4));
   const mainStroke = isHighlighted ? "#2563eb" : strokeColor;
 
   switch (type) {
@@ -118,9 +121,9 @@ function renderComponentSymbol(
     case "variable_capacitor": {
       // Parallel plates: left lead (-1, 0) -> (-0.2, 0), plate at x = -0.2; right lead (0.2, 0) -> (1, 0), plate at x = 0.2
       parts.push(`<line x1="-1" y1="0" x2="-0.2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      parts.push(`<line x1="-0.2" y1="-0.6" x2="-0.2" y2="0.6" stroke="${mainStroke}" stroke-width="${strokeW + 0.4}" />`);
+      parts.push(`<line x1="-0.2" y1="-0.6" x2="-0.2" y2="0.6" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
       parts.push(`<line x1="0.2" y1="0" x2="1" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      parts.push(`<line x1="0.2" y1="-0.6" x2="0.2" y2="0.6" stroke="${mainStroke}" stroke-width="${strokeW + 0.4}" />`);
+      parts.push(`<line x1="0.2" y1="-0.6" x2="0.2" y2="0.6" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
       if (type === "polarized_capacitor") {
         parts.push(`<text x="-0.5" y="-0.4" font-size="0.6" font-family="sans-serif" font-weight="bold" fill="${mainStroke}" text-anchor="middle">+</text>`);
       }
@@ -169,7 +172,7 @@ function renderComponentSymbol(
       // Long line (pos), short thicker line (neg)
       parts.push(`<line x1="0" y1="-1" x2="0" y2="-0.2" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<line x1="-0.7" y1="-0.2" x2="0.7" y2="-0.2" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      parts.push(`<line x1="-0.4" y1="0.2" x2="0.4" y2="0.2" stroke="${mainStroke}" stroke-width="${strokeW + 0.6}" />`);
+      parts.push(`<line x1="-0.4" y1="0.2" x2="0.4" y2="0.2" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
       parts.push(`<line x1="0" y1="0.2" x2="0" y2="1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<text x="0.6" y="-0.3" font-size="0.5" font-family="sans-serif" fill="${mainStroke}">+</text>`);
       break;
@@ -189,9 +192,9 @@ function renderComponentSymbol(
       }
       if (type === "led") {
         // Light emission arrows
-        parts.push(`<line x1="0" y1="-0.6" x2="0.4" y2="-1" stroke="${mainStroke}" stroke-width="${strokeW * 0.8}" />`);
+        parts.push(`<line x1="0" y1="-0.6" x2="0.4" y2="-1" stroke="${mainStroke}" stroke-width="${strokeFine}" />`);
         parts.push(`<polygon points="0.4,-1 0.25,-0.95 0.35,-0.85" fill="${mainStroke}" />`);
-        parts.push(`<line x1="0.3" y1="-0.4" x2="0.7" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeW * 0.8}" />`);
+        parts.push(`<line x1="0.3" y1="-0.4" x2="0.7" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeFine}" />`);
         parts.push(`<polygon points="0.7,-0.8 0.55,-0.75 0.65,-0.65" fill="${mainStroke}" />`);
       }
       break;
@@ -202,7 +205,7 @@ function renderComponentSymbol(
       // Circle optional. Base at (-1.5, 0), collector at (1, -1.5), emitter at (1, 1.5)
       parts.push(`<line x1="-1.5" y1="0" x2="-0.4" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       // Base vertical bar
-      parts.push(`<line x1="-0.4" y1="-0.8" x2="-0.4" y2="0.8" stroke="${mainStroke}" stroke-width="${strokeW + 0.8}" />`);
+      parts.push(`<line x1="-0.4" y1="-0.8" x2="-0.4" y2="0.8" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
       // Collector line
       parts.push(`<line x1="-0.4" y1="-0.4" x2="1" y2="-1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<line x1="1" y1="-1" x2="1" y2="-1.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
@@ -226,9 +229,9 @@ function renderComponentSymbol(
       // Gate plate
       parts.push(`<line x1="-0.6" y1="-0.7" x2="-0.6" y2="0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       // Channel plates
-      parts.push(`<line x1="-0.2" y1="-0.8" x2="-0.2" y2="-0.3" stroke="${mainStroke}" stroke-width="${strokeW + 0.5}" />`);
-      parts.push(`<line x1="-0.2" y1="-0.1" x2="-0.2" y2="0.1" stroke="${mainStroke}" stroke-width="${strokeW + 0.5}" />`);
-      parts.push(`<line x1="-0.2" y1="0.3" x2="-0.2" y2="0.8" stroke="${mainStroke}" stroke-width="${strokeW + 0.5}" />`);
+      parts.push(`<line x1="-0.2" y1="-0.8" x2="-0.2" y2="-0.3" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
+      parts.push(`<line x1="-0.2" y1="-0.1" x2="-0.2" y2="0.1" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
+      parts.push(`<line x1="-0.2" y1="0.3" x2="-0.2" y2="0.8" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
       // Drain & Source connections
       parts.push(`<line x1="-0.2" y1="-0.55" x2="1" y2="-0.55" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<line x1="1" y1="-0.55" x2="1" y2="-1.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
@@ -389,35 +392,15 @@ export function renderCircuitToSvg(
       for (const pt of wire.waypoints) {
         pathD += ` L ${pt.x * gridSize} ${pt.y * gridSize}`;
       }
+    } else if (Math.abs(x1 - x2) > 0.01 && Math.abs(y1 - y2) > 0.01) {
+      // Orthogonal Manhattan routing: route horizontally then vertically
+      pathD += ` L ${x2} ${y1}`;
     }
     pathD += ` L ${x2} ${y2}`;
 
     svgParts.push(
       `<path d="${pathD}" fill="none" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`,
     );
-  }
-
-  // Render component lead connections to their target nodes if not directly aligned
-  for (const comp of Object.values(circuit.components)) {
-    for (const [pId, nId] of Object.entries(comp.ports)) {
-      const node = circuit.nodes[nId];
-      if (!node) continue;
-      const portPos = getComponentPortPosition(comp, pId);
-      if (!portPos) continue;
-
-      const px = portPos.x * gridSize;
-      const py = portPos.y * gridSize;
-      const nx = node.x * gridSize;
-      const ny = node.y * gridSize;
-
-      // If there's a distance between port terminal and node, draw lead wire
-      const distSq = (px - nx) ** 2 + (py - ny) ** 2;
-      if (distSq > 1) {
-        svgParts.push(
-          `<line x1="${px}" y1="${py}" x2="${nx}" y2="${ny}" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" />`,
-        );
-      }
-    }
   }
 
   // Render components
@@ -432,7 +415,7 @@ export function renderCircuitToSvg(
     }
 
     svgParts.push(`<g transform="${transform}">`);
-    svgParts.push(renderComponentSymbol(comp, strokeColor, isHighlighted));
+    svgParts.push(renderComponentSymbol(comp, strokeColor, isHighlighted, gridSize));
     svgParts.push(`</g>`);
 
     // Render component label & value (in world orientation for readability)
@@ -479,13 +462,12 @@ export function renderCircuitToSvg(
   for (const node of Object.values(circuit.nodes)) {
     const nx = node.x * gridSize;
     const ny = node.y * gridSize;
-    const connCount = nodeConnectionCount[node.id] || 0;
-    const isJunction = node.junction || connCount >= 3;
+    const isJunction = node.junction === true;
     const isHighlighted = node.id === options.highlightNodeId;
 
     if (isJunction) {
       // Standard junction dot
-      svgParts.push(`<circle cx="${nx}" cy="${ny}" r="4" fill="${wireColor}" />`);
+      svgParts.push(`<circle cx="${nx}" cy="${ny}" r="3.5" fill="${wireColor}" />`);
     }
 
     if (options.showNodes || isHighlighted) {
