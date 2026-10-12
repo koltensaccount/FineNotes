@@ -18,6 +18,7 @@ coverage/
 
 # Local agent workspace (session plans can contain private infra details)
 .claude/
+.serena/
 
 # Editor / OS
 .DS_Store

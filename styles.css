@@ -242,6 +242,146 @@ body,
   margin-left: 0;
 }
 
+/* --------------------------------------------------- toolbar positions */
+.goodobsidian-view.is-pos-bottom {
+  flex-direction: column-reverse;
+}
+
+.goodobsidian-view.is-pos-left {
+  flex-direction: row;
+}
+
+.goodobsidian-view.is-pos-right {
+  flex-direction: row-reverse;
+}
+
+/* Vertical toolbar docked to left or right */
+.goodobsidian-toolbar.is-pos-left,
+.goodobsidian-toolbar.is-pos-right {
+  flex-direction: column;
+  align-items: center;
+  width: var(--gob-bar-h, 50px);
+  min-width: var(--gob-bar-h, 50px);
+  max-width: var(--gob-bar-h, 50px);
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  padding: 8px 4px;
+  gap: 8px;
+  box-sizing: border-box;
+  touch-action: pan-y;
+}
+
+.goodobsidian-toolbar.is-pos-left .goodobsidian-bar-group,
+.goodobsidian-toolbar.is-pos-right .goodobsidian-bar-group {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.goodobsidian-toolbar.is-pos-left .goodobsidian-bar-group.is-centre,
+.goodobsidian-toolbar.is-pos-right .goodobsidian-bar-group.is-centre {
+  border-left: none;
+  border-top: 1px solid var(--gob-line);
+  padding-left: 0;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.goodobsidian-toolbar.is-pos-left .goodobsidian-bar-group.is-tools,
+.goodobsidian-toolbar.is-pos-right .goodobsidian-bar-group.is-tools {
+  position: static;
+  transform: none;
+  margin: 4px 0;
+}
+
+.goodobsidian-toolbar.is-pos-left .goodobsidian-bar-group.goodobsidian-bar-doc,
+.goodobsidian-toolbar.is-pos-right .goodobsidian-bar-group.goodobsidian-bar-doc {
+  margin-left: 0;
+  margin-top: auto;
+}
+
+/* Dock indicator when dragging the bar to an edge */
+.goodobsidian-dock-indicator {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  background: var(--interactive-accent);
+  opacity: 0.35;
+  border-radius: var(--gob-radius-m, 8px);
+  transition: all 0.15s ease-out;
+}
+
+.goodobsidian-dock-indicator.is-dock-top {
+  top: 4px;
+  left: 8px;
+  right: 8px;
+  height: 44px;
+}
+
+.goodobsidian-dock-indicator.is-dock-bottom {
+  bottom: 4px;
+  left: 8px;
+  right: 8px;
+  height: 44px;
+}
+
+.goodobsidian-dock-indicator.is-dock-left {
+  top: 8px;
+  bottom: 8px;
+  left: 4px;
+  width: 44px;
+}
+
+.goodobsidian-dock-indicator.is-dock-right {
+  top: 8px;
+  bottom: 8px;
+  right: 4px;
+  width: 44px;
+}
+
+.goodobsidian-toolbar.is-bar-held {
+  box-shadow: 0 0 0 2px var(--interactive-accent), var(--gob-shadow-float);
+  touch-action: none !important;
+}
+
+/* More panel toolbar position selector */
+.goodobsidian-more-pos-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+}
+
+.goodobsidian-more-pos-button {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--gob-radius-s, 4px);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 11px);
+  cursor: pointer;
+}
+
+.goodobsidian-more-pos-button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.goodobsidian-more-pos-button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
 .goodobsidian-toolbar button {
   display: inline-flex;
   align-items: center;
@@ -2979,6 +3119,59 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
 
 .goodobsidian-export-modal {
   width: min(760px, calc(100vw - 32px));
+  height: min(85vh, 680px);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.goodobsidian-export-modal .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.goodobsidian-export-modal .goodobsidian-ask {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 10px;
+}
+
+.goodobsidian-export-modal .goodobsidian-export-scope,
+.goodobsidian-export-modal .goodobsidian-export-choose {
+  flex: 0 0 auto;
+}
+
+.goodobsidian-export-modal .goodobsidian-export-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.goodobsidian-export-modal .goodobsidian-export-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+}
+
+.goodobsidian-export-modal .goodobsidian-export-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  border-top: 1px solid var(--background-modifier-border);
+  padding: 10px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--background-primary);
 }
 
 .goodobsidian-ask {

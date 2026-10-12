@@ -269,6 +269,8 @@ export function requireApiVersion(_version: string): boolean {
 
 export function setIcon(): void {}
 
+export function addIcon(): void {}
+
 export function loadPdfJs(): Promise<never> {
   return Promise.reject(new Error("no pdf.js under test"));
 }

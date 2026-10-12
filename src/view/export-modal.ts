@@ -40,6 +40,8 @@ export interface ExportedPdf {
   bytes: ArrayBuffer;
 }
 
+export type ExportFormat = "pdf" | "png";
+
 export interface ExportPdfHost {
   defaultQuality?: PdfQuality;
   /** "notebook" or "page": only the wording changes. */
@@ -54,13 +56,14 @@ export interface ExportPdfHost {
   /** Paint page `index`'s preview into `canvas`, `cssWidth` CSS px wide, as it will export. */
   paintPreview: (canvas: HTMLCanvasElement, index: number, cssWidth: number) => Promise<void>;
   /** The file name the pages would be saved under. */
-  fileNameFor: (pages: readonly number[]) => string;
+  fileNameFor: (pages: readonly number[], format?: ExportFormat) => string;
   /** Render and save; `onProgress` counts finished pages. Rejects with an `AbortError` when cancelled. */
   export: (
     pages: readonly number[],
     onProgress: (done: number, total: number) => void,
     cancelled: () => boolean,
     quality?: PdfQuality,
+    format?: ExportFormat,
   ) => Promise<ExportedPdf>;
   /** Open the saved PDF in Obsidian. */
   open: (path: string) => void;
@@ -81,6 +84,8 @@ export class ExportPdfModal extends Modal {
   private busy = false;
   private quality: PdfQuality;
   private qualitySelect: HTMLSelectElement | null = null;
+  private format: ExportFormat = "pdf";
+  private formatSelect: HTMLSelectElement | null = null;
   private cancelled = false;
   private closed = false;
   private readonly keyboard: DialogKeyboard;
@@ -95,14 +100,14 @@ export class ExportPdfModal extends Modal {
     super(app);
     this.quality = pdfQuality(host.defaultQuality);
     this.keyboard = new DialogKeyboard(this.modalEl);
-    this.pageScope = host.pageCount > 1 ? "all" : "current";
-    this.chosen = [host.currentPage];
+    this.pageScope = host.pageCount > 1 ? "custom" : "current";
+    this.chosen = allPages(host.pageCount);
   }
 
   override onOpen(): void {
     this.closed = false;
     this.modalEl.addClass("goodobsidian-export-modal", "goodobsidian-dialog");
-    this.titleEl.setText("Export as PDF");
+    this.titleEl.setText(this.format === "png" ? "Export as PNG" : "Export as PDF");
     this.renderChoose();
   }
 
@@ -134,9 +139,8 @@ export class ExportPdfModal extends Modal {
     if (pageCount > 1) {
       const seg = contentEl.createDiv({ cls: "goodobsidian-segmented goodobsidian-export-scope" });
       const scopes: ReadonlyArray<{ id: ExportScope; label: string }> = [
-        { id: "all", label: `All ${pageCount} pages` },
-        { id: "current", label: `This page (${currentPage + 1})` },
         { id: "custom", label: "Choose pages" },
+        { id: "current", label: `This page (${currentPage + 1})` },
       ];
       for (const { id, label } of scopes) {
         const button = seg.createEl("button", { cls: "clickable-icon", text: label });
@@ -168,14 +172,34 @@ export class ExportPdfModal extends Modal {
     this.keyboard.watch(field, bar);
 
     const stage = contentEl.createDiv({ cls: "goodobsidian-export-stage" });
-    const summary = contentEl.createDiv({ cls: "goodobsidian-ask-note" });
-    new Setting(contentEl).setName("Quality").setDesc("Higher raster detail; PDF text and vectors stay preserved.").addDropdown(dropdown => {
-      for (const [value,label] of Object.entries(PDF_QUALITY_LABELS)) dropdown.addOption(value,label);
-      dropdown.setValue(this.quality).onChange(value => {this.quality = pdfQuality(value);});
-      this.qualitySelect = dropdown.selectEl;
-    });
-    const status = contentEl.createDiv({ cls: "goodobsidian-ask-status" });
-    const actions = contentEl.createDiv({ cls: "goodobsidian-ask-actions" });
+    const footer = contentEl.createDiv({ cls: "goodobsidian-export-footer" });
+    new Setting(footer)
+      .setName("Format")
+      .addDropdown((dropdown) => {
+        dropdown.addOption("pdf", "PDF document (.pdf)");
+        dropdown.addOption("png", "PNG image(s) (.png)");
+        dropdown.setValue(this.format).onChange((value) => {
+          this.format = value as ExportFormat;
+          this.titleEl.setText(this.format === "png" ? "Export as PNG" : "Export as PDF");
+          sync(false);
+        });
+        this.formatSelect = dropdown.selectEl;
+      });
+    new Setting(footer)
+      .setName("Quality")
+      .setDesc("Higher raster detail; PDF text and vectors stay preserved.")
+      .addDropdown((dropdown) => {
+        for (const [value, label] of Object.entries(PDF_QUALITY_LABELS)) {
+          dropdown.addOption(value, label);
+        }
+        dropdown.setValue(this.quality).onChange((value) => {
+          this.quality = pdfQuality(value);
+        });
+        this.qualitySelect = dropdown.selectEl;
+      });
+    const summary = footer.createDiv({ cls: "goodobsidian-ask-note" });
+    const status = footer.createDiv({ cls: "goodobsidian-ask-status" });
+    const actions = footer.createDiv({ cls: "goodobsidian-ask-actions" });
     const cancel = actions.createEl("button", { text: "Cancel" });
     cancel.addEventListener("click", () => this.close());
     const go = actions.createEl("button", { cls: "mod-cta", text: "Export" });
@@ -214,11 +238,6 @@ export class ExportPdfModal extends Modal {
 
     const onTap = (index: number, extend: boolean): void => {
       if (this.busy) return;
-      if (this.pageScope === "all") {
-        // Unticking a page of "all" is choosing the rest.
-        this.pageScope = "custom";
-        this.chosen = allPages(pageCount);
-      }
       this.chosen = toggleSelection(this.chosen, index, this.anchor, extend);
       this.anchor = index;
       setChosen(this.chosen);
@@ -262,9 +281,14 @@ export class ExportPdfModal extends Modal {
             : reordered
               ? ` (${formatPageRange(pages)}, in that order)`
               : ` (${formatPageRange(pages)})`;
+        const fileName = this.host.fileNameFor(pages, this.format);
+        const savedText =
+          this.format === "png" && n > 1
+            ? `${n} PNG images`
+            : `“${fileName}”`;
         summary.setText(
           `${n === 1 ? "1 page" : `${n} pages`}${which}, saved as ` +
-            `“${this.host.fileNameFor(pages)}” ` +
+            `${savedText} ` +
             (this.host.folder !== null
               ? `in “${this.host.folder}”.`
               : `next to this ${this.host.noun}.`),
@@ -279,7 +303,9 @@ export class ExportPdfModal extends Modal {
       if (pages.length === 0 || this.busy) return;
       this.busy = true;
       const quality = this.quality;
+      const exportFormat = this.format;
       if (this.qualitySelect) this.qualitySelect.disabled = true;
+      if (this.formatSelect) this.formatSelect.disabled = true;
       this.cancelled = false;
       go.disabled = true;
       contentEl.addClass("is-busy");
@@ -294,13 +320,15 @@ export class ExportPdfModal extends Modal {
           },
           () => this.cancelled,
           quality,
+          exportFormat,
         );
         if (this.closed) return;
-        this.renderDone(saved);
+        this.renderDone(saved, exportFormat);
       } catch (error) {
         if (this.closed || (error instanceof DOMException && error.name === "AbortError")) return;
         this.busy = false;
         if (this.qualitySelect) this.qualitySelect.disabled = false;
+        if (this.formatSelect) this.formatSelect.disabled = false;
         contentEl.removeClass("is-busy");
         status.addClass("is-error");
         status.setText(errorMessage(error));
@@ -337,18 +365,22 @@ export class ExportPdfModal extends Modal {
 
   // --- Saved -----------------------------------------------------------------
 
-  private renderDone(saved: ExportedPdf): void {
+  private renderDone(saved: ExportedPdf, format: ExportFormat = "pdf"): void {
     this.busy = false;
     this.keyboard.end();
     this.disposePreviews();
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.removeClass("is-busy");
-    contentEl.createDiv({ cls: "goodobsidian-export-done", text: `Saved “${saved.path}”.` });
+    const count = this.pages().length;
+    const msg =
+      format === "png" && count > 1
+        ? `Saved ${count} PNG images to “${this.host.folder ?? "vault"}”.`
+        : `Saved “${saved.path}”.`;
+    contentEl.createDiv({ cls: "goodobsidian-export-done", text: msg });
     const status = contentEl.createDiv({ cls: "goodobsidian-ask-status" });
     const actions = contentEl.createDiv({ cls: "goodobsidian-ask-actions" });
 
-    const file = shareableFile(saved);
+    const file = shareableFile(saved, format);
     if (file) {
       // A fresh tap: the share sheet needs a user gesture, which the export's
       // own tap has long since spent.
@@ -517,13 +549,14 @@ function aspectOf(size: { width: number; height: number }): string {
   return size.width > 0 && size.height > 0 ? `${size.width} / ${size.height}` : "1 / 1.414";
 }
 
-/** The PDF as a `File` the platform's share sheet will take, or `null` where there is none. */
-function shareableFile(saved: ExportedPdf): File | null {
+/** The exported document/image as a `File` the platform's share sheet will take, or `null` where there is none. */
+function shareableFile(saved: ExportedPdf, format: ExportFormat = "pdf"): File | null {
   if (typeof navigator.share !== "function" || typeof navigator.canShare !== "function") {
     return null;
   }
   try {
-    const file = new File([saved.bytes], saved.name, { type: "application/pdf" });
+    const mime = format === "png" ? "image/png" : "application/pdf";
+    const file = new File([saved.bytes], saved.name, { type: mime });
     return navigator.canShare({ files: [file] }) ? file : null;
   } catch {
     return null;

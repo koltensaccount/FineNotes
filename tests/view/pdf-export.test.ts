@@ -14,7 +14,7 @@ vi.mock("../../src/canvas/renderer", () => ({
   }),
 }));
 const { renderPageThumbnail } = await import("../../src/canvas/renderer");
-const { exportPagesToPdf } = await import("../../src/view/pdf-export");
+const { exportPagesToPdf, renderPagePng } = await import("../../src/view/pdf-export");
 const jpg = readFileSync(new URL("../export/fixtures/white.jpg", import.meta.url));
 const png = Uint8Array.from(
   Buffer.from(
@@ -240,4 +240,12 @@ it.each(["standard", "high", "very-high"] as const)("%s reaches the shared expor
   expect(vi.mocked(renderPageThumbnail).mock.calls[0][3]).toBe(page.geometry.width * scale);
   const result = await PDFDocument.load(bytes);
   expect(result.getPage(0).getWidth()).toBeCloseTo(page.geometry.width * POINTS_PER_PAGE_PX, 2);
+});
+
+it("renders a page to PNG bytes using renderPagePng", async () => {
+  const page = blankPage("p1");
+  const bytes = await renderPagePng(page, sources, "standard");
+  expect(bytes).toBeInstanceOf(Uint8Array);
+  expect(bytes.length).toBeGreaterThan(0);
+  expect(renderPageThumbnail).toHaveBeenCalled();
 });

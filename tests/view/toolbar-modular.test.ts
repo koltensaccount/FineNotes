@@ -62,6 +62,10 @@ class MockEl {
     this.setAttribute(k, v);
   }
 
+  getAttribute(k: string): string | undefined {
+    return this.attrs[k];
+  }
+
   removeAttribute(k: string): void {
     delete this.attrs[k];
     if (k.startsWith("data-")) {
@@ -95,12 +99,14 @@ class MockEl {
 
   append(...e: MockEl[]): void {
     for (const child of e) {
+      child.remove();
       child.parentElement = this;
       this.children.push(child);
     }
   }
 
   appendChild(child: MockEl): MockEl {
+    child.remove();
     child.parentElement = this;
     this.children.push(child);
     return child;
@@ -750,5 +756,99 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
     toolbar.unhideTool("shape");
     const restoredShape = doc.body.querySelector('[data-tool-id="shape"]')!;
     expect(restoredShape.isFocused).toBe(true);
+  });
+
+  it("moves a tool all the way across the toolbar past the last tool in one continuous swoop", () => {
+    vi.useFakeTimers();
+    try {
+      const layoutSpy = vi.fn();
+      createTestToolbar({}, {
+        onToolbarLayoutChange: layoutSpy,
+      });
+
+      const toolsGroup = host.querySelector(".goodobsidian-bar-group.is-tools")!;
+      const buttons = toolsGroup.querySelectorAll("button");
+      const firstBtn = buttons[0];
+      expect(firstBtn.dataset.toolId).toBe("select");
+
+      // Pointer down on lasso tool
+      firstBtn.dispatchEvent("pointerdown", {
+        button: 0,
+        pointerId: 1,
+        clientX: 20,
+        clientY: 20,
+      });
+
+      vi.advanceTimersByTime(400);
+      expect(toolsGroup.hasClass("is-reordering")).toBe(true);
+      expect(firstBtn.hasClass("is-drag-held")).toBe(true);
+
+      // Drag all the way to clientX 450 (well past the last tool at index 6, which is record at x~310..350)
+      doc.dispatchEvent("pointermove", {
+        pointerId: 1,
+        clientX: 450,
+        clientY: 20,
+        preventDefault: vi.fn(),
+      });
+
+      expect(firstBtn.hasClass("is-dragging")).toBe(true);
+
+      // Pointer up commits new order
+      doc.dispatchEvent("pointerup", {
+        pointerId: 1,
+      });
+
+      expect(toolsGroup.hasClass("is-reordering")).toBe(false);
+      expect(firstBtn.hasClass("is-dragging")).toBe(false);
+      expect(firstBtn.hasClass("is-drag-held")).toBe(false);
+
+      expect(layoutSpy).toHaveBeenCalled();
+      const newOrder = layoutSpy.mock.calls[0][0];
+      // "select" should now be at the very end (index 6, right after "record")
+      expect(newOrder[newOrder.length - 1]).toBe("select");
+      expect(newOrder[0]).not.toBe("select");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("dynamically toggles lasso icon between lasso and square-dashed when mode changes", () => {
+    const { toolbar, state } = createTestToolbar();
+    const selectBtn = host.querySelector('[data-tool-id="select"]')!;
+    expect(selectBtn.getAttribute("aria-label")).toBe("Lasso select (V)");
+
+    // Switch state to rect mode
+    state.lassoMode = "rect";
+    toolbar.syncActive();
+    expect(selectBtn.getAttribute("aria-label")).toBe("Rectangular select (V)");
+
+    // Switch back to freehand mode
+    state.lassoMode = "freehand";
+    toolbar.syncActive();
+    expect(selectBtn.getAttribute("aria-label")).toBe("Lasso select (V)");
+  });
+
+  it("supports toolbar docking positions (top, bottom, left, right) and position changes", () => {
+    const posSpy = vi.fn();
+    const { toolbar } = createTestToolbar(
+      { toolbarPosition: "top" },
+      { onToolbarPositionChange: posSpy },
+    );
+
+    expect(toolbar.getToolbarPosition()).toBe("top");
+    expect(host.hasClass("is-pos-top")).toBe(true);
+
+    toolbar.setToolbarPosition("left");
+    expect(toolbar.getToolbarPosition()).toBe("left");
+    expect(host.hasClass("is-pos-left")).toBe(true);
+    expect(host.hasClass("is-pos-top")).toBe(false);
+
+    toolbar.setToolbarPosition("bottom");
+    expect(toolbar.getToolbarPosition()).toBe("bottom");
+    expect(host.hasClass("is-pos-bottom")).toBe(true);
+
+    toolbar.setToolbarPosition("right");
+    expect(toolbar.getToolbarPosition()).toBe("right");
+    expect(host.hasClass("is-pos-right")).toBe(true);
   });
 });

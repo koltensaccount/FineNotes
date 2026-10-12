@@ -146,7 +146,7 @@ import { ExportPdfModal } from "./export-modal";
 import { penGesturesOf } from "../ink/pen-gestures";
 import { NotebookSearchModal } from "./search-modal";
 import { collectPageText, pageFromSubpath, transcriptSidecarPath } from "../search/notebook-search";
-import { exportPagesToPdf, paintPagePreview } from "./pdf-export";
+import { exportPagesToPdf, paintPagePreview, renderPagePng } from "./pdf-export";
 import { exportBaseName } from "../export/page-range";
 import { stripInkSuffix, uniqueFileName } from "../model/new-notebook";
 import { MorePanel } from "./more-panel";
@@ -1067,6 +1067,11 @@ export class InkView extends TextFileView {
           this.settings.hiddenToolbarTools = hidden;
           void this.plugin.saveSettings();
         },
+        onToolbarPositionChange: (pos) => {
+          this.settings.toolbarPosition = pos;
+          void this.plugin.saveSettings();
+          this.surface?.layout();
+        },
       },
       {
         defaultSize: this.settings.defaultSize,
@@ -1087,6 +1092,7 @@ export class InkView extends TextFileView {
         },
         toolbarToolOrder: this.settings.toolbarToolOrder,
         hiddenToolbarTools: this.settings.hiddenToolbarTools,
+        toolbarPosition: this.settings.toolbarPosition,
       },
     );
 
@@ -1721,9 +1727,49 @@ export class InkView extends TextFileView {
         if (page)
           await paintPagePreview(canvas, page, sources, cssWidth, window.devicePixelRatio || 1);
       },
-      fileNameFor: (pages) =>
-        uniqueFileName(exportBaseName(note.basename, pages, total), ".pdf", taken()),
-      export: async (pages, onProgress, cancelled, quality) => {
+      fileNameFor: (pages, format) => {
+        const ext = format === "png" ? ".png" : ".pdf";
+        if (format === "png" && pages.length > 1) {
+          return `${pages.length} PNG images`;
+        }
+        return uniqueFileName(exportBaseName(note.basename, pages, total), ext, taken());
+      },
+      export: async (pages, onProgress, cancelled, quality, format) => {
+        if (format === "png") {
+          const count = pages.length;
+          let firstExportedPng: { path: string; name: string; bytes: ArrayBuffer } | null = null;
+          for (let idx = 0; idx < pages.length; idx++) {
+            if (cancelled()) throw new DOMException("Export aborted", "AbortError");
+            onProgress(idx, count);
+            const pageIndex = pages[idx];
+            const page = doc.pages[pageIndex];
+            if (!page) continue;
+            const pngBytes = await renderPagePng(page, sources, quality);
+            const base = stripInkSuffix(note.basename);
+            const fileName =
+              count === 1
+                ? uniqueFileName(exportBaseName(note.basename, pages, total), ".png", taken())
+                : uniqueFileName(`${base} (page ${pageIndex + 1})`, ".png", taken());
+            const path = normalizePath(folder ? `${folder}/${fileName}` : fileName);
+            if (chosen !== undefined && !this.app.vault.getFolderByPath(chosen)) {
+              try {
+                await this.app.vault.createFolder(chosen);
+              } catch {
+                // Created meanwhile.
+              }
+            }
+            const buffer = pngBytes.buffer.slice(
+              pngBytes.byteOffset,
+              pngBytes.byteOffset + pngBytes.byteLength,
+            ) as ArrayBuffer;
+            await this.app.vault.createBinary(path, buffer);
+            if (!firstExportedPng) {
+              firstExportedPng = { path, name: fileName, bytes: buffer };
+            }
+          }
+          onProgress(count, count);
+          return firstExportedPng ?? { path: "", name: "", bytes: new ArrayBuffer(0) };
+        }
         const bytes = await exportPagesToPdf(
           pages.map((i) => doc.pages[i]),
           sources,
@@ -2028,6 +2074,13 @@ export class InkView extends TextFileView {
         },
         resetToolbarLayout: () => {
           this.toolbar?.resetToolbarLayout();
+        },
+        toolbarPosition: this.toolbar?.getToolbarPosition() ?? this.settings.toolbarPosition ?? "top",
+        onToolbarPositionChange: (pos) => {
+          this.toolbar?.setToolbarPosition(pos);
+          this.settings.toolbarPosition = pos;
+          void this.plugin.saveSettings();
+          this.surface?.layout();
         },
       },
     );

@@ -121,6 +121,39 @@ export async function renderPageJpeg(page: Page, sources: PdfExportSources, qual
   }
 }
 
+/** One page rendered as PNG bytes (with full backdrop, text, and ink). */
+export async function renderPagePng(
+  page: Page,
+  sources: PdfExportSources,
+  quality: PdfQuality = "standard",
+): Promise<Uint8Array> {
+  const { width, height } = page.geometry;
+  const scale = exportPixelScale(width, height, PDF_QUALITY_FACTORS[quality]);
+  if (scale === 0) throw new Error("A page has no size");
+
+  const painter = await preparePage(page, sources, scale);
+  const canvas = createEl("canvas");
+  try {
+    renderPageThumbnail(canvas, page, painter, width * scale, 1, {
+      usePressure: sources.usePressure,
+      highlighterAlpha: sources.highlighterAlpha,
+      paper: sources.paper,
+      ...(sources.images ? { images: sources.images } : {}),
+    });
+    return await new Promise<Uint8Array>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("The page could not be encoded as PNG"));
+          return;
+        }
+        blob.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)), reject);
+      }, "image/png");
+    });
+  } finally {
+    releaseCanvas(canvas);
+  }
+}
+
 /**
  * Paint `page` into `canvas` at `cssWidth` CSS px, exactly as it will be
  * exported — for the export dialog's page previews. Resolves once painted.

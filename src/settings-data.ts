@@ -55,6 +55,8 @@ export interface GoodObsidianSettings {
   toolbarToolOrder?: string[];
   /** Tool identifiers hidden from the main toolbar. */
   hiddenToolbarTools?: string[];
+  /** Docked position of the handwriting toolbar: top, bottom, left, or right. */
+  toolbarPosition?: ToolbarPosition;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;
@@ -218,6 +220,8 @@ export const DEFAULT_SETTINGS: GoodObsidianSettings = {
   showNewNotebookInContextMenu: true,
   showNewNotebookInExplorer: false,
 };
+
+export type ToolbarPosition = "top" | "bottom" | "left" | "right";
 
 /** The default sequence of tools in the handwriting toolbar. */
 export const DEFAULT_TOOLBAR_TOOL_ORDER: readonly string[] = [

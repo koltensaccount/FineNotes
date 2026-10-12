@@ -44,6 +44,8 @@ export interface MorePanelPage {
   clearable: boolean;
 }
 
+import type { ToolbarPosition } from "../settings-data";
+
 export interface MorePanelActions {
   // Properties holding functions, not methods (CLAUDE.md: a callback is a value).
   paintThumbnail: (canvas: HTMLCanvasElement, index: number, cssWidth: number) => void;
@@ -60,6 +62,8 @@ export interface MorePanelActions {
   hiddenTools?: HiddenToolItem[];
   unhideTool?: (id: string) => void;
   resetToolbarLayout?: () => void;
+  toolbarPosition?: ToolbarPosition;
+  onToolbarPositionChange?: (pos: ToolbarPosition) => void;
 }
 
 export interface HiddenToolItem {
@@ -168,6 +172,30 @@ export class MorePanel {
           icon: "rotate-ccw",
           text: "Reset toolbar layout",
           run: () => actions.resetToolbarLayout?.(),
+        });
+      }
+    }
+
+    if (actions.onToolbarPositionChange) {
+      this.heading("Toolbar position");
+      const posGroup = this.group();
+      const posRow = posGroup.createDiv({ cls: "goodobsidian-more-pos-row" });
+      const positions: Array<{ id: ToolbarPosition; label: string; icon: string }> = [
+        { id: "top", label: "Top", icon: "panel-top" },
+        { id: "bottom", label: "Bottom", icon: "panel-bottom" },
+        { id: "left", label: "Left", icon: "panel-left" },
+        { id: "right", label: "Right", icon: "panel-right" },
+      ];
+      const current = actions.toolbarPosition ?? "top";
+      for (const pos of positions) {
+        const btn = posRow.createEl("button", {
+          cls: `goodobsidian-more-pos-button clickable-icon${pos.id === current ? " is-active" : ""}`,
+        });
+        setIcon(btn.createSpan({ cls: "goodobsidian-more-pos-icon" }), pos.icon);
+        btn.createSpan({ text: pos.label });
+        btn.addEventListener("click", () => {
+          this.close();
+          actions.onToolbarPositionChange?.(pos.id);
         });
       }
     }
