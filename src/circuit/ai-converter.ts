@@ -12,7 +12,8 @@ import { defaultModelFor, extractLlmErrorMessage, jsonEndpoint } from "../recogn
 import { type Bounds } from "../model/document";
 import { type PageElements } from "../model/selection-commands";
 import { renderSelectionToPng } from "../view/selection-clipboard";
-import { type KirchhoffCircuit, validateAndNormalizeCircuit } from "./ir";
+import { cloneCircuit, type KirchhoffCircuit, validateAndNormalizeCircuit } from "./ir";
+import { CIRCUIT_SYSTEM_PROMPT, CIRCUIT_RESPONSE_SCHEMA, circuitTopologySignature } from "./recognition-contract";
 import { autoLayoutCircuit } from "./layout";
 
 export interface ConvertCircuitInput {
@@ -21,73 +22,17 @@ export interface ConvertCircuitInput {
   keyStore: KeyStore;
   modelOverride?: string;
   pageImageBase64?: string;
+  onReviewReady?: (review: CircuitRecognitionReview) => void;
 }
 
-const CIRCUIT_SYSTEM_PROMPT = `You are an expert electrical engineer and schematic recognition system.
-Analyze the provided handwritten electrical circuit diagram and convert it into a structured netlist following the kirchhoff-ir/1.0 schema.
-
-If two images are provided:
-- Image 1 is the high-resolution crop of the selected handwritten circuit diagram (this is the PRIMARY SOURCE OF TRUTH).
-- Image 2 is the surrounding notebook page containing handwritten notes, formulas, equations, or labels.
-- Use Image 2 ONLY to resolve ambiguity in the drawn circuit (such as illegible component values, formulas, or component types like BJT vs MOSFET).
-- NEVER invent or add components, wires, or connections that are not drawn in Image 1.
-- If any component, connection, or label is ambiguous, record a short note in the "uncertainties" array.
-
-Supported component types:
-- resistor (ports: p1, p2)
-- variable_resistor (ports: p1, p2)
-- capacitor (ports: p1, p2)
-- polarized_capacitor (ports: pos, neg)
-- variable_capacitor (ports: p1, p2)
-- inductor (ports: p1, p2)
-- vsource (AC voltage source, ports: pos, neg)
-- vsource_dc (DC voltage source, ports: pos, neg)
-- battery (ports: pos, neg)
-- isource (current source, ports: out, in)
-- diode (ports: anode, cathode)
-- zener_diode (ports: anode, cathode)
-- led (ports: anode, cathode)
-- transistor_npn (ports: base, collector, emitter)
-- transistor_pnp (ports: base, collector, emitter)
-- transistor_nmos (ports: gate, drain, source)
-- transistor_pmos (ports: gate, drain, source)
-- opamp (ports: in_inv, in_noninv, out, vcc, vee)
-- ground (ports: gnd)
-- earth (ports: earth)
-- switch_spst (ports: p1, p2)
-- lamp (ports: p1, p2)
-
-Layout guidelines:
-- Coordinates should be integers or half-integers on a regular grid (typical circuit scale: 0 to 20 units).
-- Align connected component terminals with connection nodes.
-- Horizontal two-terminal components have rotation 0. Vertical components pointing downward or upward have rotation 90 or 270.
-- Recognize component reference labels (e.g., R1, C1, V_in, V_out) and values (e.g., 10k, 100uF, 5V, 1kHz).
-- Identify all electrical junctions and wire connections.
-
-Respond ONLY with valid JSON matching the schema below. No markdown fences, no explanation text:
-{
-  "version": "kirchhoff-ir/1.0",
-  "title": "Circuit",
-  "uncertainties": [],
-  "nodes": {
-    "n1": { "id": "n1", "x": 0, "y": 0, "junction": false }
-  },
-  "components": {
-    "r1": {
-      "id": "r1",
-      "type": "resistor",
-      "label": "R1",
-      "value": "10kΩ",
-      "x": 3,
-      "y": 0,
-      "rotation": 0,
-      "ports": { "p1": "n1", "p2": "n2" }
-    }
-  },
-  "wires": [
-    { "id": "w1", "fromNode": "n1", "toNode": "n2" }
-  ]
-}`;
+/** Held in memory for review; copied locally only on an explicit editor action. */
+export interface CircuitRecognitionReview {
+  originalImage: string;
+  model: string;
+  rawText: string;
+  normalized: KirchhoffCircuit;
+  laidOut: KirchhoffCircuit;
+}
 
 /** Converts a Blob to a Base64 data string */
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -170,6 +115,7 @@ export async function convertSelectionToCircuit(
     generationConfig: {
       maxOutputTokens,
       responseMimeType: "application/json",
+      ...(isGemini15 ? {} : { responseJsonSchema: CIRCUIT_RESPONSE_SCHEMA }),
     },
   };
 
@@ -205,7 +151,7 @@ export async function convertSelectionToCircuit(
 
   let rawText = "";
   for (const part of parts) {
-    if (typeof part.text === "string") {
+    if (typeof part.text === "string" && part.thought !== true) {
       rawText += part.text;
     }
   }
@@ -242,6 +188,16 @@ export async function convertSelectionToCircuit(
 
   // Automatic clean layout, grid snapping, and orthogonal routing
   const laidOut = autoLayoutCircuit(normalized);
+  if (circuitTopologySignature(normalized, true) !== circuitTopologySignature(laidOut, true)) {
+    throw new Error("Automatic layout changed circuit connections. Original handwriting has been preserved.");
+  }
+  input.onReviewReady?.({
+    originalImage: `data:image/png;base64,${base64Data}`,
+    model,
+    rawText,
+    normalized: cloneCircuit(normalized),
+    laidOut: cloneCircuit(laidOut),
+  });
 
   return laidOut;
 }

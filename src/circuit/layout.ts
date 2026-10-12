@@ -171,6 +171,23 @@ export function isSegmentObstructed(
     }
   }
 
+  // Shared-net components are still obstacles at their OTHER terminals.
+  // Passing a lead through an unrelated pin makes the SVG look joined and the
+  // coordinate-based CircuitikZ importer correctly treats that pin as connected.
+  for (const comp of Object.values(circuit.components)) {
+    const def = COMPONENT_CATALOG[comp.type];
+    for (const port of def?.ports || []) {
+      const nodeId = comp.ports[port.id];
+      if (nodeId && (options?.ignoreNodeIds?.has(nodeId) || options?.netId === nodeId)) continue;
+      const point = getComponentPortPosition(comp, port.id);
+      if (!point) continue;
+      if (Math.abs(sy1 - sy2) < 0.001 && Math.abs(point.y - sy1) < 0.25 &&
+          point.x >= Math.min(sx1, sx2) - 0.1 && point.x <= Math.max(sx1, sx2) + 0.1) return true;
+      if (Math.abs(sx1 - sx2) < 0.001 && Math.abs(point.x - sx1) < 0.25 &&
+          point.y >= Math.min(sy1, sy2) - 0.1 && point.y <= Math.max(sy1, sy2) + 0.1) return true;
+    }
+  }
+
   // 2. Unrelated electrical nodes / junctions
   for (const n of Object.values(circuit.nodes)) {
     if (options?.ignoreNodeIds?.has(n.id)) continue;

@@ -7007,3 +7007,93 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
     padding-bottom: 12px;
   }
 }
+
+/* Circuit review: canvas and contextual correction tools share one workspace. */
+.goodobsidian-circuit-modal {
+  width: min(1180px, 96vw);
+  max-width: 1180px;
+  height: min(900px, 94vh);
+  max-height: 94vh;
+}
+.goodobsidian-circuit-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+.goodobsidian-circuit-workspace .goodobsidian-visual-stage { height: 100%; }
+.goodobsidian-visual-stage > svg { width: 100%; height: 100%; }
+.goodobsidian-circuit-context {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 12px;
+  border: var(--gob-hairline);
+  border-radius: var(--gob-radius-m);
+  background: var(--background-secondary);
+  min-height: 0;
+  min-width: 0;
+}
+.goodobsidian-circuit-context-inspector { overflow: visible; padding: 0; }
+.goodobsidian-circuit-context-inspector .setting-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0;
+}
+.goodobsidian-circuit-context-inspector .setting-item-name { width: 100%; }
+.goodobsidian-circuit-context-inspector :is(input[type="text"], select) { width: 100%; }
+.goodobsidian-circuit-context-inspector .goodobsidian-circuit-btn-group { flex-wrap: wrap; }
+.goodobsidian-circuit-context-inspector .goodobsidian-port-item { flex-wrap: wrap; gap: 6px; }
+.goodobsidian-circuit-context-inspector .goodobsidian-port-item select { width: 100%; }
+.goodobsidian-circuit-original summary { font-weight: 600; cursor: pointer; }
+.goodobsidian-circuit-original img {
+  width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  background: white;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+.goodobsidian-circuit-original p { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.goodobsidian-circuit-review-issues { font-size: var(--font-ui-small); color: var(--text-muted); }
+.goodobsidian-circuit-review-issues summary { color: var(--text-normal); cursor: pointer; font-weight: 600; }
+.goodobsidian-circuit-issue-list { max-height: 110px; overflow-y: auto; padding: 4px 0; }
+.goodobsidian-circuit-issue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+.goodobsidian-circuit-issue.is-error { color: var(--text-error); }
+.goodobsidian-circuit-btn:disabled { opacity: 0.45; cursor: default; }
+.goodobsidian-circuit-modal :is(.goodobsidian-circuit-btn, .goodobsidian-circuit-tab-btn, .goodobsidian-circuit-select) { min-height: 44px; }
+@media (max-width: 900px) {
+  .goodobsidian-circuit-modal-content { padding: 10px; }
+  .goodobsidian-circuit-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, 1fr) minmax(0, 38%); }
+  .goodobsidian-circuit-context { padding: 10px; }
+  .goodobsidian-circuit-original img { max-height: 140px; }
+  .goodobsidian-circuit-header { gap: 6px; }
+  .goodobsidian-circuit-title { flex: 1; }
+  .goodobsidian-circuit-tabs { order: 3; width: 100%; }
+  .goodobsidian-circuit-tabs button { flex: 1; padding: 6px 8px; }
+  .goodobsidian-circuit-toolbar { gap: 6px; padding: 6px; }
+  .goodobsidian-circuit-toolbar > select { max-width: 170px; }
+  .goodobsidian-circuit-issue-list { max-height: 80px; }
+}
+@media (max-height: 600px) and (min-width: 761px) {
+  .goodobsidian-circuit-modal { height: 96vh; max-height: 96vh; }
+  .goodobsidian-circuit-original img { max-height: 110px; }
+  .goodobsidian-circuit-issue-list { max-height: 70px; }
+}
+@media (min-width: 561px) and (max-width: 900px) {
+  .goodobsidian-circuit-context {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+}

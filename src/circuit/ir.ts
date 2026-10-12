@@ -451,7 +451,7 @@ export function getComponentPortPosition(
   if (!port) return null;
 
   let px = port.x;
-  let py = port.y;
+  const py = port.y;
 
   if (comp.mirror) {
     px = -px;
@@ -476,6 +476,10 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
     return createEmptyCircuit();
   }
   const obj = raw as Record<string, unknown>;
+  const repairs: CircuitDiagnostic[] = [];
+  const reportRepair = (message: string, componentId?: string): void => {
+    repairs.push({ severity: "warning", code: "NORMALIZATION_REPAIR", message, componentId });
+  };
   const circuit: KirchhoffCircuit = {
     version: KIRCHHOFF_IR_VERSION,
     title: typeof obj.title === "string" ? obj.title : "Circuit",
@@ -492,6 +496,9 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
         const nodeObj = n as Record<string, unknown>;
         const nodeId = typeof nodeObj.id === "string" && nodeObj.id.trim() ? nodeObj.id.trim() : id.trim();
         if (!nodeId) continue;
+        if (![nodeObj.x, nodeObj.y].every((v) => typeof v === "number" && Number.isFinite(v))) {
+          reportRepair(`Missing or invalid position for junction "${nodeId}" was reset to the origin.`);
+        }
         circuit.nodes[nodeId] = {
           id: nodeId,
           x: typeof nodeObj.x === "number" && Number.isFinite(nodeObj.x) ? nodeObj.x : 0,
@@ -511,10 +518,14 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
         const compId = typeof compObj.id === "string" && compObj.id.trim() ? compObj.id.trim() : id.trim();
         if (!compId) continue;
 
-        const rawType = String(compObj.type || "resistor");
+        const rawType = typeof compObj.type === "string" ? compObj.type : "resistor";
         const type: ComponentType = (rawType in COMPONENT_CATALOG)
           ? (rawType as ComponentType)
           : "generic_box";
+        if (type !== rawType) reportRepair(`Unknown component type "${rawType}" was displayed as a generic box.`, compId);
+        if (![compObj.x, compObj.y].every((v) => typeof v === "number" && Number.isFinite(v))) {
+          reportRepair(`Missing or invalid position for "${compId}" was reset to the origin.`, compId);
+        }
 
         const comp: CircuitComponent = {
           id: compId,
@@ -523,7 +534,7 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
           value: typeof compObj.value === "string" ? compObj.value : undefined,
           x: typeof compObj.x === "number" && Number.isFinite(compObj.x) ? compObj.x : 0,
           y: typeof compObj.y === "number" && Number.isFinite(compObj.y) ? compObj.y : 0,
-          rotation: typeof compObj.rotation === "number" ? ((compObj.rotation % 360) + 360) % 360 : 0,
+          rotation: typeof compObj.rotation === "number" && Number.isFinite(compObj.rotation) ? ((compObj.rotation % 360) + 360) % 360 : 0,
           mirror: Boolean(compObj.mirror),
           ports: {},
         };
@@ -533,6 +544,7 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
             if (typeof nId === "string" && nId.trim()) {
               const targetNodeId = nId.trim();
               if (!circuit.nodes[targetNodeId]) {
+                reportRepair(`Missing node "${targetNodeId}" was created for ${compId}.${pId}; verify this connection.`, compId);
                 const portPos = getComponentPortPosition(comp, pId) ?? { x: comp.x, y: comp.y };
                 circuit.nodes[targetNodeId] = {
                   id: targetNodeId,
@@ -574,12 +586,16 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
             toNode,
             waypoints: Array.isArray(wireObj.waypoints)
               ? wireObj.waypoints
-                  .filter((pt): pt is { x: number; y: number } =>
-                    typeof pt === "object" && pt !== null && typeof pt.x === "number" && typeof pt.y === "number" && Number.isFinite(pt.x) && Number.isFinite(pt.y)
-                  )
+                  .filter((pt: unknown): pt is { x: number; y: number } => {
+                    if (typeof pt !== "object" || pt === null) return false;
+                    const point = pt as Record<string, unknown>;
+                    return typeof point.x === "number" && typeof point.y === "number" && Number.isFinite(point.x) && Number.isFinite(point.y);
+                  })
               : undefined,
-            direct: Boolean(wireObj.direct) ? true : undefined,
+            direct: wireObj.direct ? true : undefined,
           });
+        } else {
+          reportRepair(`Wire "${typeof wireObj.id === "string" ? wireObj.id : "unnamed"}" was discarded because its endpoints are missing or identical.`);
         }
       }
     }
@@ -606,7 +622,7 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
   }
 
   // 6. Run comprehensive electrical connectivity validation
-  circuit.diagnostics = validateCircuitConnectivity(circuit);
+  circuit.diagnostics = [...repairs, ...validateCircuitConnectivity(circuit)];
 
   return circuit;
 }
@@ -621,7 +637,9 @@ export interface CircuitDiagnostic {
     | "UNCONNECTED_TERMINAL"
     | "INTENTIONALLY_OPEN_PORT"
     | "ISOLATED_SUBCIRCUIT"
-    | "UNROUTABLE_OBSTRUCTION";
+    | "UNROUTABLE_OBSTRUCTION"
+    | "NORMALIZATION_REPAIR"
+    | "SHORTED_COMPONENT";
   message: string;
   componentId?: string;
   nodeId?: string;
@@ -639,6 +657,20 @@ export interface CircuitDiagnostic {
 export function validateCircuitConnectivity(circuit: KirchhoffCircuit): CircuitDiagnostic[] {
   const diagnostics: CircuitDiagnostic[] = [];
   const validNodeIds = new Set(Object.keys(circuit.nodes));
+  // Electrical nets join only through wires, never through component bodies.
+  const netParent = new Map([...validNodeIds].map((id) => [id, id]));
+  const findNet = (id: string): string => {
+    const parent = netParent.get(id);
+    if (!parent || parent === id) return id;
+    const root = findNet(parent);
+    netParent.set(id, root);
+    return root;
+  };
+  for (const wire of circuit.wires) {
+    if (validNodeIds.has(wire.fromNode) && validNodeIds.has(wire.toNode)) {
+      netParent.set(findNet(wire.fromNode), findNet(wire.toNode));
+    }
+  }
 
   // 1. Check wires
   const nodeWireCount: Record<string, number> = {};
@@ -673,6 +705,16 @@ export function validateCircuitConnectivity(circuit: KirchhoffCircuit): CircuitD
   for (const comp of Object.values(circuit.components)) {
     const def = COMPONENT_CATALOG[comp.type];
     const catalogPortIds = new Set(def ? def.ports.map((p) => p.id) : []);
+    if (def?.ports.length === 2 && comp.type !== "switch_spst") {
+      const a = comp.ports[def.ports[0].id];
+      const b = comp.ports[def.ports[1].id];
+      if (a && b && validNodeIds.has(a) && validNodeIds.has(b) && findNet(a) === findNet(b)) {
+        diagnostics.push({
+          severity: "warning", code: "SHORTED_COMPONENT", componentId: comp.id,
+          message: `${comp.label || comp.id} has both terminals on the same electrical net. Check for a wire bypassing this component.`,
+        });
+      }
+    }
 
     // Check for invalid ports
     for (const [pId, nId] of Object.entries(comp.ports)) {

@@ -15,7 +15,10 @@ import {
   type KirchhoffCircuit,
   cloneCircuit,
   getComponentPortPosition,
+  validateCircuitConnectivity,
 } from "../circuit/ir";
+import { changeComponentType } from "../circuit/component-edit";
+import type { CircuitRecognitionReview } from "../circuit/ai-converter";
 import { circuitToTikz, tikzToCircuit } from "../circuit/ir2tikz";
 import { layoutCircuit, rerouteCircuitWires, routeAllTerminalLeads } from "../circuit/layout";
 import { buildWirePathD, renderCircuitToSvg } from "../circuit/svg-render";
@@ -27,6 +30,7 @@ export interface CircuitModalOptions {
   circuit: KirchhoffCircuit;
   onSave: (circuit: KirchhoffCircuit, tikz: string, svg: string) => void;
   onCancel?: () => void;
+  recognitionReview?: CircuitRecognitionReview;
 }
 
 /** Distance from a point (px, py) to a line segment (x1, y1) -> (x2, y2) */
@@ -73,6 +77,9 @@ export class CircuitModal extends Modal {
   private circuit: KirchhoffCircuit;
   private readonly onSave: CircuitModalOptions["onSave"];
   private readonly onCancel?: CircuitModalOptions["onCancel"];
+  private readonly recognitionReview?: CircuitRecognitionReview;
+  private reviewIssuesEl!: HTMLElement;
+  private visualInspectorEl!: HTMLElement;
 
   // State Store
   private activeTab: CircuitEditorTab = "visual";
@@ -119,6 +126,8 @@ export class CircuitModal extends Modal {
     this.circuit = cloneCircuit(options.circuit);
     this.onSave = options.onSave;
     this.onCancel = options.onCancel;
+    this.recognitionReview = options.recognitionReview;
+    this.refreshElectricalDiagnostics();
     this.codeDraft = circuitToTikz(this.circuit);
 
     // Auto-select first component if available
@@ -175,7 +184,7 @@ export class CircuitModal extends Modal {
     // Header with title and segmented tabs
     const headerEl = contentEl.createDiv({ cls: "goodobsidian-circuit-header" });
     const titleEl = headerEl.createDiv({ cls: "goodobsidian-circuit-title" });
-    titleEl.createEl("h2", { text: "Circuit Editor" });
+    titleEl.createEl("h2", { text: this.recognitionReview ? "Review circuit" : "Circuit Editor" });
 
     this.tabHeaderEl = headerEl.createDiv({ cls: "goodobsidian-circuit-tabs" });
     this.buildTabButtons();
@@ -191,10 +200,13 @@ export class CircuitModal extends Modal {
     };
 
     const saveBtn = actionsEl.createEl("button", {
-      text: "Save Circuit",
+      text: this.recognitionReview ? "Use circuit" : "Save Circuit",
       cls: "goodobsidian-circuit-btn mod-cta",
     });
     saveBtn.onclick = () => this.handleSave();
+
+    this.reviewIssuesEl = contentEl.createDiv({ cls: "goodobsidian-circuit-review-issues" });
+    this.renderReviewIssues();
 
     // Body container
     this.bodyContainerEl = contentEl.createDiv({ cls: "goodobsidian-circuit-body" });
@@ -202,7 +214,24 @@ export class CircuitModal extends Modal {
     this.visualViewEl = this.bodyContainerEl.createDiv({ cls: "goodobsidian-circuit-view is-visual" });
     this.visualToolbarEl = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-toolbar" });
     this.visualBannerEl = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-banner-container" });
-    this.visualStageEl = this.visualViewEl.createDiv({ cls: "goodobsidian-visual-stage" });
+    const workspace = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-workspace" });
+    this.visualStageEl = workspace.createDiv({ cls: "goodobsidian-visual-stage" });
+    const aside = workspace.createDiv({ cls: "goodobsidian-circuit-context" });
+    if (this.recognitionReview) {
+      const original = aside.createEl("details", { cls: "goodobsidian-circuit-original" });
+      original.open = true;
+      original.createEl("summary", { text: "Original drawing" });
+      original.createEl("img", { attr: { src: this.recognitionReview.originalImage, alt: "Selected handwritten circuit before conversion" } });
+      original.createEl("p", { text: "Your ink stays unchanged until you choose Use circuit." });
+      const copyReport = original.createEl("button", { text: "Copy debug report", cls: "goodobsidian-circuit-btn" });
+      copyReport.title = "Copy the selected image and recognition stages locally; nothing is uploaded";
+      copyReport.onclick = () => {
+        void navigator.clipboard.writeText(JSON.stringify({ ...this.recognitionReview, edited: this.circuit }, null, 2))
+          .then(() => new Notice("Debug report copied. It includes your selected drawing."))
+          .catch(() => new Notice("Could not copy the debug report."));
+      };
+    }
+    this.visualInspectorEl = aside.createDiv({ cls: "goodobsidian-blocks-inspector goodobsidian-circuit-context-inspector" });
 
     // Mount pointer event handlers ONCE on the persistent visualStageEl
     this.visualStageEl.onpointerdown = (ev) => this.handleStagePointerDown(ev);
@@ -288,7 +317,7 @@ export class CircuitModal extends Modal {
         if (this.visualStageEl.hasPointerCapture(this.capturedPointerId)) {
           this.visualStageEl.releasePointerCapture(this.capturedPointerId);
         }
-      } catch (_) {}
+      } catch { /* Pointer capture may already be released by the browser. */ }
       this.capturedPointerId = null;
     }
     if (this.didDragMove && this.dragInitialSnapshot) {
@@ -306,7 +335,7 @@ export class CircuitModal extends Modal {
         if (this.visualStageEl.hasPointerCapture(this.capturedPointerId)) {
           this.visualStageEl.releasePointerCapture(this.capturedPointerId);
         }
-      } catch (_) {}
+      } catch { /* Pointer capture may already be released by the browser. */ }
       this.capturedPointerId = null;
     }
     const hadDrag = Boolean(this.draggingWaypoint || this.draggingCompId);
@@ -330,6 +359,8 @@ export class CircuitModal extends Modal {
     this.historyRedo.push(cloneCircuit(this.circuit));
     const prev = this.historyUndo.pop()!;
     this.circuit = prev;
+    this.refreshElectricalDiagnostics();
+    this.renderReviewIssues();
     this.selectedComponentId = null;
     this.selectedWireId = null;
     this.selectedNodeId = null;
@@ -359,6 +390,8 @@ export class CircuitModal extends Modal {
     this.historyUndo.push(cloneCircuit(this.circuit));
     const next = this.historyRedo.pop()!;
     this.circuit = next;
+    this.refreshElectricalDiagnostics();
+    this.renderReviewIssues();
     this.selectedComponentId = null;
     this.selectedWireId = null;
     this.selectedNodeId = null;
@@ -390,6 +423,8 @@ export class CircuitModal extends Modal {
     const next = cloneCircuit(this.circuit);
     fn(next);
     this.circuit = next;
+    this.refreshElectricalDiagnostics();
+    this.renderReviewIssues();
 
     this.codeDraft = circuitToTikz(this.circuit);
     this.codeDraftDirty = false;
@@ -409,6 +444,8 @@ export class CircuitModal extends Modal {
     this.renderVisualToolbar();
     this.renderVisualBanner();
     this.renderVisualStage();
+    this.visualInspectorEl.empty();
+    this.renderInspector(this.visualInspectorEl);
   }
 
   private renderVisualToolbar(): void {
@@ -419,11 +456,12 @@ export class CircuitModal extends Modal {
 
     const selectBtn = modeGroup.createEl("button", {
       cls: `goodobsidian-circuit-btn ${this.interactionMode === "select" ? "is-active" : ""}`,
-      title: "Select & Move tool (V)",
+      title: "Select and move components",
     });
     const selectIcon = selectBtn.createSpan({ cls: "goodobsidian-btn-icon" });
     setIcon(selectIcon, "mouse-pointer");
     selectBtn.createSpan({ text: "Select" });
+    selectBtn.setAttribute("aria-pressed", String(this.interactionMode === "select"));
     selectBtn.onclick = () => {
       this.interactionMode = "select";
       this.wireDrawStart = null;
@@ -432,11 +470,12 @@ export class CircuitModal extends Modal {
 
     const wireBtn = modeGroup.createEl("button", {
       cls: `goodobsidian-circuit-btn ${this.interactionMode === "wire" ? "is-active" : ""}`,
-      title: "Draw & Connect Wires tool (W)",
+      title: "Connect terminals",
     });
     const wireIcon = wireBtn.createSpan({ cls: "goodobsidian-btn-icon" });
     setIcon(wireIcon, "git-commit");
     wireBtn.createSpan({ text: "Draw Wire" });
+    wireBtn.setAttribute("aria-pressed", String(this.interactionMode === "wire"));
     wireBtn.onclick = () => {
       this.interactionMode = "wire";
       this.wireDrawStart = null;
@@ -464,6 +503,8 @@ export class CircuitModal extends Modal {
       title: "Undo (Cmd+Z)",
     });
     setIcon(undoBtn, "undo-2");
+    undoBtn.disabled = this.historyUndo.length === 0;
+    undoBtn.setAttribute("aria-label", "Undo");
     undoBtn.onclick = () => this.undo();
 
     const redoBtn = historyGroup.createEl("button", {
@@ -471,58 +512,9 @@ export class CircuitModal extends Modal {
       title: "Redo (Cmd+Shift+Z)",
     });
     setIcon(redoBtn, "redo-2");
+    redoBtn.disabled = this.historyRedo.length === 0;
+    redoBtn.setAttribute("aria-label", "Redo");
     redoBtn.onclick = () => this.redo();
-
-    // 4. Contextual Selection Actions (Rotate, Add Bend, Delete)
-    const actionGroup = this.visualToolbarEl.createDiv({ cls: "goodobsidian-circuit-btn-group" });
-
-    if (this.selectedComponentId && this.circuit.components[this.selectedComponentId]) {
-      const rotBtn = actionGroup.createEl("button", {
-        cls: "goodobsidian-circuit-btn",
-        title: "Rotate component 90°",
-      });
-      setIcon(rotBtn, "rotate-cw");
-      rotBtn.createSpan({ text: "Rotate" });
-      rotBtn.onclick = () => {
-        if (!this.selectedComponentId) return;
-        this.rotateComponent(this.selectedComponentId);
-      };
-    }
-
-    if (this.selectedWireId) {
-      const bendBtn = actionGroup.createEl("button", {
-        cls: "goodobsidian-circuit-btn",
-        title: "Add waypoint handle to bend this wire",
-      });
-      setIcon(bendBtn, "corner-down-right");
-      bendBtn.createSpan({ text: "Add Bend" });
-      bendBtn.onclick = () => {
-        if (!this.selectedWireId) return;
-        this.addBendToWire(this.selectedWireId);
-      };
-
-      const rerouteWireBtn = actionGroup.createEl("button", {
-        cls: "goodobsidian-circuit-btn",
-        title: "Re-route this wire cleanly around obstacles",
-      });
-      setIcon(rerouteWireBtn, "git-branch");
-      rerouteWireBtn.createSpan({ text: "Reroute" });
-      rerouteWireBtn.onclick = () => {
-        if (!this.selectedWireId) return;
-        this.rerouteWire(this.selectedWireId);
-      };
-    }
-
-    const hasSelection = Boolean(this.selectedComponentId || this.selectedWireId || this.selectedNodeId);
-    if (hasSelection) {
-      const delBtn = actionGroup.createEl("button", {
-        cls: "goodobsidian-circuit-btn mod-warning",
-        title: "Delete selected item (Delete / Backspace)",
-      });
-      setIcon(delBtn, "trash-2");
-      delBtn.createSpan({ text: "Delete" });
-      delBtn.onclick = () => this.handleDeleteSelected();
-    }
 
     // 5. Global Schematic Clean & Layout Actions
     const layoutGroup = this.visualToolbarEl.createDiv({ cls: "goodobsidian-circuit-btn-group is-right" });
@@ -532,7 +524,7 @@ export class CircuitModal extends Modal {
       title: "Clean and orthogonally route all wires around obstacles",
     });
     setIcon(cleanWiresBtn, "sparkles");
-    cleanWiresBtn.createSpan({ text: "Clean Wires" });
+    cleanWiresBtn.createSpan({ text: "Route" });
     cleanWiresBtn.onclick = () => this.cleanAllWires();
 
     const autoLayoutBtn = layoutGroup.createEl("button", {
@@ -540,7 +532,7 @@ export class CircuitModal extends Modal {
       title: "Auto-arrange components and route wires",
     });
     setIcon(autoLayoutBtn, "layout-grid");
-    autoLayoutBtn.createSpan({ text: "Auto-Layout" });
+    autoLayoutBtn.createSpan({ text: "Arrange" });
     autoLayoutBtn.onclick = () => this.autoLayout();
   }
 
@@ -588,11 +580,10 @@ export class CircuitModal extends Modal {
       padding: 40,
     });
 
-    this.visualStageEl.innerHTML = svgMarkup;
+    const parsedSvg = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
+    this.visualStageEl.replaceChildren(this.visualStageEl.ownerDocument.importNode(parsedSvg.documentElement, true));
     const svgEl = this.visualStageEl.querySelector("svg");
     if (svgEl) {
-      svgEl.style.width = "100%";
-      svgEl.style.height = "100%";
       svgEl.style.cursor = this.interactionMode === "wire" ? "crosshair" : "default";
     }
   }
@@ -621,7 +612,7 @@ export class CircuitModal extends Modal {
         try {
           this.visualStageEl.setPointerCapture(ev.pointerId);
           this.capturedPointerId = ev.pointerId;
-        } catch (_) {}
+        } catch { /* Pointer capture may already be released by the browser. */ }
         this.dragInitialSnapshot = cloneCircuit(this.circuit);
         this.draggingWaypoint = { wireId, index };
         this.selectedWireId = wireId;
@@ -746,11 +737,15 @@ export class CircuitModal extends Modal {
       const hw = (def ? def.width : 2) / 2;
       const hh = (def ? def.height : 2) / 2;
 
-      if (gridX >= comp.x - hw && gridX <= comp.x + hw && gridY >= comp.y - hh && gridY <= comp.y + hh) {
+      const rad = -comp.rotation * Math.PI / 180;
+      const dx = gridX - comp.x, dy = gridY - comp.y;
+      const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+      const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+      if (Math.abs(localX) <= hw && Math.abs(localY) <= hh) {
         try {
           this.visualStageEl.setPointerCapture(ev.pointerId);
           this.capturedPointerId = ev.pointerId;
-        } catch (_) {}
+        } catch { /* Pointer capture may already be released by the browser. */ }
         this.dragInitialSnapshot = cloneCircuit(this.circuit);
         this.selectedComponentId = comp.id;
         this.selectedWireId = null;
@@ -1341,8 +1336,8 @@ export class CircuitModal extends Modal {
       const item = wireList.createDiv({
         cls: `goodobsidian-blocks-item ${this.selectedWireId === wire.id ? "is-selected" : ""}`,
       });
-      item.createSpan({ cls: "goodobsidian-comp-label", text: `Wire ${wire.id}` });
-      item.createSpan({ cls: "goodobsidian-comp-type", text: `${wire.fromNode} ↔ ${wire.toNode}` });
+      item.createSpan({ cls: "goodobsidian-comp-label", text: `Connection ${this.circuit.wires.indexOf(wire) + 1}` });
+      item.createSpan({ cls: "goodobsidian-comp-type", text: `${this.nodeDisplayName(wire.fromNode)} ↔ ${this.nodeDisplayName(wire.toNode)}` });
       if (wire.waypoints && wire.waypoints.length > 0) {
         item.createSpan({ cls: "goodobsidian-comp-val", text: `${wire.waypoints.length} waypoints` });
       }
@@ -1356,20 +1351,76 @@ export class CircuitModal extends Modal {
 
     // Right Inspector Panel
     const inspector = container.createDiv({ cls: "goodobsidian-blocks-inspector" });
+    this.renderInspector(inspector);
+  }
+
+  private renderInspector(inspector: HTMLElement): void {
+    // 4. Contextual Selection Actions (Rotate, Add Bend, Delete)
+    const actionGroup = inspector.createDiv({ cls: "goodobsidian-circuit-btn-group" });
+
+    if (this.selectedComponentId && this.circuit.components[this.selectedComponentId]) {
+      const rotBtn = actionGroup.createEl("button", {
+        cls: "goodobsidian-circuit-btn",
+        title: "Rotate component 90°",
+      });
+      setIcon(rotBtn, "rotate-cw");
+      rotBtn.createSpan({ text: "Rotate" });
+      rotBtn.onclick = () => {
+        if (!this.selectedComponentId) return;
+        this.rotateComponent(this.selectedComponentId);
+      };
+    }
+
+    if (this.selectedWireId) {
+      const bendBtn = actionGroup.createEl("button", {
+        cls: "goodobsidian-circuit-btn",
+        title: "Add waypoint handle to bend this wire",
+      });
+      setIcon(bendBtn, "corner-down-right");
+      bendBtn.createSpan({ text: "Add Bend" });
+      bendBtn.onclick = () => {
+        if (!this.selectedWireId) return;
+        this.addBendToWire(this.selectedWireId);
+      };
+
+      const rerouteWireBtn = actionGroup.createEl("button", {
+        cls: "goodobsidian-circuit-btn",
+        title: "Re-route this wire cleanly around obstacles",
+      });
+      setIcon(rerouteWireBtn, "git-branch");
+      rerouteWireBtn.createSpan({ text: "Reroute" });
+      rerouteWireBtn.onclick = () => {
+        if (!this.selectedWireId) return;
+        this.rerouteWire(this.selectedWireId);
+      };
+    }
+
+    const hasSelection = Boolean(this.selectedComponentId || this.selectedWireId || this.selectedNodeId);
+    if (hasSelection) {
+      const delBtn = actionGroup.createEl("button", {
+        cls: "goodobsidian-circuit-btn mod-warning",
+        title: "Delete selected item (Delete / Backspace)",
+      });
+      setIcon(delBtn, "trash-2");
+      delBtn.createSpan({ text: "Delete" });
+      delBtn.onclick = () => this.handleDeleteSelected();
+    }
+
+
 
     // Scenario 1: Selected Wire Inspector
     if (this.selectedWireId) {
       const wire = this.circuit.wires.find((w) => w.id === this.selectedWireId);
       if (wire) {
-        inspector.createEl("h3", { text: `Wire: ${wire.id}` });
+        inspector.createEl("h3", { text: "Connection" });
 
         const fromGroup = inspector.createDiv({ cls: "setting-item" });
-        fromGroup.createDiv({ cls: "setting-item-name", text: "From Node" });
-        fromGroup.createDiv({ cls: "setting-item-description", text: wire.fromNode });
+        fromGroup.createDiv({ cls: "setting-item-name", text: "From" });
+        this.renderWireEndpoint(fromGroup, wire.id, "fromNode");
 
         const toGroup = inspector.createDiv({ cls: "setting-item" });
-        toGroup.createDiv({ cls: "setting-item-name", text: "To Node" });
-        toGroup.createDiv({ cls: "setting-item-description", text: wire.toNode });
+        toGroup.createDiv({ cls: "setting-item-name", text: "To" });
+        this.renderWireEndpoint(toGroup, wire.id, "toNode");
 
         const directGroup = inspector.createDiv({ cls: "setting-item" });
         directGroup.createDiv({ cls: "setting-item-name", text: "Direct (diagonal) routing" });
@@ -1414,6 +1465,13 @@ export class CircuitModal extends Modal {
 
     const def = COMPONENT_CATALOG[selectedComp.type];
     inspector.createEl("h3", { text: `Properties: ${selectedComp.label}` });
+    if (Object.keys(selectedComp.ports).some((id) => !def.ports.some((port) => port.id === id))) {
+      const repair = inspector.createEl("button", { text: "Reset invalid terminals", cls: "goodobsidian-circuit-btn" });
+      repair.onclick = () => {
+        this.mutateCircuit((c) => changeComponentType(c, selectedComp.id, selectedComp.type));
+        new Notice("Invalid terminal names removed. Check and reconnect the terminals below.");
+      };
+    }
 
     // Component Type
     const typeGroup = inspector.createDiv({ cls: "setting-item" });
@@ -1428,11 +1486,7 @@ export class CircuitModal extends Modal {
       this.mutateCircuit((c) => {
         const comp = c.components[selectedComp.id];
         if (!comp) return;
-        comp.type = nextType;
-        const newDef = COMPONENT_CATALOG[nextType];
-        if (newDef?.defaultValue && !comp.value) {
-          comp.value = newDef.defaultValue;
-        }
+        changeComponentType(c, comp.id, nextType);
       });
     };
 
@@ -1497,17 +1551,23 @@ export class CircuitModal extends Modal {
 
         for (const node of Object.values(this.circuit.nodes)) {
           const opt = nodeSelect.createEl("option", {
-            text: node.label ? `${node.label} (${node.id})` : node.id,
+            text: this.nodeDisplayName(node.id),
             value: node.id,
           });
           if (node.id === currentNodeId) opt.selected = true;
         }
 
+        nodeSelect.createEl("option", { text: "Not connected", value: "" });
+        nodeSelect.value = currentNodeId || "";
+
         nodeSelect.onchange = () => {
           const targetNodeId = nodeSelect.value;
           this.mutateCircuit((c) => {
             const comp = c.components[selectedComp.id];
-            if (comp) comp.ports[port.id] = targetNodeId;
+            if (comp) {
+              if (targetNodeId) comp.ports[port.id] = targetNodeId;
+              else delete comp.ports[port.id];
+            }
           });
         };
       }
@@ -1594,7 +1654,10 @@ export class CircuitModal extends Modal {
       if (prevTikz !== nextTikz) {
         this.pushHistory(this.circuit);
       }
+      result.circuit.uncertainties = this.circuit.uncertainties;
       this.circuit = result.circuit;
+      this.refreshElectricalDiagnostics();
+      this.renderReviewIssues();
       this.codeDraftDirty = false;
     }
 
@@ -1619,6 +1682,88 @@ export class CircuitModal extends Modal {
     }
   }
 
+  private renderWireEndpoint(parent: HTMLElement, wireId: string, endpoint: "fromNode" | "toNode"): void {
+    const wire = this.circuit.wires.find((w) => w.id === wireId);
+    if (!wire) return;
+    const select = parent.createEl("select", { cls: "goodobsidian-circuit-select" });
+    for (const node of Object.values(this.circuit.nodes)) {
+      select.createEl("option", { text: this.nodeDisplayName(node.id), value: node.id });
+    }
+    select.value = wire[endpoint];
+    select.onchange = () => {
+      const nodeId = select.value;
+      const other = endpoint === "fromNode" ? wire.toNode : wire.fromNode;
+      if (nodeId === other) {
+        select.value = wire[endpoint];
+        new Notice("Choose a different destination terminal.");
+        return;
+      }
+      this.mutateCircuit((c) => {
+        const edited = c.wires.find((w) => w.id === wireId);
+        if (!edited) return;
+        edited[endpoint] = nodeId;
+        edited.waypoints = undefined;
+        const routed = rerouteCircuitWires(c, [wireId]);
+        c.wires = routed.wires;
+      });
+    };
+  }
+
+  private nodeDisplayName(id: string): string {
+    const node = this.circuit.nodes[id];
+    if (node?.label) return node.label;
+    const pins: string[] = [];
+    for (const comp of Object.values(this.circuit.components)) {
+      for (const [portId, nodeId] of Object.entries(comp.ports)) {
+        if (nodeId !== id) continue;
+        const port = COMPONENT_CATALOG[comp.type]?.ports.find((p) => p.id === portId);
+        pins.push(`${comp.label} · ${port?.name || portId}`);
+      }
+    }
+    return pins.length ? pins.join(" / ") : `Junction ${Object.keys(this.circuit.nodes).indexOf(id) + 1}`;
+  }
+
+  private refreshElectricalDiagnostics(): void {
+    const recognitionNotes = (this.circuit.diagnostics || []).filter((d) => d.code === "NORMALIZATION_REPAIR");
+    this.circuit.diagnostics = [...recognitionNotes, ...validateCircuitConnectivity(this.circuit)];
+  }
+
+  private renderReviewIssues(): void {
+    if (!this.reviewIssuesEl) return;
+    const wasOpen = this.reviewIssuesEl.querySelector("details")?.open;
+    this.reviewIssuesEl.empty();
+    const diagnostics = (this.circuit.diagnostics || []).filter((d) => d.severity !== "info");
+    const uncertainties = this.circuit.uncertainties || [];
+    const count = diagnostics.length + uncertainties.length;
+    if (!count) {
+      this.reviewIssuesEl.createSpan({ text: "No connection warnings. Compare the result with your drawing." });
+      return;
+    }
+    const details = this.reviewIssuesEl.createEl("details");
+    details.open = wasOpen ?? Boolean(this.recognitionReview);
+    details.createEl("summary", { text: `${count} item${count === 1 ? "" : "s"} to check` });
+    const list = details.createDiv({ cls: "goodobsidian-circuit-issue-list" });
+    uncertainties.forEach((text, index) => {
+      const row = list.createDiv({ cls: "goodobsidian-circuit-issue" });
+      row.createSpan({ text: `AI uncertainty: ${text}` });
+      const resolve = row.createEl("button", { text: "Resolved", cls: "goodobsidian-circuit-btn" });
+      resolve.onclick = () => this.mutateCircuit((c) => { c.uncertainties?.splice(index, 1); });
+    });
+    for (const diagnostic of diagnostics) {
+      const row = list.createDiv({ cls: `goodobsidian-circuit-issue is-${diagnostic.severity}` });
+      row.createSpan({ text: diagnostic.message });
+      if (diagnostic.componentId || diagnostic.wireId || diagnostic.nodeId) {
+        const inspect = row.createEl("button", { text: "Inspect", cls: "goodobsidian-circuit-btn" });
+        inspect.onclick = () => {
+          this.selectedComponentId = diagnostic.componentId || null;
+          this.selectedWireId = diagnostic.componentId ? null : diagnostic.wireId || null;
+          this.selectedNodeId = diagnostic.componentId || diagnostic.wireId ? null : diagnostic.nodeId || null;
+          this.switchTab("visual");
+        };
+      }
+    }
+  }
+
   // --- Save / Commit -------------------------------------------------------
 
   private handleSave(): void {
@@ -1626,13 +1771,17 @@ export class CircuitModal extends Modal {
       this.flushCodeParse();
     }
 
-    const hasErrors = this.codeDiagnostics.some((d) => d.severity === "error");
+    this.finishActiveDrag();
+    this.refreshElectricalDiagnostics();
+    this.renderReviewIssues();
+    const hasErrors = this.codeDiagnostics.some((d) => d.severity === "error") ||
+      (this.circuit.diagnostics || []).some((d) => d.severity === "error" || d.code === "INVALID_PORT");
     if (hasErrors) {
-      new Notice("Cannot save circuit with syntax errors. Please fix diagnostics.");
+      new Notice("Fix the highlighted syntax or connection errors before saving.");
       return;
     }
 
-    const tikz = this.codeDraft || circuitToTikz(this.circuit);
+    const tikz = circuitToTikz(this.circuit);
     const svg = renderCircuitToSvg(this.circuit, {
       theme: "light",
       backgroundColor: "transparent",

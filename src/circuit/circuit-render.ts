@@ -7,6 +7,7 @@
 
 import type { Bounds, CircuitElement } from "../model/document";
 import { renderCircuitToSvg } from "./svg-render";
+import type { KirchhoffCircuit } from "./ir";
 import { imageBounds, rotationOf } from "../canvas/image-geometry";
 
 interface CachedCircuitBitmap {
@@ -19,6 +20,17 @@ interface CachedCircuitBitmap {
 
 const BITMAP_CACHE = new Map<string, CachedCircuitBitmap>();
 const MAX_CACHE_ENTRIES = 100;
+const REGENERATED_SVGS = new WeakMap<KirchhoffCircuit, string>();
+
+/** Old saved SVGs can contain beta 36's inflated strokes; refresh once outside the ink path. */
+export function circuitSvgForDisplay(circuit: CircuitElement): string {
+  if (circuit.svg?.includes('data-finenotes-renderer="2"')) return circuit.svg;
+  const cached = REGENERATED_SVGS.get(circuit.ir);
+  if (cached) return cached;
+  const svg = renderCircuitToSvg(circuit.ir, { theme: "light", backgroundColor: "transparent" });
+  REGENERATED_SVGS.set(circuit.ir, svg);
+  return svg;
+}
 
 function hashContent(str: string): string {
   let h1 = 0xdeadbeef;
@@ -43,7 +55,7 @@ export function getCircuitImage(
   circuit: CircuitElement,
   onReady?: () => void,
 ): HTMLImageElement | null {
-  const svg = circuit.svg || renderCircuitToSvg(circuit.ir);
+  const svg = circuitSvgForDisplay(circuit);
   const cacheKey = `${circuit.id}:${hashContent(svg)}`;
 
   const cached = BITMAP_CACHE.get(cacheKey);

@@ -200,15 +200,13 @@ import {
   strokeBounds,
   strokeCount,
 } from "../model/document";
-import { convertSelectionToCircuit as runAiCircuitConversion } from "../circuit/ai-converter";
+import { type CircuitRecognitionReview, convertSelectionToCircuit as runAiCircuitConversion } from "../circuit/ai-converter";
 import {
   AddCircuitCommand,
   ReplaceStrokesWithCircuitCommand,
   UpdateCircuitCommand,
 } from "../circuit/circuit-commands";
 import { CircuitModal } from "./circuit-modal";
-import { circuitToTikz } from "../circuit/ir2tikz";
-import { renderCircuitToSvg } from "../circuit/svg-render";
 import { DUPLICATE_OFFSET, duplicateImage, nextImageId } from "../model/images";
 import {
   AddElements,
@@ -5783,6 +5781,8 @@ export class InkSurface {
 
     const pageId = sel.pageId;
     const strokesToConvert = [...sel.strokes];
+    const recognitionStrokes = structuredClone(strokesToConvert);
+    const originalInkFingerprint = JSON.stringify(recognitionStrokes);
     const docRef = this.doc;
 
     const keyStore = this.callbacks.getKeyStore?.();
@@ -5815,56 +5815,48 @@ export class InkSurface {
         }
       }
 
+      let recognitionReview: CircuitRecognitionReview | undefined;
       const ir = await runAiCircuitConversion({
-        elements: { strokes: strokesToConvert, images: [], textBoxes: [] },
+        elements: { strokes: recognitionStrokes, images: [], textBoxes: [] },
         bounds,
         keyStore,
         pageImageBase64,
+        onReviewReady: (review) => { recognitionReview = review; },
       });
 
-      // Verification checks upon return
-      if (this.doc !== docRef) return;
-      const returnPage = pageById(this.doc, pageId);
-      if (!returnPage) return;
-
-      const currentStrokesSet = new Set(returnPage.strokes);
-      const intactStrokes = strokesToConvert.filter((s) => currentStrokesSet.has(s));
-
-      const w = Math.max(80, bounds.maxX - bounds.minX);
-      const h = Math.max(60, bounds.maxY - bounds.minY);
-      const circuitId = `c_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      const tikz = circuitToTikz(ir);
-      const svg = renderCircuitToSvg(ir, { theme: "light", backgroundColor: "transparent" });
-
-      const circuitElement: CircuitElement = {
-        id: circuitId,
-        x: bounds.minX,
-        y: bounds.minY,
-        w,
-        h,
-        rotation: 0,
-        ir,
-        tikz,
-        svg,
-      };
-
-      if (intactStrokes.length === strokesToConvert.length) {
-        // Full match: swap handwriting with circuit
-        this.applyBackgroundCommand(
-          new ReplaceStrokesWithCircuitCommand(pageId, intactStrokes, circuitElement),
-          pageId,
-          bounds,
-        );
-        new Notice("Circuit converted to CircuitikZ diagram!", 4000);
-      } else {
-        // Partial or changed ink: add circuit non-destructively so modified ink is preserved
-        this.applyBackgroundCommand(
-          new AddCircuitCommand(pageId, circuitElement),
-          pageId,
-          bounds,
-        );
-        new Notice("Circuit diagram placed on page (handwriting was modified during conversion).", 5000);
-      }
+      // Review is a draft. Recheck notebook, page, lock and original ink at commit time.
+      if (this.doc !== docRef || !pageById(this.doc, pageId)) return;
+      if (!this.app) throw new Error("Circuit review is unavailable. Original handwriting has been preserved.");
+      new CircuitModal(this.app, {
+        circuit: ir,
+        recognitionReview,
+        onSave: (reviewedIr, tikz, svg) => {
+          if (this.doc !== docRef || this.callbacks.isLocked?.()) {
+            new Notice("The notebook changed or is locked. Your original ink was preserved.");
+            return;
+          }
+          const returnPage = pageById(this.doc, pageId);
+          if (!returnPage) return;
+          const currentStrokesSet = new Set(returnPage.strokes);
+          const intactStrokes = strokesToConvert.filter((stroke) => currentStrokesSet.has(stroke));
+          const circuitElement: CircuitElement = {
+            id: `c_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            x: bounds.minX, y: bounds.minY,
+            w: Math.max(80, bounds.maxX - bounds.minX),
+            h: Math.max(60, bounds.maxY - bounds.minY),
+            rotation: 0, ir: reviewedIr, tikz, svg,
+          };
+          if (intactStrokes.length === strokesToConvert.length && JSON.stringify(strokesToConvert) === originalInkFingerprint) {
+            this.applyBackgroundCommand(
+              new ReplaceStrokesWithCircuitCommand(pageId, intactStrokes, circuitElement), pageId, bounds,
+            );
+            new Notice("Reviewed circuit placed. Undo restores your handwriting.");
+          } else {
+            this.applyBackgroundCommand(new AddCircuitCommand(pageId, circuitElement), pageId, bounds);
+            new Notice("Circuit added alongside your ink because the drawing changed during review.");
+          }
+        },
+      }).open();
     } catch (err) {
       new Notice(`Circuit conversion failed: ${errorMessage(err)}`, 6000);
     }

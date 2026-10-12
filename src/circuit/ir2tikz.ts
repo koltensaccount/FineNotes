@@ -61,6 +61,9 @@ const REVERSE_TIKZ_TYPE_MAP: Record<string, ComponentType> = {
   ground: "ground",
   earth: "earth",
   lamp: "lamp",
+  "closing switch": "switch_spst",
+  "open switch": "switch_spst",
+  generic: "generic_box",
 };
 
 /** Mapping from component port IDs to standard CircuitikZ named node anchors */
@@ -213,7 +216,8 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
 
     // Standard two-terminal components
     // Determine terminal positions
-    let portKeys = Object.keys(comp.ports);
+    const catalogKeys = COMPONENT_CATALOG[comp.type]?.ports.map((port) => port.id) || [];
+    const portKeys = catalogKeys.filter((key) => comp.ports[key]);
     if (portKeys.length >= 2) {
       let p1Key = portKeys[0];
       let p2Key = portKeys[1];
@@ -447,7 +451,17 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
 
       const optTokens = optsString.split(",").map((s) => s.trim());
       const rawType = (optTokens[0] || "R").toLowerCase();
-      const compType = REVERSE_TIKZ_TYPE_MAP[rawType] || "resistor";
+      const compType = REVERSE_TIKZ_TYPE_MAP[rawType];
+      if (rawType === "short" || rawType === "wire") {
+        circuit.wires.push({ id: getNextWireId(), fromNode: getOrCreateNode(x1, y1), toNode: getOrCreateNode(x2, y2), direct: true });
+        handledLines.add(lineNum);
+        continue;
+      }
+      if (!compType) {
+        diagnostics.push({ line: lineNum, severity: "error", message: `Unsupported component type "${rawType}"; circuit was not applied.` });
+        handledLines.add(lineNum);
+        continue;
+      }
 
       let label = "";
       let value = "";
@@ -466,9 +480,17 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
       const cx = (x1 + x2) / 2;
       const cy = (y1 + y2) / 2;
 
-      // Approximate rotation
+      // Relative to this symbol's catalog axis (sources are vertical at rotation 0).
+      const def = COMPONENT_CATALOG[compType];
+      if (def.ports.length !== 2) {
+        diagnostics.push({ line: lineNum, severity: "error", message: `Use node syntax for "${rawType}"; it is not a two-terminal component.` });
+        handledLines.add(lineNum);
+        continue;
+      }
+      const [firstPort, secondPort] = def.ports;
       const angleRad = Math.atan2(y2 - y1, x2 - x1);
-      const angleDeg = Math.round((angleRad * 180) / Math.PI / 90) * 90;
+      const localAngle = Math.atan2(secondPort.y - firstPort.y, secondPort.x - firstPort.x);
+      const angleDeg = Math.round((angleRad - localAngle) * 180 / Math.PI * 100) / 100;
       const rotation = ((angleDeg % 360) + 360) % 360;
 
       circuit.components[compId] = {
@@ -480,8 +502,8 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
         y: cy,
         rotation,
         ports: {
-          p1: n1Id,
-          p2: n2Id,
+          [firstPort.id]: n1Id,
+          [secondPort.id]: n2Id,
         },
       };
       handledLines.add(lineNum);
