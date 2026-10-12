@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 43 — Circuit continuous dragging, resize undo, and math label stability
+
+- Continuous wire dragging: calculate reshaped waypoints from the pointer-down snapshot to maintain segment identity and prevent bend accumulation across successive pointer movements.
+- Circuit resize Undo: preserve the live document circuit unchanged during interactive handle resize preview, rendering the draft on the wet layer and committing a single reversible command on pointer end.
+- Standardized label placement units: store and calculate component label and value offsets consistently in schematic grid units across IR, canvas inspector, and label layout.
+- Mathematical SVG label security and PDF export: safely escape XML characters before vector formatting, isolate MathJax glyph IDs per instance with `mjx_*` prefixes to eliminate collisions, and support both `href` and `xlink:href` attributes for reliable PDF export.
+
 ### Beta 42 — LTspice-inspired circuit editor overhaul
 
 - Direct wire segment manipulation: drag horizontal wire segments vertically and vertical segments horizontally to reshape orthogonal bends; electrical endpoints remain fixed and collinear bends collapse automatically without requiring "Add Bend".
