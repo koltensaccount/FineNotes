@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("obsidian", () => import("./fake-obsidian"));
@@ -82,7 +83,9 @@ class MockEl {
     return this.text + this.children.map((c) => c.textContent).join("");
   }
 
-  setCssStyles(_s: Record<string, string>): void {}
+  setCssStyles(s: Record<string, string>): void {
+    Object.assign(this.style, s);
+  }
   setCssProps(_s: Record<string, string>): void {}
 
   empty(): void {
@@ -850,5 +853,190 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
     toolbar.setToolbarPosition("right");
     expect(toolbar.getToolbarPosition()).toBe("right");
     expect(host.hasClass("is-pos-right")).toBe(true);
+  });
+
+  it("moves options pill up with buffer when toolbar moves to the side while keeping options pill horizontal by default", () => {
+    const { toolbar } = createTestToolbar({ toolbarPosition: "top" });
+    const optionsEl = host.querySelector(".goodobsidian-options")!;
+
+    expect(toolbar.getOptionsPosition()).toBe("top");
+    expect(optionsEl.hasClass("is-pos-top")).toBe(true);
+    // When toolbar is at top, options sits below the bar
+    expect(parseInt(optionsEl.style.top ?? "0", 10)).toBeGreaterThan(8);
+
+    // Move toolbar to the left
+    toolbar.setToolbarPosition("left");
+    // Options pill stays at top by default, but moves up to EDGE_INSET (8px) buffer
+    expect(toolbar.getOptionsPosition()).toBe("top");
+    expect(optionsEl.hasClass("is-pos-top")).toBe(true);
+    expect(optionsEl.style.top).toBe("8px");
+
+    // Move toolbar to the right
+    toolbar.setToolbarPosition("right");
+    expect(optionsEl.style.top).toBe("8px");
+
+    // Move toolbar to the bottom
+    toolbar.setToolbarPosition("bottom");
+    expect(optionsEl.style.top).toBe("8px");
+  });
+
+  it("supports options pill docking to bottom, left, and right", () => {
+    const optSpy = vi.fn();
+    const { toolbar } = createTestToolbar(
+      { toolbarPosition: "top" },
+      { onOptionsPositionChange: optSpy },
+    );
+    const optionsEl = host.querySelector(".goodobsidian-options")!;
+
+    host.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    toolbar.setOptionsPosition("bottom");
+    expect(toolbar.getOptionsPosition()).toBe("bottom");
+    expect(optionsEl.hasClass("is-pos-bottom")).toBe(true);
+
+    toolbar.setOptionsPosition("left");
+    expect(toolbar.getOptionsPosition()).toBe("left");
+    expect(optionsEl.hasClass("is-pos-left")).toBe(true);
+    expect(optionsEl.style.maxWidth).toBe("60px");
+
+    toolbar.setOptionsPosition("right");
+    expect(toolbar.getOptionsPosition()).toBe("right");
+    expect(optionsEl.hasClass("is-pos-right")).toBe(true);
+    expect(optionsEl.style.maxWidth).toBe("60px");
+  });
+
+  it("suppresses touch scrolling when dock hold gesture is triggered", () => {
+    vi.useFakeTimers();
+    try {
+      createTestToolbar({ toolbarPosition: "left" });
+      const barEl = host.querySelector(".goodobsidian-toolbar")!;
+
+      // Pointer down on blank space
+      barEl.dispatchEvent("pointerdown", { button: 0, pointerId: 10, clientX: 25, clientY: 100, target: barEl });
+      expect(barEl.hasClass("is-bar-held")).toBe(false);
+
+      // Fast forward past 400ms hold
+      vi.advanceTimersByTime(400);
+      expect(barEl.hasClass("is-bar-held")).toBe(true);
+      expect(barEl.style.overflow).toBe("hidden");
+      expect(barEl.style.touchAction).toBe("none");
+
+      doc.dispatchEvent("touchstart", {
+        changedTouches: [{ identifier: 42, clientX: 25, clientY: 100 }],
+      });
+      // Verify only the active touch is prevented
+      let prevented = false;
+      const touchMoveEvent = {
+        changedTouches: [{ identifier: 42 }],
+        cancelable: true,
+        preventDefault: () => { prevented = true; },
+      };
+      doc.dispatchEvent("touchmove", touchMoveEvent);
+      expect(prevented).toBe(true);
+      prevented = false;
+      doc.dispatchEvent("touchmove", { ...touchMoveEvent, changedTouches: [{ identifier: 99 }] });
+      expect(prevented).toBe(false);
+      barEl.dispatchEvent("pointerdown", { button: 0, pointerId: 11, isPrimary: false, target: barEl });
+      doc.dispatchEvent("pointerup", { pointerId: 11 });
+      expect(barEl.hasClass("is-bar-held")).toBe(true);
+
+      // Pointer up releases held state and restores overflow
+      doc.dispatchEvent("pointerup", { pointerId: 10, clientX: 25, clientY: 100 });
+      expect(barEl.hasClass("is-bar-held")).toBe(false);
+      expect(barEl.style.overflow).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fits all dock combinations and measures after clearing the old orientation", () => {
+    const { toolbar } = createTestToolbar();
+    const options = host.querySelector(".goodobsidian-options")!;
+    const bar = host.querySelector(".goodobsidian-toolbar")!;
+    host.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300 } as DOMRect);
+    const positions = ["top", "bottom", "left", "right"] as const;
+    for (const barPos of positions) {
+      bar.getBoundingClientRect = () => ({
+        left: barPos === "right" ? 340 : 0, right: barPos === "left" ? 60 : 400,
+        top: barPos === "bottom" ? 240 : 0, bottom: barPos === "top" ? 60 : 300,
+        width: 60, height: 60,
+      } as DOMRect);
+      toolbar.setToolbarPosition(barPos);
+      for (const optPos of positions) {
+        options.getBoundingClientRect = () => ({
+          width: Math.min(optPos === "left" || optPos === "right" ? 60 : 600, parseFloat(options.style.maxWidth)),
+          height: Math.min(optPos === "left" || optPos === "right" ? 600 : 60, parseFloat(options.style.maxHeight)),
+        } as DOMRect);
+        toolbar.setOptionsPosition(optPos);
+        toolbar.applyPosition();
+        expect(options.hasClass(`is-pos-${optPos}`)).toBe(true);
+        const x = parseFloat(options.style.left);
+        const y = parseFloat(options.style.top);
+        const box = options.getBoundingClientRect();
+        expect(x).toBeGreaterThanOrEqual(barPos === "left" ? 68 : 8);
+        expect(y).toBeGreaterThanOrEqual(barPos === "top" ? 68 : 8);
+        expect(x + box.width).toBeLessThanOrEqual(barPos === "right" ? 332 : 392);
+        expect(y + box.height).toBeLessThanOrEqual(barPos === "bottom" ? 232 : 292);
+      }
+    }
+  });
+
+  it("respects opposing movement near an edge threshold", () => {
+    const { toolbar } = createTestToolbar();
+    host.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    expect((toolbar as any).computeDockCandidate({ clientX: 20, clientY: 80 }, "left", 20, 30)).toBe("bottom");
+    expect((toolbar as any).computeDockCandidate({ clientX: 80, clientY: 20 }, "top", 30, 20)).toBe("right");
+  });
+
+  it("places options popovers using their own dock and visible viewport", () => {
+    const { toolbar } = createTestToolbar();
+    const options = host.querySelector(".goodobsidian-options")!;
+    const anchor = options.createEl("button");
+    const popover = host.createDiv();
+    (toolbar as any).popover = popover;
+    host.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    anchor.getBoundingClientRect = () => ({ left: 840, right: 880, top: 100, bottom: 140, width: 40, height: 40 } as DOMRect);
+    popover.getBoundingClientRect = () => ({ width: 280, height: 200 } as DOMRect);
+    (toolbar as any).optionsPosition = "right";
+    doc.defaultView.visualViewport.width = 900;
+    (toolbar as any).keepPopoverInside(anchor);
+    expect(parseFloat(popover.style.left)).toBe(552);
+    expect(popover.style.transform).toBe("none");
+    expect(parseFloat(popover.style.left) + 280).toBeLessThan(840);
+  });
+
+  it("keeps the options docking hold owned by the first pointer", () => {
+    vi.useFakeTimers();
+    try {
+      createTestToolbar();
+      const options = host.querySelector(".goodobsidian-options")!;
+      options.dispatchEvent("pointerdown", { button: 0, pointerId: 20, clientX: 25, clientY: 100, target: options });
+      options.dispatchEvent("pointerdown", { button: 0, pointerId: 21, clientX: 30, clientY: 100, target: options });
+      vi.advanceTimersByTime(400);
+      expect(options.hasClass("is-pill-held")).toBe(true);
+      doc.dispatchEvent("pointercancel", { pointerId: 21 });
+      expect(options.hasClass("is-pill-held")).toBe(true);
+      doc.dispatchEvent("pointercancel", { pointerId: 20 });
+      expect(options.hasClass("is-pill-held")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("verifies sidebar z-index hierarchy and square-dashed icon SVG geometry", () => {
+    const fs = require("fs");
+    const stylesCss = fs.readFileSync(path.resolve(__dirname, "../../styles.css"), "utf8");
+    const toolbarTs = fs.readFileSync(path.resolve(__dirname, "../../src/view/toolbar.ts"), "utf8");
+
+    // Verify SQUARE_DASHED_SVG uses a prominent, bold, full-sized rounded rectangle
+    expect(toolbarTs).toContain('rect x="2.5" y="2.5" width="19" height="19" rx="3.5" stroke-dasharray="4 2.5"');
+
+    // Verify .goodobsidian-pagesidebar-top has z-index: 10
+    expect(stylesCss).toMatch(/\.goodobsidian-pagesidebar-top\s*\{[^}]*z-index:\s*10;/);
+
+    // Verify .goodobsidian-page-check has z-index: 1 (so it never scrolls over top header)
+    expect(stylesCss).toMatch(/\.goodobsidian-page-check\s*\{[^}]*z-index:\s*1;/);
+
+    // Verify .goodobsidian-pages-header is NOT made transparent
+    expect(stylesCss).not.toContain(".goodobsidian-pages-header { background: transparent; }");
   });
 });

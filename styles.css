@@ -346,6 +346,7 @@ body,
 .goodobsidian-toolbar.is-bar-held {
   box-shadow: 0 0 0 2px var(--interactive-accent), var(--gob-shadow-float);
   touch-action: none !important;
+  overflow: hidden !important;
 }
 
 /* More panel toolbar position selector */
@@ -582,6 +583,85 @@ body,
   transition:
     translate var(--gob-t-slide) var(--gob-ease-out),
     visibility 0s linear var(--gob-t-slide);
+}
+
+.goodobsidian-options.is-pos-bottom.is-floating.is-collapsed {
+  translate: 0 calc(100% + var(--gob-pill-gap) + 2px);
+}
+
+.goodobsidian-options.is-pos-left.is-floating.is-collapsed {
+  translate: calc(-100% - var(--gob-pill-gap) - 2px) 0;
+}
+
+.goodobsidian-options.is-pos-right.is-floating.is-collapsed {
+  translate: calc(100% + var(--gob-pill-gap) + 2px) 0;
+}
+
+/* Vertical sub-menu when docked to left or right */
+.goodobsidian-options.is-pos-left,
+.goodobsidian-options.is-pos-right {
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  max-width: 60px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  padding: 6px 4px;
+  gap: 4px;
+  touch-action: pan-y !important;
+}
+
+.goodobsidian-options.is-pos-left .goodobsidian-sep,
+.goodobsidian-options.is-pos-right .goodobsidian-sep {
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+}
+
+.goodobsidian-options.is-pos-left .goodobsidian-color-strip,
+.goodobsidian-options.is-pos-right .goodobsidian-color-strip {
+  flex-direction: column;
+  max-height: 180px;
+  max-width: 48px;
+  touch-action: pan-y !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.goodobsidian-options.is-pos-left .goodobsidian-quick-widths,
+.goodobsidian-options.is-pos-right .goodobsidian-quick-widths {
+  flex-direction: column;
+  max-height: 180px;
+  max-width: 48px;
+  touch-action: pan-y !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.goodobsidian-options.is-pos-left .goodobsidian-quick-colors,
+.goodobsidian-options.is-pos-right .goodobsidian-quick-colors {
+  flex-direction: column;
+  min-width: 0 !important;
+  max-width: 48px;
+  flex-basis: auto;
+  touch-action: pan-y !important;
+}
+
+.goodobsidian-options.is-pos-left button,
+.goodobsidian-options.is-pos-right button {
+  min-width: 0 !important;
+  max-width: 48px;
+  box-sizing: border-box;
+  touch-action: pan-y !important;
+}
+
+.goodobsidian-options.is-pill-held {
+  box-shadow: 0 0 0 2px var(--interactive-accent), var(--gob-shadow-float);
+  touch-action: none !important;
+  overflow: hidden !important;
 }
 
 /* The pill's controls are compact, after GoodNotes: it sits over the page and
@@ -953,7 +1033,7 @@ body,
    They stay put while the thumbnails scroll under them. */
 .goodobsidian-pagesidebar-top {
   position: sticky;
-  z-index: 2;
+  z-index: 10;
   top: 0;
   padding-bottom: 10px;
   background: var(--gob-side-bg);
@@ -6103,7 +6183,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   background: var(--background-primary);
   color: var(--interactive-accent);
   pointer-events: none;
-  z-index: 2;
+  z-index: 1;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 .goodobsidian-page-check.is-page-checked {
@@ -6363,7 +6443,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-line-style-check svg { width: 16px; height: 16px; }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and
   (background: color-mix(in srgb, red 50%, transparent)) {
-  .goodobsidian-pages-header { background: transparent; }
   .goodobsidian-pages-header .goodobsidian-pagesidebar-filter.clickable-icon,
   .goodobsidian-pages-header .goodobsidian-page-selection-controls button.clickable-icon { background: var(--gob-frost); }
   /* Drawing strips and their sticky color controls retain solid semantic surfaces. */

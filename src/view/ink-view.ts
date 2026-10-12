@@ -1072,6 +1072,11 @@ export class InkView extends TextFileView {
           void this.plugin.saveSettings();
           this.surface?.layout();
         },
+        onOptionsPositionChange: (pos) => {
+          this.settings.optionsPosition = pos;
+          void this.plugin.saveSettings();
+          this.surface?.layout();
+        },
       },
       {
         defaultSize: this.settings.defaultSize,
@@ -1093,6 +1098,7 @@ export class InkView extends TextFileView {
         toolbarToolOrder: this.settings.toolbarToolOrder,
         hiddenToolbarTools: this.settings.hiddenToolbarTools,
         toolbarPosition: this.settings.toolbarPosition,
+        optionsPosition: this.settings.optionsPosition,
       },
     );
 

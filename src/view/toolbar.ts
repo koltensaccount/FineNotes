@@ -19,7 +19,6 @@ import {
 import { renderPresetColors } from "./preset-colors";
 import { lineStyleOf } from "../ink/line-style";
 import type { LineStyle } from "../model/document";
-import { writingPopoverFit } from "./writing-popover-fit";
 import {
   createStrokePreview,
   previewThicknessLabel,
@@ -91,7 +90,7 @@ import { drawingToolOf, selectedTool } from "./tool-return";
 import { addIcon, setIcon } from "obsidian";
 import type { ToolbarPosition } from "../settings-data";
 
-const SQUARE_DASHED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-square-dashed"><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/></svg>`;
+const SQUARE_DASHED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-square-dashed"><rect x="2.5" y="2.5" width="19" height="19" rx="3.5" stroke-dasharray="4 2.5"/></svg>`;
 try {
   if (typeof addIcon === "function") {
     addIcon("square-dashed", SQUARE_DASHED_SVG);
@@ -430,6 +429,8 @@ export interface ToolbarCallbacks {
   onToolbarLayoutChange?: (order: ConfigurableToolId[], hidden: ConfigurableToolId[]) => void;
   /** The docked toolbar position changed (top, bottom, left, right). */
   onToolbarPositionChange?: (position: ToolbarPosition) => void;
+  /** The docked tool options sub-menu position changed (top, bottom, left, right). */
+  onOptionsPositionChange?: (position: ToolbarPosition) => void;
 }
 
 export interface ToolbarOptions {
@@ -443,6 +444,8 @@ export interface ToolbarOptions {
   hiddenToolbarTools?: string[];
   /** Initial docked position of the toolbar. */
   toolbarPosition?: ToolbarPosition;
+  /** Initial docked position of the tool options sub-menu pill. */
+  optionsPosition?: ToolbarPosition;
 }
 
 /** Minimum gap between the pill and the edge of the page area, in CSS px. */
@@ -569,6 +572,7 @@ export class Toolbar {
   private drawingTool: ActiveTool = "pen";
 
   private toolbarPosition: ToolbarPosition = "top";
+  private optionsPosition: ToolbarPosition = "top";
 
   /**
    * Both tiers are appended to `host`, the view's content element. `widths`
@@ -585,12 +589,13 @@ export class Toolbar {
   ) {
     this.initialPalette = [...palette];
     this.toolbarPosition = this.options.toolbarPosition ?? "top";
+    this.optionsPosition = this.options.optionsPosition ?? "top";
     this.barEl = host.createDiv({ cls: `goodobsidian-toolbar is-pos-${this.toolbarPosition}` });
     this.barEl.setAttribute("role", "toolbar");
     this.barEl.setAttribute("aria-label", "Handwriting tools");
     this.host.addClass(`is-pos-${this.toolbarPosition}`);
     // The pill always floats over the page (styles.css, `.is-floating`).
-    this.optionsEl = host.createDiv({ cls: "goodobsidian-options is-floating" });
+    this.optionsEl = host.createDiv({ cls: `goodobsidian-options is-floating is-pos-${this.optionsPosition}` });
     this.optionsEl.setAttribute("role", "toolbar");
     this.optionsEl.setAttribute("aria-label", "Tool options");
     if (this.options.toolbarToolOrder && Array.isArray(this.options.toolbarToolOrder)) {
@@ -622,6 +627,7 @@ export class Toolbar {
     this.keepFocus(this.optionsEl, true);
     this.installPressFeedback();
     this.installBarDockGestures();
+    this.installOptionsDockGestures();
   }
 
   /**
@@ -2819,16 +2825,93 @@ export class Toolbar {
     this.applyPosition();
   }
 
+  getOptionsPosition(): ToolbarPosition {
+    return this.optionsPosition;
+  }
+
+  setOptionsPosition(pos: ToolbarPosition): void {
+    if (this.optionsPosition === pos) return;
+    this.optionsPosition = pos;
+    this.optionsEl.removeClass("is-pos-top", "is-pos-bottom", "is-pos-left", "is-pos-right");
+    this.optionsEl.addClass(`is-pos-${pos}`);
+    this.applyPosition();
+  }
+
+  private computeDockCandidate(
+    e: PointerEvent,
+    currentPos: ToolbarPosition,
+    startX: number,
+    startY: number,
+  ): ToolbarPosition {
+    const hostBox = this.host.getBoundingClientRect();
+    const topThreshold = Math.max(100, Math.min(220, hostBox.height * 0.25));
+    const bottomThreshold = Math.max(100, Math.min(220, hostBox.height * 0.25));
+    const leftThreshold = Math.max(100, Math.min(220, hostBox.width * 0.25));
+    const rightThreshold = Math.max(100, Math.min(220, hostBox.width * 0.25));
+
+    const distTop = e.clientY - hostBox.top;
+    const distBottom = hostBox.bottom - e.clientY;
+    const distLeft = e.clientX - hostBox.left;
+    const distRight = hostBox.right - e.clientX;
+
+    const dy = e.clientY - startY;
+    const dx = e.clientX - startX;
+
+    if (currentPos === "left") {
+      if (dy < -24 || (dy <= 0 && distTop < topThreshold)) return "top";
+      if (dy > 24 || (dy >= 0 && distBottom < bottomThreshold)) return "bottom";
+      if (dx > 40 && distRight < rightThreshold * 1.5) return "right";
+    } else if (currentPos === "right") {
+      if (dy < -24 || (dy <= 0 && distTop < topThreshold)) return "top";
+      if (dy > 24 || (dy >= 0 && distBottom < bottomThreshold)) return "bottom";
+      if (dx < -40 && distLeft < leftThreshold * 1.5) return "left";
+    } else if (currentPos === "top") {
+      if (dx < -24 || (dx <= 0 && distLeft < leftThreshold)) return "left";
+      if (dx > 24 || (dx >= 0 && distRight < rightThreshold)) return "right";
+      if (dy > 40 && distBottom < bottomThreshold * 1.5) return "bottom";
+    } else if (currentPos === "bottom") {
+      if (dx < -24 || (dx <= 0 && distLeft < leftThreshold)) return "left";
+      if (dx > 24 || (dx >= 0 && distRight < rightThreshold)) return "right";
+      if (dy < -40 && distTop < topThreshold * 1.5) return "top";
+    }
+
+    const normTop = distTop / Math.max(1, hostBox.height);
+    const normBottom = distBottom / Math.max(1, hostBox.height);
+    const normLeft = distLeft / Math.max(1, hostBox.width);
+    const normRight = distRight / Math.max(1, hostBox.width);
+    const min = Math.min(normTop, normBottom, normLeft, normRight);
+    if (min === normTop) return "top";
+    if (min === normBottom) return "bottom";
+    if (min === normLeft) return "left";
+    return "right";
+  }
+
   private installBarDockGestures(): void {
     let holdTimer: number | null = null;
     let holdTriggered = false;
     let startX = 0;
     let startY = 0;
     let activePointerId: number | null = null;
+    let activeTouchId: number | null = null;
     let indicator: HTMLElement | null = null;
     let candidatePos: ToolbarPosition = this.toolbarPosition;
 
     const doc = this.barEl.ownerDocument;
+
+    const onTouchStart = (e: TouchEvent): void => {
+      if (activePointerId === null || activeTouchId !== null) return;
+      const touch = Array.from(e.changedTouches).find((touch) =>
+        Math.abs(touch.clientX - startX) < 2 && Math.abs(touch.clientY - startY) < 2,
+      );
+      if (touch) activeTouchId = touch.identifier;
+    };
+
+    const onTouchMove = (e: TouchEvent): void => {
+      if (holdTriggered && activePointerId !== null && activeTouchId !== null &&
+          Array.from(e.changedTouches).some((touch) => touch.identifier === activeTouchId) && e.cancelable) {
+        e.preventDefault();
+      }
+    };
 
     const cleanupDoc = (): void => {
       if (holdTimer !== null) {
@@ -2840,6 +2923,8 @@ export class Toolbar {
         indicator = null;
       }
       this.barEl.removeClass("is-bar-held");
+      this.barEl.style.overflow = "";
+      this.barEl.style.touchAction = "";
       if (activePointerId !== null) {
         try {
           if (this.barEl.hasPointerCapture(activePointerId)) {
@@ -2850,6 +2935,9 @@ export class Toolbar {
       doc.removeEventListener("pointermove", onMove);
       doc.removeEventListener("pointerup", onUp);
       doc.removeEventListener("pointercancel", onCancel);
+      doc.removeEventListener("touchstart", onTouchStart, true);
+      doc.removeEventListener("touchmove", onTouchMove, { capture: true });
+      activeTouchId = null;
     };
 
     const onMove = (e: PointerEvent): void => {
@@ -2867,17 +2955,7 @@ export class Toolbar {
 
       if (e.cancelable) e.preventDefault();
 
-      const hostBox = this.host.getBoundingClientRect();
-      const dTop = Math.abs(e.clientY - hostBox.top);
-      const dBottom = Math.abs(hostBox.bottom - e.clientY);
-      const dLeft = Math.abs(e.clientX - hostBox.left);
-      const dRight = Math.abs(hostBox.right - e.clientX);
-
-      const min = Math.min(dTop, dBottom, dLeft, dRight);
-      if (min === dTop) candidatePos = "top";
-      else if (min === dBottom) candidatePos = "bottom";
-      else if (min === dLeft) candidatePos = "left";
-      else candidatePos = "right";
+      candidatePos = this.computeDockCandidate(e, this.toolbarPosition, startX, startY);
 
       if (indicator) {
         indicator.className = `goodobsidian-dock-indicator is-dock-${candidatePos}`;
@@ -2909,9 +2987,7 @@ export class Toolbar {
       const target = e.target as Element | null;
       if (target?.closest("button, input, select, textarea, [role='button']")) return;
 
-      if (activePointerId !== null) {
-        cleanupDoc();
-      }
+      if (activePointerId !== null || e.isPrimary === false) return;
 
       activePointerId = e.pointerId;
       startX = e.clientX;
@@ -2922,6 +2998,8 @@ export class Toolbar {
       holdTimer = window.setTimeout(() => {
         holdTriggered = true;
         this.barEl.addClass("is-bar-held");
+        this.barEl.style.overflow = "hidden";
+        this.barEl.style.touchAction = "none";
         if (activePointerId !== null) {
           try {
             this.barEl.setPointerCapture(activePointerId);
@@ -2940,12 +3018,157 @@ export class Toolbar {
       doc.addEventListener("pointermove", onMove);
       doc.addEventListener("pointerup", onUp);
       doc.addEventListener("pointercancel", onCancel);
+      doc.addEventListener("touchstart", onTouchStart, true);
+      doc.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
     };
 
     this.barEl.addEventListener("pointerdown", onPointerDown);
     this.disposers.push(() => {
       cleanupDoc();
       this.barEl.removeEventListener("pointerdown", onPointerDown);
+    });
+  }
+
+  private installOptionsDockGestures(): void {
+    let holdTimer: number | null = null;
+    let holdTriggered = false;
+    let startX = 0;
+    let startY = 0;
+    let activePointerId: number | null = null;
+    let activeTouchId: number | null = null;
+    let indicator: HTMLElement | null = null;
+    let candidatePos: ToolbarPosition = this.optionsPosition;
+
+    const doc = this.optionsEl.ownerDocument;
+
+    const onTouchStart = (e: TouchEvent): void => {
+      if (activePointerId === null || activeTouchId !== null) return;
+      const touch = Array.from(e.changedTouches).find((touch) =>
+        Math.abs(touch.clientX - startX) < 2 && Math.abs(touch.clientY - startY) < 2,
+      );
+      if (touch) activeTouchId = touch.identifier;
+    };
+
+    const onTouchMove = (e: TouchEvent): void => {
+      if (holdTriggered && activePointerId !== null && activeTouchId !== null &&
+          Array.from(e.changedTouches).some((touch) => touch.identifier === activeTouchId) && e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    const cleanupDoc = (): void => {
+      if (holdTimer !== null) {
+        window.clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (indicator) {
+        indicator.remove();
+        indicator = null;
+      }
+      this.optionsEl.removeClass("is-pill-held");
+      this.optionsEl.style.overflow = "";
+      this.optionsEl.style.touchAction = "";
+      if (activePointerId !== null) {
+        try {
+          if (this.optionsEl.hasPointerCapture(activePointerId)) {
+            this.optionsEl.releasePointerCapture(activePointerId);
+          }
+        } catch {}
+      }
+      doc.removeEventListener("pointermove", onMove);
+      doc.removeEventListener("pointerup", onUp);
+      doc.removeEventListener("pointercancel", onCancel);
+      doc.removeEventListener("touchstart", onTouchStart, true);
+      doc.removeEventListener("touchmove", onTouchMove, { capture: true });
+      activeTouchId = null;
+    };
+
+    const onMove = (e: PointerEvent): void => {
+      if (e.pointerId !== activePointerId) return;
+      const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+      if (!holdTriggered) {
+        if (dist > 8) {
+          if (holdTimer !== null) {
+            window.clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        }
+        return;
+      }
+
+      if (e.cancelable) e.preventDefault();
+
+      candidatePos = this.computeDockCandidate(e, this.optionsPosition, startX, startY);
+
+      if (indicator) {
+        indicator.className = `goodobsidian-dock-indicator is-dock-${candidatePos}`;
+      }
+    };
+
+    const onUp = (e: PointerEvent): void => {
+      if (e.pointerId !== activePointerId) return;
+      const wasHeld = holdTriggered;
+      const targetPos = candidatePos;
+      cleanupDoc();
+      activePointerId = null;
+      holdTriggered = false;
+      if (wasHeld && targetPos !== this.optionsPosition) {
+        this.setOptionsPosition(targetPos);
+        this.callbacks.onOptionsPositionChange?.(targetPos);
+      }
+    };
+
+    const onCancel = (e: PointerEvent): void => {
+      if (e.pointerId !== activePointerId) return;
+      cleanupDoc();
+      activePointerId = null;
+      holdTriggered = false;
+    };
+
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return;
+      const target = e.target as Element | null;
+      if (target?.closest("button, input, select, textarea, [role='button']")) return;
+
+      if (activePointerId !== null || e.isPrimary === false) return;
+
+      activePointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      holdTriggered = false;
+      candidatePos = this.optionsPosition;
+
+      holdTimer = window.setTimeout(() => {
+        holdTriggered = true;
+        this.optionsEl.addClass("is-pill-held");
+        this.optionsEl.style.overflow = "hidden";
+        this.optionsEl.style.touchAction = "none";
+        if (activePointerId !== null) {
+          try {
+            this.optionsEl.setPointerCapture(activePointerId);
+          } catch {}
+        }
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          try {
+            navigator.vibrate(25);
+          } catch {}
+        }
+        indicator = this.host.createDiv({
+          cls: `goodobsidian-dock-indicator is-dock-${this.optionsPosition}`,
+        });
+      }, 400);
+
+      doc.addEventListener("pointermove", onMove);
+      doc.addEventListener("pointerup", onUp);
+      doc.addEventListener("pointercancel", onCancel);
+      doc.addEventListener("touchstart", onTouchStart, true);
+      doc.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+    };
+
+    this.optionsEl.addEventListener("pointerdown", onPointerDown);
+    this.disposers.push(() => {
+      cleanupDoc();
+      this.optionsEl.removeEventListener("pointerdown", onPointerDown);
     });
   }
 
@@ -2956,95 +3179,47 @@ export class Toolbar {
     const anchorBox = anchor.getBoundingClientRect();
     const win = this.host.ownerDocument.defaultView ?? window;
     const viewport = win.visualViewport;
-    const pos = this.toolbarPosition;
+    const pos = this.optionsEl.contains(anchor) ? this.optionsPosition : this.toolbarPosition;
 
-    if (pos === "left") {
-      const left = Math.round(anchorBox.right - hostBox.left + 8);
-      const popoverBox = popover.getBoundingClientRect();
-      const maxH = hostBox.height - 16;
-      const maxW = Math.max(100, hostBox.width - left - 16);
-      let top = Math.round(anchorBox.top - hostBox.top);
-      if (top + (popoverBox.height || 200) > hostBox.height - 8) {
-        top = Math.max(8, hostBox.height - (popoverBox.height || 200) - 8);
+    const leftEdge = Math.max(hostBox.left, viewport?.offsetLeft ?? 0) + EDGE_INSET;
+    const rightEdge = Math.max(leftEdge, Math.min(hostBox.right,
+      (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth)) - EDGE_INSET);
+    const topEdge = Math.max(hostBox.top, viewport?.offsetTop ?? 0) + EDGE_INSET;
+    const bottomEdge = Math.max(topEdge, Math.min(hostBox.bottom,
+      (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight)) - EDGE_INSET);
+    let left = leftEdge;
+    let right = rightEdge;
+    let top = topEdge;
+    let bottom = bottomEdge;
+    if (pos === "left") left = Math.min(right, Math.max(left, anchorBox.right + 8));
+    else if (pos === "right") right = Math.max(left, Math.min(right, anchorBox.left - 8));
+    else {
+      const below = Math.max(0, bottom - anchorBox.bottom - 8);
+      const above = Math.max(0, anchorBox.top - 8 - top);
+      if ((pos === "bottom" && above > 0) || (below < 200 && above > below)) {
+        bottom = Math.max(top, Math.min(bottom, anchorBox.top - 8));
+      } else {
+        top = Math.min(bottom, Math.max(top, anchorBox.bottom + 8));
       }
-      popover.setCssStyles({
-        left: `${left}px`,
-        top: `${Math.max(8, top)}px`,
-        maxHeight: `${Math.floor(maxH)}px`,
-        maxWidth: `${Math.floor(maxW)}px`,
-        transform: "none",
-      });
-      return;
     }
-
-    if (pos === "right") {
-      const popoverBox = popover.getBoundingClientRect();
-      const popoverWidth = popoverBox.width || 280;
-      const maxH = hostBox.height - 16;
-      const maxW = Math.max(100, anchorBox.left - hostBox.left - 16);
-      let left = Math.round(anchorBox.left - hostBox.left - popoverWidth - 8);
-      left = Math.max(8, Math.min(hostBox.width - popoverWidth - 8, left));
-      let top = Math.round(anchorBox.top - hostBox.top);
-      if (top + (popoverBox.height || 200) > hostBox.height - 8) {
-        top = Math.max(8, hostBox.height - (popoverBox.height || 200) - 8);
-      }
-      popover.setCssStyles({
-        left: `${Math.max(8, left)}px`,
-        top: `${Math.max(8, top)}px`,
-        maxHeight: `${Math.floor(maxH)}px`,
-        maxWidth: `${Math.floor(maxW)}px`,
-        transform: "none",
-      });
-      return;
-    }
-
-    if (pos === "bottom") {
-      const popoverBox = popover.getBoundingClientRect();
-      const popoverWidth = popoverBox.width || 280;
-      const maxH = Math.max(100, anchorBox.top - hostBox.top - 16);
-      const maxW = Math.max(100, hostBox.width - 16);
-      let centre = anchorBox.left - hostBox.left + anchorBox.width / 2;
-      const halfW = popoverWidth / 2;
-      if (centre - halfW < 8) {
-        centre = 8 + halfW;
-      } else if (centre + halfW > hostBox.width - 8) {
-        centre = hostBox.width - 8 - halfW;
-      }
-      const top = Math.round(anchorBox.top - hostBox.top - 8);
-      popover.setCssStyles({
-        left: `${Math.round(centre)}px`,
-        top: `${top}px`,
-        maxHeight: `${Math.floor(maxH)}px`,
-        maxWidth: `${Math.floor(maxW)}px`,
-        transform: "translate(-50%, -100%)",
-      });
-      return;
-    }
-
-    const fitBox = {
-      top: Math.max(hostBox.top, viewport?.offsetTop ?? 0),
-      bottom: Math.min(hostBox.bottom, (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight)),
-      width: Math.max(0, Math.min(hostBox.right, (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth)) - Math.max(hostBox.left, viewport?.offsetLeft ?? 0)),
-    };
-    const fit = writingPopoverFit(fitBox, anchorBox);
     popover.setCssStyles({
-      left: `${Math.round(anchorBox.left - hostBox.left + anchorBox.width / 2)}px`,
-      top: `${Math.round(fit.top + fitBox.top - hostBox.top)}px`,
-      maxHeight: `${Math.floor(fit.maxHeight)}px`,
-      maxWidth: `${Math.floor(fit.maxWidth)}px`,
-      transform: fit.above ? "translate(-50%, -100%)" : "translateX(-50%)",
+      maxWidth: `${Math.floor(right - left)}px`,
+      maxHeight: `${Math.floor(bottom - top)}px`,
+      transform: "none",
     });
     const box = popover.getBoundingClientRect();
-    const leftEdge = Math.max(hostBox.left, viewport?.offsetLeft ?? 0);
-    const rightEdge = Math.min(hostBox.right, (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth));
-    let shift = 0;
-    if (box.right > rightEdge - EDGE_INSET) shift = rightEdge - EDGE_INSET - box.right;
-    if (box.left + shift < leftEdge + EDGE_INSET) shift = leftEdge + EDGE_INSET - box.left;
-    // A popover with an arrow keeps it pointing at the anchor.
-    popover.setCssProps({ "--gob-popover-arrow": `${Math.round(-shift)}px` });
-    if (shift === 0) return;
-    const centre = anchorBox.left - hostBox.left + anchorBox.width / 2;
-    popover.setCssStyles({ left: `${Math.round(centre + shift)}px` });
+    const width = Math.min(box.width, right - left);
+    const height = Math.min(box.height, bottom - top);
+    const centre = anchorBox.left + anchorBox.width / 2;
+    const x = pos === "left" ? left : pos === "right" ? right - width :
+      Math.max(left, Math.min(right - width, centre - width / 2));
+    const y = pos === "bottom" || bottom < bottomEdge ? bottom - height :
+      pos === "top" ? top : Math.max(top, Math.min(bottom - height, anchorBox.top));
+    popover.setCssStyles({
+      left: `${Math.round(x - hostBox.left)}px`,
+      top: `${Math.round(y - hostBox.top)}px`,
+    });
+    popover.setCssProps({ "--gob-popover-arrow": `${Math.round(centre - x - width / 2)}px` });
   }
 
   /** Dismiss the popover on an outside press or Escape. */
@@ -3079,93 +3254,44 @@ export class Toolbar {
 
   // --- Placing the options pill --------------------------------------------
 
-  /** Where tier 1 ends, in host coordinates: the pill hangs below it. */
-  private barBottom(): number {
-    const hostBox = this.host.getBoundingClientRect();
-    const barBox = this.barEl.getBoundingClientRect();
-    return barBox.bottom - hostBox.top + EDGE_INSET;
-  }
-
-  /**
-   * Pin the pill directly under the tool bar, centred over the page area
-   * (right of a docked sidebar), as GoodNotes does. It was draggable and its
-   * position persisted until 0.3.1; a stale stored position left it sitting
-   * in the middle of the page on every device it had been dragged on.
-   * Re-applied after a resize or rotation and when the sidebar opens.
-   */
+  /** Fit the options pill inside the page area left by the toolbar dock. */
   applyPosition(): void {
     // A glide in progress would be measured as the pill's size.
     this.stopPillMorph();
+    const barPos = this.toolbarPosition;
+    const optPos = this.optionsPosition;
+    this.optionsEl.setCssStyles({ maxWidth: "", maxHeight: "" });
+    this.optionsEl.removeClass("is-pos-top", "is-pos-bottom", "is-pos-left", "is-pos-right");
+    this.optionsEl.addClass(`is-pos-${optPos}`);
     this.fitTextPill();
-    const hostBox = this.host.getBoundingClientRect();
-    const pill = this.optionsEl.getBoundingClientRect();
-    const pos = this.toolbarPosition;
 
-    if (pos === "top") {
-      this.optionsEl.setCssStyles({ maxWidth: "" });
-      const inset = Math.min(this.leftInset, Math.max(0, hostBox.width - pill.width));
-      const span = Math.max(1, hostBox.width - inset);
-      const minLeft = inset + EDGE_INSET;
-      const maxLeft = Math.max(minLeft, hostBox.width - pill.width - EDGE_INSET);
-      const left = Math.min(maxLeft, Math.max(minLeft, inset + (span - pill.width) / 2));
-      this.optionsEl.setCssStyles({
-        left: `${Math.round(left)}px`,
-        top: `${Math.round(this.barBottom())}px`,
-      });
-    } else if (pos === "bottom") {
-      this.optionsEl.setCssStyles({ maxWidth: "" });
-      const inset = Math.min(this.leftInset, Math.max(0, hostBox.width - pill.width));
-      const span = Math.max(1, hostBox.width - inset);
-      const minLeft = inset + EDGE_INSET;
-      const maxLeft = Math.max(minLeft, hostBox.width - pill.width - EDGE_INSET);
-      const left = Math.min(maxLeft, Math.max(minLeft, inset + (span - pill.width) / 2));
-      const barBox = this.barEl.getBoundingClientRect();
-      const top = barBox.top - hostBox.top - pill.height - EDGE_INSET;
-      this.optionsEl.setCssStyles({
-        left: `${Math.round(left)}px`,
-        top: `${Math.round(Math.max(EDGE_INSET, top))}px`,
-      });
-    } else if (pos === "left") {
-      const barBox = this.barEl.getBoundingClientRect();
-      const left = barBox.right - hostBox.left + EDGE_INSET;
-      const maxW = Math.max(0, hostBox.width - left - EDGE_INSET);
-      this.optionsEl.setCssStyles({
-        maxWidth: `${Math.floor(maxW)}px`,
-      });
-      const activeBtn = this.toolButtonsMap.get(this.state.tool as ConfigurableToolId);
-      const btnBox = activeBtn?.getBoundingClientRect();
-      let top: number;
-      if (btnBox && btnBox.height > 0) {
-        top = btnBox.top - hostBox.top + (btnBox.height - pill.height) / 2;
-      } else {
-        top = (hostBox.height - pill.height) / 2;
-      }
-      top = Math.max(EDGE_INSET, Math.min(hostBox.height - pill.height - EDGE_INSET, top));
-      this.optionsEl.setCssStyles({
-        left: `${Math.round(left)}px`,
-        top: `${Math.round(top)}px`,
-      });
-    } else if (pos === "right") {
-      const barBox = this.barEl.getBoundingClientRect();
-      const maxW = Math.max(0, barBox.left - hostBox.left - EDGE_INSET * 2);
-      this.optionsEl.setCssStyles({
-        maxWidth: `${Math.floor(maxW)}px`,
-      });
-      const left = Math.max(EDGE_INSET, barBox.left - hostBox.left - Math.min(pill.width, maxW) - EDGE_INSET);
-      const activeBtn = this.toolButtonsMap.get(this.state.tool as ConfigurableToolId);
-      const btnBox = activeBtn?.getBoundingClientRect();
-      let top: number;
-      if (btnBox && btnBox.height > 0) {
-        top = btnBox.top - hostBox.top + (btnBox.height - pill.height) / 2;
-      } else {
-        top = (hostBox.height - pill.height) / 2;
-      }
-      top = Math.max(EDGE_INSET, Math.min(hostBox.height - pill.height - EDGE_INSET, top));
-      this.optionsEl.setCssStyles({
-        left: `${Math.round(left)}px`,
-        top: `${Math.round(top)}px`,
-      });
-    }
+    const hostBox = this.host.getBoundingClientRect();
+    const barBox = this.barEl.getBoundingClientRect();
+    // Reserve the toolbar's edge on both axes, including opposite-edge docks.
+    const left = Math.min(hostBox.width, Math.max(EDGE_INSET,
+      barPos === "left" ? barBox.right - hostBox.left + EDGE_INSET : this.leftInset + EDGE_INSET));
+    const right = Math.max(left, Math.min(hostBox.width - EDGE_INSET,
+      barPos === "right" ? barBox.left - hostBox.left - EDGE_INSET : hostBox.width - EDGE_INSET));
+    const top = Math.min(hostBox.height, Math.max(EDGE_INSET,
+      barPos === "top" ? barBox.bottom - hostBox.top + EDGE_INSET : EDGE_INSET));
+    const bottom = Math.max(top, Math.min(hostBox.height - EDGE_INSET,
+      barPos === "bottom" ? barBox.top - hostBox.top - EDGE_INSET : hostBox.height - EDGE_INSET));
+    const width = Math.max(0, right - left);
+    const height = Math.max(0, bottom - top);
+    const vertical = optPos === "left" || optPos === "right";
+    this.optionsEl.setCssStyles({
+      maxWidth: `${Math.floor(vertical ? Math.min(60, width) : width)}px`,
+      maxHeight: `${Math.floor(height)}px`,
+    });
+    // Measure after the orientation and constraints have taken effect.
+    const pill = this.optionsEl.getBoundingClientRect();
+    const pillWidth = Math.min(pill.width, width);
+    const pillHeight = Math.min(pill.height, height);
+    this.optionsEl.setCssStyles({
+      left: `${Math.round(optPos === "right" ? right - pillWidth :
+        vertical ? left : left + (width - pillWidth) / 2)}px`,
+      top: `${Math.round(optPos === "bottom" ? bottom - pillHeight : top)}px`,
+    });
 
     if (this.popover) {
       this.popoverAnchor = this.resolvePopoverAnchor();
