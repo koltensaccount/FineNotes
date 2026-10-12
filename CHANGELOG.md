@@ -8,6 +8,20 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 42 — LTspice-inspired circuit editor overhaul
+
+- Direct wire segment manipulation: drag horizontal wire segments vertically and vertical segments horizontally to reshape orthogonal bends; electrical endpoints remain fixed and collinear bends collapse automatically without requiring "Add Bend".
+- Movable electrical junctions: true electrical junctions (3+ branches or explicit junctions) follow drags and reshape all connected wire branches cleanly.
+- Preserved user-edited geometry: wires manually edited or reshaped are marked `userEdited` and protected from arbitrary automated rerouting passes.
+- Touch & Apple Pencil optimization: hit targets tuned for pencil interaction, blank-canvas drag-panning, and dedicated floating Zoom controls with Zoom to Fit.
+- Component dropdown fix: resolved dropdown arrow collision and WebKit styling across light, dark, and mobile layouts.
+- Searchable component picker with tap-to-place mode: easily search symbols with common devices first and place them directly at tapped coordinates.
+- Dark mode visibility: consistent high-contrast light schematic canvas with dark symbols and wires, while the surrounding inspector respects Obsidian themes.
+- Real LaTeX label rendering: math expressions ($R_1$, $V_{in}$, $I_D$, $\omega$, $\frac{V_o}{V_i}$) render vector SVG labels via Obsidian MathJax with vector fallback.
+- Direct label editing & positioning: drag and reposition labels directly on the schematic, with "Reset Label to Auto Position" support.
+- Circuit diagram resizing: selected notebook circuits display corner resize handles with aspect-ratio locked vector scaling and PDF export preservation.
+- Component disconnection: explicit Disconnect action to safely detach component terminals for topology edits.
+
 ### Beta 41 — circuit recognition and review
 
 - Handwritten circuit conversion now opens a review before replacing ink. Compare the original crop with the editable result, inspect recognition uncertainties and electrical warnings, and correct the diagram before committing. Cancellation and failures preserve the original drawing; Undo restores it after conversion.
