@@ -8,7 +8,7 @@
 
 import { postJson } from "../recognition/http";
 import { type KeyStore } from "../recognition/key-store";
-import { VENDORS, defaultModelFor, extractLlmErrorMessage } from "../recognition/llm-request";
+import { defaultModelFor, extractLlmErrorMessage, jsonEndpoint } from "../recognition/llm-request";
 import { type Bounds } from "../model/document";
 import { type PageElements } from "../model/selection-commands";
 import { renderSelectionToPng } from "../view/selection-clipboard";
@@ -112,10 +112,11 @@ export async function convertSelectionToCircuit(
   const base64Data = await blobToBase64(pngBlob);
 
   // 2. Prepare Google Gemini generateContent payload
-  const vendorConfig = VENDORS.google;
-  const model = input.modelOverride || defaultModelFor("google");
-  const url = vendorConfig.url({ model });
-  const headers = vendorConfig.headers(apiKey.trim());
+  const endpoint = jsonEndpoint({
+    vendor: "google",
+    model: input.modelOverride || defaultModelFor("google"),
+    apiKey: apiKey.trim(),
+  });
 
   const body = {
     systemInstruction: {
@@ -144,7 +145,7 @@ export async function convertSelectionToCircuit(
   };
 
   // 3. Send request over Obsidian requestUrl
-  const response = await postJson(url, headers, body);
+  const response = await postJson(endpoint.url, endpoint.headers, body);
   if (response.status !== 200) {
     let detail = "";
     try {
@@ -191,6 +192,11 @@ export async function convertSelectionToCircuit(
   let cleanJsonText = rawText.trim();
   if (cleanJsonText.startsWith("```")) {
     cleanJsonText = cleanJsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  }
+  const firstBrace = cleanJsonText.indexOf("{");
+  const lastBrace = cleanJsonText.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleanJsonText = cleanJsonText.slice(firstBrace, lastBrace + 1);
   }
 
   let parsed: unknown;
