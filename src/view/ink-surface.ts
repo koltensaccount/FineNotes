@@ -206,6 +206,7 @@ import {
   RecolorStrokes,
   RemoveElements,
   TranslateElements,
+  MoveElementsToPage,
   TransformSelectedInk,
   copyElements,
   elementsOnPage,
@@ -615,6 +616,7 @@ const clipboard = new InkClipboard();
  * is left out of the tiles.
  */
 interface ImageDrag {
+  targetPageId?: string;
   pointerId: number;
   part: ImagePart;
   pageId: string;
@@ -698,6 +700,7 @@ interface LassoDraft {
  * moved by (dx, dy), and left out of the tiles, and its text boxes follow.
  */
 interface GroupDrag {
+  targetPageId?: string;
   pointerId: number;
   selection: GroupSelection;
   /** The selection's bounds when the drag began, page space. */
@@ -783,6 +786,8 @@ export class InkSurface {
   private readonly disposers: Array<() => void> = [];
   /** The one animation frame every scroll, zoom and repaint coalesces into. */
   private frameReq = 0;
+  private selectionDragPointer: Pt | null = null;
+  private selectionScrollAt = 0;
   private prefetchReq = 0;
   /** Scroll position and momentum. The DOM never scrolls; this does. */
   private readonly scroller = new KineticScroller();
@@ -1450,6 +1455,12 @@ export class InkSurface {
     // then on, a picture pasted from there wins over the plugin's clipboard
     // (see `handlePaste`). Idempotent, so every open surface may report it.
     const onLeave = (): void => clipboard.noteWindowLeft();
+    this.surfaceEl.ownerDocument.addEventListener("copy", onLeave);
+    this.surfaceEl.ownerDocument.addEventListener("cut", onLeave);
+    this.disposers.push(() => {
+      this.surfaceEl.ownerDocument.removeEventListener("copy", onLeave);
+      this.surfaceEl.ownerDocument.removeEventListener("cut", onLeave);
+    });
     const onVisibility = (): void => {
       if (document.visibilityState === "hidden") clipboard.noteWindowLeft();
     };
@@ -2175,7 +2186,7 @@ export class InkSurface {
     // Zoomed in, a swipe moves around the page being read and never onto the
     // next one; turning pages waits until the view is zoomed out again.
     const rangeX =
-      row && !this.turnsPages
+      row && !this.turnsPages && !this.draggingBetweenPages
         ? rowPageScrollRange(this.pageLayout, this.pageIndex, scale, this.cssW)
         : undefined;
     this.scroller.setExtent({
@@ -2356,12 +2367,23 @@ export class InkSurface {
     // Both advance every frame: a pinch usually ends with one finger still
     // moving, so a fling and the zoom spring run together. Short-circuiting
     // here froze the spring for the length of the fling, then snapped it.
+    const dragScrolling = this.stepSelectionDragScroll(t);
     const scrolling = this.scroller.step(t);
     const zooming = this.stepZoomAnim(t);
-    const moving = scrolling || zooming;
+    const moving = scrolling || zooming || dragScrolling;
     const busy = moving || this.scroller.isDragging || this.pinch !== null;
     this.noteViewMotion(busy);
     this.syncViewport();
+    if (dragScrolling && this.selectionDragPointer) {
+      const p = this.selectionDragPointer, group = this.groupDrag, image = this.imageDrag;
+      if (group?.lifted && !group.shape && !group.ink) {
+        const box = this.boxForPage(group.selection.pageId);
+        if (box) this.moveGroupDrag(group, box, this.pagePoint(box, p.x, p.y));
+      } else if (image?.lifted && image.part === "body") {
+        const box = this.boxForPage(image.pageId);
+        if (box) { this.moveImageBody(image, box, this.pagePoint(box, p.x, p.y)); this.renderImageDraft(); this.syncImageOverlay(); }
+      }
+    }
     this.syncPullAdd();
     if (busy) this.flashChrome();
     const complete = this.paint(busy ? SCROLL_FRAME_BUDGET_MS : Infinity);
@@ -5193,7 +5215,8 @@ export class InkSurface {
   private dragShift(pageId: string, textBox: TextBoxElement): Pt {
     const drag = this.groupDrag;
     if (!drag?.lifted || drag.selection.pageId !== pageId) return { x: 0, y: 0 };
-    return drag.selection.textBoxes.includes(textBox) ? { x: drag.dx, y: drag.dy } : { x: 0, y: 0 };
+    const source = this.boxForPage(pageId), target = this.boxForPage(drag.targetPageId ?? pageId);
+    return drag.selection.textBoxes.includes(textBox) ? { x: drag.dx + (target && source ? target.x-source.x : 0), y: drag.dy + (target && source ? target.y-source.y : 0) } : { x: 0, y: 0 };
   }
 
   /** The part of the paper element on screen, in its own (scaled layout) px. */
@@ -5264,7 +5287,7 @@ export class InkSurface {
       this.syncActionBar(); return;
     }
     const sel = this.liveSelection();
-    const box = sel ? this.boxForPage(sel.pageId) : null;
+    const box = sel ? this.boxForPage(this.groupDrag?.targetPageId ?? sel.pageId) : null;
     const bounds = sel && box ? this.groupBounds(sel) : null;
     this.selectionFrameEl.toggleClass("is-hidden", !box || !bounds);
     const shape = this.editableShape(sel);
@@ -5730,6 +5753,7 @@ export class InkSurface {
       });
       // Nobody else may be left holding an unhandled rejection.
       png.catch(() => undefined);
+      if (this.callbacks.onCopySelection || (typeof navigator !== "undefined" && navigator.clipboard?.write && typeof ClipboardItem !== "undefined")) clipboard.markSelectionPng();
       if (this.callbacks.onCopySelection) {
         this.callbacks.onCopySelection(png, marker);
       } else {
@@ -5901,7 +5925,8 @@ export class InkSurface {
     if (!this.pasteGate.claim(request.ticket)) return false;
     request.completed = Date.now();
     if (this.callbacks.isLocked?.()) return true;
-    const ownedRegion = clipboard.regionPng && !clipboard.leftSinceCopy && !data.text && data.file?.type === "image/png";
+    // Native iPad paste may omit the plain-text MIME marker of our own exported PNG.
+    const ownedRegion = (clipboard.regionPng || clipboard.hasSelectionPng) && !clipboard.leftSinceCopy && !data.text && data.file?.type === "image/png";
     if ((data.text === clipboardMarker(clipboard.version) || ownedRegion) && this.paste(request.target)) return true;
     if (data.file && this.imagesShown && this.callbacks.onPasteImage) {
       this.callbacks.onPasteImage(data.file, request.target);
@@ -6079,6 +6104,10 @@ export class InkSurface {
     // The whole picture covers the element as it was and as it is now.
     const box = this.boxForPage(session.pageId);
     if (box) this.renderer?.invalidateRegion(box.index, imageBounds(session.full));
+    if (this.direction === "horizontal" && !this.turnsPages) {
+      if (changed && drag.targetPageId) this.pageIndex = this.doc.pages.findIndex(p => p.id === drag.targetPageId);
+      this.ensurePaperSize(); this.requestFrame();
+    }
     this.renderDry();
     this.syncImageOverlay();
     if (changed) this.changed();
@@ -6283,17 +6312,22 @@ export class InkSurface {
     const point = this.pagePoint(box, event.clientX, event.clientY);
     if (drag.ink) this.moveInkHandle(drag, box, point);
     else if (drag.shape) this.moveShapeHandle(drag, box, point);
-    else this.moveGroupDrag(drag, box, point);
+    else {
+      this.selectionDragPointer = { x: event.clientX, y: event.clientY };
+      this.moveGroupDrag(drag, box, point); this.requestFrame();
+    }
   };
 
   /** Carry a selection being dragged to page point `p`, from where the drag began. */
   private moveGroupDrag(drag: GroupDrag, box: PageBox, p: Pt): void {
-    const d = clampGroupDelta(drag.bounds, p.x - drag.from.x, p.y - drag.from.y, box);
+    const target = this.dragTargetBox(box, p, drag.targetPageId);
+    drag.targetPageId = target.id;
+    const d = clampGroupDelta(drag.bounds, p.x + box.x - target.x - drag.from.x, p.y + box.y - target.y - drag.from.y, target);
     drag.dx = d.dx;
     drag.dy = d.dy;
     if (!drag.lifted) this.liftSelection(drag, box);
     this.renderGroupDraft();
-    this.placeDraggedTextBoxes(drag, box);
+    this.placeDraggedTextBoxes(drag, target);
     this.syncSelectionOverlay();
   }
 
@@ -6316,6 +6350,7 @@ export class InkSurface {
    */
   private liftSelection(drag: GroupDrag, box: PageBox): void {
     drag.lifted = true;
+    if (this.direction === "horizontal" && !this.turnsPages) this.ensurePaperSize();
     this.renderer?.setHiddenStrokes(new Set(drag.selection.strokes.map((stroke) => stroke.id)));
     this.renderer?.setHiddenImages(new Set(drag.selection.images));
     this.renderer?.invalidateRegion(box.index, drag.bounds);
@@ -6324,7 +6359,7 @@ export class InkSurface {
 
   private renderGroupDraft(): void {
     const drag = this.groupDrag;
-    const box = drag ? this.boxForPage(drag.selection.pageId) : null;
+    const box = drag ? this.boxForPage(drag.targetPageId ?? drag.selection.pageId) : null;
     if (!drag?.lifted || !box) return;
     const { images } = drag.selection;
     const strokes = drag.shape ? [{ ...drag.shape.stroke, pts: drag.shape.pts, size: drag.shape.size ?? drag.shape.stroke.size }] : drag.ink?.draft ?? drag.selection.strokes;
@@ -6358,6 +6393,7 @@ export class InkSurface {
     const drag = this.groupDrag;
     if (!drag) return;
     this.groupDrag = null;
+    this.selectionDragPointer = null; this.selectionScrollAt = 0;
     if ((drag.shape || drag.ink) && !commit) this.shapeMode = "resize";
     this.circleDrag = false;
     this.selectionFrameEl.removeEventListener("pointermove", this.onSelectionPointerMove);
@@ -6379,7 +6415,7 @@ export class InkSurface {
     const geometryChanged = !!drag.shape && (drag.shape.pts.some((v, i) => v !== drag.shape!.stroke.pts[i]) || (drag.shape.size !== undefined && drag.shape.size !== drag.shape.stroke.size));
     const moved =
       commit &&
-      (inkChanged || geometryChanged || drag.dx !== 0 || drag.dy !== 0) &&
+      (inkChanged || geometryChanged || drag.dx !== 0 || drag.dy !== 0 || (drag.targetPageId !== undefined && drag.targetPageId !== pageId)) &&
       this.doc.pages.some((page) => page.id === pageId);
     if (moved) {
       if (drag.ink) {
@@ -6390,12 +6426,21 @@ export class InkSurface {
         this.history.push(this.doc, new TransformStroke(pageId, shape.stroke.id, shape.pts, shape.mode === "scale" ? shape.size : undefined, shape.mode === "scale" ? "Scale shape" : "Resize shape"));
         this.selectedShapeFrame = { id: shape.stroke.id, points: shape.stroke.pts, frame: shapeFrame(shape.stroke.shape!, shape.stroke.pts, shape.frame.angle)! };
         this.shapeMode = "resize";
+      } else if (drag.targetPageId && drag.targetPageId !== pageId && this.doc.pages.some(p => p.id === drag.targetPageId)) {
+        this.history.push(this.doc, new MoveElementsToPage(pageId, drag.targetPageId, drag.selection, drag.dx, drag.dy));
+        this.selection = { ...drag.selection, pageId: drag.targetPageId };
+        const target = this.boxForPage(drag.targetPageId);
+        if (target) this.renderer?.invalidateRegion(target.index, this.groupBounds(this.selection)!);
       } else this.history.push(this.doc, new TranslateElements(pageId, drag.selection, drag.dx, drag.dy));
       this.strokeIndex.rebuild(this.doc.pages);
     }
     if (box) {
-      const after = moved ? (drag.ink ? this.groupBounds(drag.selection) : drag.shape ? strokeBounds(drag.shape.stroke) : shiftBounds(drag.bounds, drag.dx, drag.dy)) : null;
+      const after = moved && (!drag.targetPageId || drag.targetPageId === pageId) ? (drag.ink ? this.groupBounds(drag.selection) : drag.shape ? strokeBounds(drag.shape.stroke) : shiftBounds(drag.bounds, drag.dx, drag.dy)) : null;
       this.renderer?.invalidateRegion(box.index, unionBounds(drag.bounds, after) ?? drag.bounds);
+    }
+    if (this.direction === "horizontal" && !this.turnsPages) {
+      if (moved && drag.targetPageId) this.pageIndex = this.doc.pages.findIndex(p => p.id === drag.targetPageId);
+      this.ensurePaperSize(); this.requestFrame();
     }
     this.renderDry();
     this.syncTextBoxes();
@@ -6595,6 +6640,40 @@ export class InkSurface {
     return this.pageLayout.boxes.find((box) => box.id === pageId) ?? null;
   }
 
+  private get draggingBetweenPages(): boolean {
+    return !!(this.groupDrag?.lifted && !this.groupDrag.shape && !this.groupDrag.ink) || !!(this.imageDrag?.lifted && this.imageDrag.part === "body");
+  }
+
+  private stepSelectionDragScroll(t: number): boolean {
+    const p = this.selectionDragPointer;
+    if (!p || !this.draggingBetweenPages) { this.selectionScrollAt = 0; return false; }
+    const rect = this.scrollEl.getBoundingClientRect();
+    const horizontal = this.direction === "horizontal";
+    const lo = horizontal ? rect.left : rect.top, hi = horizontal ? rect.right : rect.bottom;
+    const at = horizontal ? p.x : p.y, margin = Math.min(48, (hi-lo)/4);
+    if (!(margin > 0)) return false;
+    const speed = at < lo+margin ? -Math.min(1, (lo+margin-at)/margin) : at > hi-margin ? Math.min(1, (at-hi+margin)/margin) : 0;
+    const dt = this.selectionScrollAt ? Math.max(0, Math.min(32, t-this.selectionScrollAt)) : 16;
+    this.selectionScrollAt = t;
+    if (!speed) return false;
+    const before = this.scroller.position;
+    this.scroller.scrollBy(horizontal ? speed*480*dt/1000 : 0, horizontal ? 0 : speed*480*dt/1000);
+    const after = this.scroller.position;
+    return before.x !== after.x || before.y !== after.y;
+  }
+
+  private moveImageBody(drag: ImageDrag, source: PageBox, p: Pt): void {
+    const target = this.dragTargetBox(source, p, drag.targetPageId);
+    drag.targetPageId = target.id;
+    drag.draft = moveImage(drag.start, p.x + source.x-target.x-drag.from.x, p.y+source.y-target.y-drag.from.y, target);
+  }
+
+  /** Keep the last page through gutters; only body moves may choose a new destination. */
+  private dragTargetBox(source: PageBox, point: Pt, lastPageId?: string): PageBox {
+    return boxAtPoint(this.pageLayout, point.x + source.x, point.y + source.y) ??
+      (lastPageId ? this.boxForPage(lastPageId) : null) ?? source;
+  }
+
   /** Client px -> page-local point on a given page. */
   private pagePoint(box: PageBox, clientX: number, clientY: number): { x: number; y: number } {
     return this.toPage(box, this.toLayout(clientX, clientY));
@@ -6610,7 +6689,7 @@ export class InkSurface {
    */
   private syncImageOverlay(): void {
     const sel = this.liveImageSelection();
-    const box = sel ? this.boxForPage(sel.pageId) : null;
+    const box = sel ? this.boxForPage(this.imageDrag?.targetPageId ?? sel.pageId) : null;
     this.imageUiEl.toggleClass("is-hidden", !sel || !box || this.cropping !== null);
     this.syncCropOverlay();
     this.syncActionBar();
@@ -6687,9 +6766,11 @@ export class InkSurface {
     if (!box) return;
     const p = this.pagePoint(box, event.clientX, event.clientY);
     switch (drag.part) {
-      case "body":
-        drag.draft = moveImage(drag.start, p.x - drag.from.x, p.y - drag.from.y, box);
+      case "body": {
+        this.selectionDragPointer = { x: event.clientX, y: event.clientY };
+        this.moveImageBody(drag, box, p); this.requestFrame();
         break;
+      }
       case "rotate":
         drag.draft = rotateImage(drag.start, drag.from, p);
         break;
@@ -6719,6 +6800,7 @@ export class InkSurface {
   /** Take the dragged image out of the tiles and draw it on the wet layer instead. */
   private liftImage(drag: ImageDrag, box: PageBox): void {
     drag.lifted = true;
+    if (this.direction === "horizontal" && !this.turnsPages) this.ensurePaperSize();
     this.renderer?.setHiddenImages(new Set([drag.image]));
     this.renderer?.invalidateRegion(box.index, imageBounds(drag.start));
     this.renderDry();
@@ -6726,7 +6808,7 @@ export class InkSurface {
 
   private renderImageDraft(): void {
     const drag = this.imageDrag;
-    const box = drag ? this.boxForPage(drag.pageId) : null;
+    const box = drag ? this.boxForPage(drag.targetPageId ?? drag.pageId) : null;
     if (!drag || !box) return;
     // A cropped picture is dragged cropped: the draft keeps its crop.
     const { id, path, crop } = drag.image;
@@ -6746,6 +6828,7 @@ export class InkSurface {
     const drag = this.imageDrag;
     if (!drag) return;
     this.imageDrag = null;
+    this.selectionDragPointer = null; this.selectionScrollAt = 0;
     this.imageFrameEl.removeEventListener("pointermove", this.onImagePointerMove);
     this.imageFrameEl.removeEventListener("pointerup", this.onImagePointerEnd);
     this.imageFrameEl.removeEventListener("pointercancel", this.onImagePointerEnd);
@@ -6762,15 +6845,24 @@ export class InkSurface {
     const box = this.boxForPage(drag.pageId);
     const page = this.doc.pages.find((candidate) => candidate.id === drag.pageId);
     const changed =
-      commit && page?.images.includes(drag.image) && !sameTransform(drag.start, drag.draft);
+      commit && page?.images.includes(drag.image) && (!sameTransform(drag.start, drag.draft) || (!!drag.targetPageId && drag.targetPageId !== drag.pageId));
     if (box) {
-      const dirty = changed
+      const dirty = changed && (!drag.targetPageId || drag.targetPageId === drag.pageId)
         ? unionBounds(imageBounds(drag.start), imageBounds(drag.draft))
         : imageBounds(drag.start);
       if (dirty) this.renderer?.invalidateRegion(box.index, dirty);
     }
     if (changed) {
-      this.history.push(this.doc, new TransformImage(drag.pageId, drag.image.id, drag.draft));
+      if (drag.targetPageId && drag.targetPageId !== drag.pageId && this.doc.pages.some(p => p.id === drag.targetPageId)) {
+        this.history.push(this.doc, new MoveElementsToPage(drag.pageId, drag.targetPageId, { strokes: [], images: [drag.image], textBoxes: [] }, drag.draft.x - drag.start.x, drag.draft.y - drag.start.y));
+        this.imageSel = { pageId: drag.targetPageId, image: drag.image };
+        const target = this.boxForPage(drag.targetPageId);
+        if (target) this.renderer?.invalidateRegion(target.index, imageBounds(drag.draft));
+      } else this.history.push(this.doc, new TransformImage(drag.pageId, drag.image.id, drag.draft));
+    }
+    if (this.direction === "horizontal" && !this.turnsPages) {
+      if (changed && drag.targetPageId) this.pageIndex = this.doc.pages.findIndex(p => p.id === drag.targetPageId);
+      this.ensurePaperSize(); this.requestFrame();
     }
     this.renderDry();
     this.syncImageOverlay();

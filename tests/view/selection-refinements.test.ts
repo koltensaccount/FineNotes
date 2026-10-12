@@ -305,3 +305,61 @@ describe("selection refinements integration", () => {
     expect(s.select).toHaveBeenCalledWith(page.id, expect.objectContaining({ strokes: [copy] }));
   });
 });
+
+describe("cross-page selection drag integration", () => {
+  function dragFixture() {
+    const f=fixture(),target=blankPage("target");target.geometry={width:800,height:1000};f.doc.pages.push(target);
+    const boxes=[{id:f.page.id,index:0,x:0,y:0,width:800,height:1000},{id:target.id,index:1,x:0,y:1036,width:800,height:1000}];
+    const stroke={id:"s",tool:"pen" as const,color:"#123",size:3,pts:[50,50,.5,100,100,.5]};f.page.strokes.push(stroke);
+    const text={id:"t",x:50,y:50,w:100,h:50,text:"editable",fontSize:16,color:"#000"};f.page.textBoxes.push(text);
+    const selection={pageId:f.page.id,strokes:[stroke],images:[],textBoxes:[text]};f.s.selection=selection;
+    const root={setCssStyles:vi.fn()};
+    Object.assign(f.s,{pageLayout:{boxes},boxForPage:(id:string)=>boxes.find(b=>b.id===id),baseScale:1,userZoom:1,textBoxInputs:new Map([[`${f.page.id}:${text.id}`,{root}]]),
+      selectionFrameEl:{removeEventListener:vi.fn(),hasPointerCapture:()=>false},
+      renderer:{setHiddenStrokes:vi.fn(),setHiddenImages:vi.fn(),invalidateRegion:vi.fn(),clearWet:vi.fn(),renderSelectionDraft:vi.fn(),renderImageDraft:vi.fn()},
+    });
+    const drag={pointerId:7,selection,bounds:{minX:50,minY:50,maxX:150,maxY:150},from:{x:50,y:50},clientX:50,clientY:50,dx:0,dy:0,lifted:false,targetPageId:undefined as string|undefined};f.s.groupDrag=drag;
+    return {...f,target,boxes,stroke,text,drag,root};
+  }
+  it.each([true,false])("previews on the destination without mutation, commits/cancels once; commit=%s", commit=>{
+    const f=dragFixture(),initial=JSON.stringify(f.doc);
+    call(f.s,"moveGroupDrag",f.drag,f.boxes[0],{x:125,y:1150});
+    expect(f.drag.targetPageId).toBe(f.target.id);expect(JSON.stringify(f.doc)).toBe(initial);
+    const renderer=f.s.renderer as {renderSelectionDraft:ReturnType<typeof vi.fn>};
+    expect(renderer.renderSelectionDraft).toHaveBeenLastCalledWith(1,[f.stroke],[],75,64,undefined);
+    expect(f.root.setCssStyles).toHaveBeenLastCalledWith({left:"125px",top:"1150px"});
+    expect(call(f.s,"dragShift",f.page.id,f.text)).toEqual({x:75,y:1100});
+    call(f.s,"endGroupDrag",commit);
+    if(commit) {
+      expect(f.page.strokes).toHaveLength(0);expect(f.target.strokes[0]).toBe(f.stroke);
+      expect((f.s.selection as {pageId:string}).pageId).toBe(f.target.id);
+      expect(f.stroke.pts).toEqual([125,114,.5,175,164,.5]);
+      const moved=JSON.stringify(f.doc);f.history.undo(f.doc as never);expect(JSON.stringify(f.doc)).toBe(initial);f.history.redo(f.doc as never);expect(JSON.stringify(f.doc)).toBe(moved);
+    } else expect(JSON.stringify(f.doc)).toBe(initial);
+  });
+  it("keeps the last destination through a gutter and permits returning to the source",()=>{
+    const f=dragFixture();call(f.s,"moveGroupDrag",f.drag,f.boxes[0],{x:125,y:1150});
+    expect(call(f.s,"dragTargetBox",f.boxes[0],{x:125,y:1020},f.target.id)).toBe(f.boxes[1]);
+    call(f.s,"moveGroupDrag",f.drag,f.boxes[0],{x:125,y:150});expect(f.drag.targetPageId).toBe(f.page.id);
+  });
+  it("moves a lone placed image between pages with editable identity and one-step undo",()=>{
+    const f=dragFixture();f.s.groupDrag=null;
+    const image={id:"i",path:"picture.png",x:50,y:50,w:100,h:100,rotation:.2};f.page.images.push(image);f.s.imageSel={pageId:f.page.id,image};
+    const drag={pointerId:9,part:"body",pageId:f.page.id,image,start:{x:50,y:50,w:100,h:100,rotation:.2},draft:{x:50,y:50,w:100,h:100,rotation:.2},from:{x:75,y:75},grab:{x:0,y:0},clientX:75,clientY:75,lifted:true};
+    f.s.imageDrag=drag;f.s.imageFrameEl={removeEventListener:vi.fn(),hasPointerCapture:()=>false};f.s.imageUiEl={removeClass:vi.fn()};
+    const initial=JSON.stringify(f.doc);call(f.s,"moveImageBody",drag,f.boxes[0],{x:125,y:1150});call(f.s,"renderImageDraft");
+    expect((f.s.renderer as {renderImageDraft:ReturnType<typeof vi.fn>}).renderImageDraft.mock.calls[0][0]).toBe(1);
+    call(f.s,"endImageDrag",true);expect(f.target.images[0]).toBe(image);expect(f.page.images).toHaveLength(0);expect((f.s.imageSel as {pageId:string}).pageId).toBe(f.target.id);expect(image.rotation).toBe(.2);
+    f.history.undo(f.doc as never);expect(JSON.stringify(f.doc)).toBe(initial);f.history.redo(f.doc as never);expect(f.target.images[0]).toBe(image);
+  });
+  it("edge scrolling runs only during body movement and stops at the content boundary",()=>{
+    const f=dragFixture();let x=0,y=0;
+    f.s.scrollEl={getBoundingClientRect:()=>({left:0,right:800,top:0,bottom:600})};f.s.direction="vertical";
+    f.s.scroller={get position(){return {x,y}},scrollBy:(_dx:number,dy:number)=>{y=Math.min(100,y+dy)}};
+    f.s.selectionDragPointer={x:100,y:590};f.drag.lifted=true;
+    expect(call(f.s,"stepSelectionDragScroll",100)).toBe(true);expect(y).toBeGreaterThan(0);
+    f.s.selectionDragPointer={x:100,y:300};expect(call(f.s,"stepSelectionDragScroll",116)).toBe(false);
+    y=100;f.s.selectionDragPointer={x:100,y:590};expect(call(f.s,"stepSelectionDragScroll",132)).toBe(false);
+    f.drag.lifted=false;expect(call(f.s,"stepSelectionDragScroll",148)).toBe(false);
+  });
+});

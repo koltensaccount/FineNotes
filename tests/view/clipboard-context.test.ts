@@ -74,6 +74,19 @@ describe("clipboard context integration", () => {
       expect(s.paste).not.toHaveBeenCalled();
     },
   );
+  it("pastes editable ink when its exported PNG loses the marker on native iPad paste", () => {
+    const s = setup();
+    const onCopySelection = vi.fn();
+    (s.surface.callbacks as Record<string, unknown>).onCopySelection = onCopySelection;
+    call(s.surface, "copySelection");
+    const file = new File(["exported PNG"], "ink.png", { type: "image/png" });
+    const event = s.event(file);
+    call(s.surface, "handlePaste", event);
+    expect(onCopySelection).toHaveBeenCalledOnce();
+    expect(s.paste).toHaveBeenCalledExactlyOnceWith(s.surface.lastPastePoint);
+    expect(s.onPasteImage).not.toHaveBeenCalled();
+  });
+
   it("matching selection marker takes priority over its PNG representation", () => {
     const s = setup();
     call(

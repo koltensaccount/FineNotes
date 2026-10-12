@@ -54,6 +54,9 @@ export interface ClipboardEntry {
 
 export class InkClipboard {
   private entry: ClipboardEntry | null = null;
+  private exportedSelectionPng = false;
+  markSelectionPng(): void { this.exportedSelectionPng = this.entry !== null; }
+  get hasSelectionPng(): boolean { return this.exportedSelectionPng; }
   private png: Promise<File> | null = null;
   get regionPng(): Promise<File> | null { return this.png; }
   putRegion(png: Promise<File>): void { this.clear(); this.png=png; }
@@ -63,6 +66,7 @@ export class InkClipboard {
   /** Hold deep copies of `elements`. An empty selection clears the clipboard. */
   put(elements: PageElements, bounds: Bounds): void {
     this.png = null;
+    this.exportedSelectionPng = false;
     this.left = false;
     this.stamp++;
     if (isEmptySelection(elements)) {
@@ -117,6 +121,7 @@ export class InkClipboard {
   clear(): void {
     this.entry = null;
     this.png = null;
+    this.exportedSelectionPng = false;
     this.left = false;
     this.stamp++;
   }

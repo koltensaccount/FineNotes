@@ -259,3 +259,13 @@ describe("pastePlacement", () => {
     expect(d).toEqual({ dx: PASTE_OFFSET, dy: PASTE_OFFSET });
   });
 });
+
+it("tracks an exported editable-selection PNG separately from copied PDF pixels and invalidates it on another copy", () => {
+  const clip=new InkClipboard();
+  const stroke={id:"s1",tool:"pen" as const,color:"#000",size:2,pts:[0,0,.5,10,10,.5]};
+  clip.put({strokes:[stroke],images:[],textBoxes:[]},{minX:0,minY:0,maxX:10,maxY:10});
+  clip.markSelectionPng();expect(clip.hasSelectionPng).toBe(true);expect(clip.leftSinceCopy).toBe(false);
+  clip.noteWindowLeft();expect(clip.leftSinceCopy).toBe(true);
+  clip.putRegion(Promise.resolve(new File([],"pdf.png",{type:"image/png"})));expect(clip.hasSelectionPng).toBe(false);
+  clip.clear();expect(clip.hasSelectionPng).toBe(false);
+});

@@ -1061,7 +1061,10 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
 
     // Obsidian supplies the icon viewport; nesting a 24px svg made the icon tiny.
     const icon = toolbarTs.match(/const RECTANGULAR_LASSO_SVG = `([^`]+)`/)?.[1];
-    expect(icon?.startsWith("<path")).toBe(true);
+    expect(icon?.startsWith("<g")).toBe(true);
+    expect(icon?.includes("stroke-width=")).toBe(false);
+    expect(toolbarTs.includes('setAttribute("viewBox", "0 0 24 24")')).toBe(true);
+    expect(icon?.includes('<circle cx="5" cy="16" r="2"')).toBe(true);
     expect(icon?.includes("<svg")).toBe(false);
     expect(toolbarTs.includes('isRect ? "finenotes-rectangular-lasso" : "lasso"')).toBe(true);
 

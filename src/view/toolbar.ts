@@ -90,8 +90,8 @@ import { drawingToolOf, selectedTool } from "./tool-return";
 import { addIcon, setIcon } from "obsidian";
 import type { ToolbarPosition } from "../settings-data";
 
-// addIcon takes paths in a 100-unit viewport, not a nested 24px SVG.
-const RECTANGULAR_LASSO_SVG = `<path d="M26 16H76Q86 16 86 26V62Q86 72 76 72H28Q18 72 18 62V26Q18 16 26 16Z M30 72C42 73 43 88 31 90C20 92 14 83 21 77C27 73 38 79 46 84" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
+// Register SVG contents only; the tool button applies Lucide's 24-unit viewport.
+const RECTANGULAR_LASSO_SVG = `<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7"/><path d="M7 22a5 5 0 0 1-2-3.994"/><circle cx="5" cy="16" r="2"/></g>`;
 try {
   if (typeof addIcon === "function") addIcon("finenotes-rectangular-lasso", RECTANGULAR_LASSO_SVG);
 } catch {}
@@ -809,6 +809,8 @@ export class Toolbar {
     }
     const iconSpan = button.createSpan({ cls: "goodobsidian-tool-icon" });
     iconOrText(iconSpan, iconName, label);
+    // Use Lucide's 24-unit viewport so both lasso variants inherit the same theme stroke width.
+    if (isRect) iconSpan.querySelector("svg")?.setAttribute("viewBox", "0 0 24 24");
     if (caret && typeof button.insertBefore === "function") {
       button.insertBefore(iconSpan, caret);
     }

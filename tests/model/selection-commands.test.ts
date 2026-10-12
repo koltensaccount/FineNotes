@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AddElements,
+  MoveElementsToPage,
   RecolorStrokes,
   RemoveElements,
   TranslateElements,
@@ -276,5 +277,30 @@ describe("RecolorStrokes", () => {
     expect(loose.color).toBe("#000000");
     new RecolorStrokes("nope", s, "#ff0000").apply(doc);
     expect(s[0].color).toBe("#000000");
+  });
+});
+
+describe("cross-page moves", () => {
+  it("moves original mixed elements once and restores exact positions and stacking on undo", () => {
+    const source=blankPage("source"),target=blankPage("target");
+    const stroke={id:"s1",tool:"pen" as const,color:"#000",size:3,pts:[20,30,.2,80,90,.8]};
+    const before={...stroke,id:"before"},after={...stroke,id:"after"};
+    const image={id:"i1",path:"image.png",x:20,y:40,w:100,h:80,rotation:.3};
+    const text={id:"t1",x:30,y:50,w:100,text:"keep editable",fontSize:16,color:"#000"};
+    source.strokes.push(before,stroke,after);source.images.push(image);source.textBoxes.push(text);
+    const doc={pages:[source,target]} as InkDocument;const initial=JSON.stringify(doc);
+    const command=new MoveElementsToPage(source.id,target.id,{strokes:[stroke],images:[image],textBoxes:[text]},15,25);
+    command.apply(doc);
+    expect(source.strokes).toEqual([before,after]);expect(target.strokes[0]).toBe(stroke);
+    expect(target.images[0]).toBe(image);expect(target.textBoxes[0]).toBe(text);
+    expect(stroke.pts).toEqual([35,55,.2,95,115,.8]);expect(stroke.size).toBe(3);expect(image.rotation).toBe(.3);
+    const moved=JSON.stringify(doc);command.invert(doc);expect(JSON.stringify(doc)).toBe(initial);
+    command.apply(doc);expect(JSON.stringify(doc)).toBe(moved);command.invert(doc);expect(JSON.stringify(doc)).toBe(initial);
+  });
+  it("does not remove anything when the destination is missing", () => {
+    const source=blankPage("source"),stroke={id:"s",tool:"pen" as const,color:"#000",size:2,pts:[0,0,.5,10,10,.5]};source.strokes.push(stroke);
+    const doc={pages:[source]} as InkDocument,initial=JSON.stringify(doc);
+    new MoveElementsToPage(source.id,"missing",{strokes:[stroke],images:[],textBoxes:[]},10,10).apply(doc);
+    expect(JSON.stringify(doc)).toBe(initial);
   });
 });

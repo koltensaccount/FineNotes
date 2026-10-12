@@ -11,6 +11,7 @@
  * floating point). Pure, like the rest of `src/model/`.
  */
 
+import { CompositeCommand } from "./page-commands";
 import type { Command } from "./commands";
 import {
   type ImageElement,
@@ -322,4 +323,24 @@ export class TransformSelectedInk implements Command {
     for (const entry of this.previous) if (page.strokes.includes(entry.stroke)) { entry.stroke.pts = entry.pts; entry.stroke.size = entry.size; }
     this.previous = [];
   }
+}
+
+/** Move original objects to another page, preserving identities and exact undo geometry/order. */
+export class MoveElementsToPage implements Command {
+  readonly label = "Move selection to another page";
+  private command: CompositeCommand | null = null;
+  constructor(readonly pageId: string, readonly targetPageId: string, private readonly elements: PageElements, private readonly dx: number, private readonly dy: number) {}
+  apply(doc: InkDocument): void {
+    this.command = null;
+    const source = pageById(doc, this.pageId), target = pageById(doc, this.targetPageId);
+    if (!source || !target || source === target) return;
+    const on = elementsOnPage(source, this.elements);
+    this.command = new CompositeCommand(this.label, [
+      new TranslateElements(this.pageId, on, this.dx, this.dy),
+      new RemoveElements(this.pageId, on),
+      new AddElements(this.targetPageId, on),
+    ]);
+    this.command.apply(doc);
+  }
+  invert(doc: InkDocument): void { this.command?.invert(doc); this.command = null; }
 }
