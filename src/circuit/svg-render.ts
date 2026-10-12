@@ -8,6 +8,8 @@
 
 import {
   type CircuitComponent,
+  type CircuitNode,
+  type CircuitWire,
   COMPONENT_CATALOG,
   type KirchhoffCircuit,
   getComponentPortPosition,
@@ -23,10 +25,40 @@ export interface SvgRenderOptions {
   backgroundColor?: string;
   highlightComponentId?: string;
   highlightNodeId?: string;
+  highlightWireId?: string;
   showGrid?: boolean;
   showNodes?: boolean;
   showPorts?: boolean;
+  interactiveOverlay?: boolean;
   padding?: number;
+}
+
+/** Construct the SVG path `d` string for a given wire */
+export function buildWirePathD(
+  wire: CircuitWire,
+  nodes: Record<string, CircuitNode>,
+  gridSize: number,
+): string {
+  const fromNode = nodes[wire.fromNode];
+  const toNode = nodes[wire.toNode];
+  if (!fromNode || !toNode) return "";
+
+  const x1 = fromNode.x * gridSize;
+  const y1 = fromNode.y * gridSize;
+  const x2 = toNode.x * gridSize;
+  const y2 = toNode.y * gridSize;
+
+  let pathD = `M ${x1} ${y1}`;
+  if (!wire.direct && wire.waypoints && wire.waypoints.length > 0) {
+    for (const pt of wire.waypoints) {
+      pathD += ` L ${pt.x * gridSize} ${pt.y * gridSize}`;
+    }
+  } else if (!wire.direct && Math.abs(x1 - x2) > 0.01 && Math.abs(y1 - y2) > 0.01) {
+    // Orthogonal Manhattan routing: route horizontally then vertically
+    pathD += ` L ${x2} ${y1}`;
+  }
+  pathD += ` L ${x2} ${y2}`;
+  return pathD;
 }
 
 /** Computes the bounding box of the circuit in grid units */
@@ -407,35 +439,46 @@ export function renderCircuitToSvg(
 
   // Render wires
   for (const wire of circuit.wires) {
-    const fromNode = circuit.nodes[wire.fromNode];
-    const toNode = circuit.nodes[wire.toNode];
-    if (!fromNode || !toNode) continue;
+    const pathD = buildWirePathD(wire, circuit.nodes, gridSize);
+    if (!pathD) continue;
 
-    const x1 = fromNode.x * gridSize;
-    const y1 = fromNode.y * gridSize;
-    const x2 = toNode.x * gridSize;
-    const y2 = toNode.y * gridSize;
+    const isWireHighlighted = wire.id === options.highlightWireId;
+    const effectiveWireColor = isWireHighlighted
+      ? (options.theme === "dark" ? "#818cf8" : "#6366f1")
+      : wireColor;
+    const strokeW = isWireHighlighted ? 3.5 : 2;
+    const dataAttr = options.interactiveOverlay ? ` data-wire-id="${escapeXml(wire.id)}"` : "";
 
-    let pathD = `M ${x1} ${y1}`;
-    if (wire.waypoints && wire.waypoints.length > 0) {
-      for (const pt of wire.waypoints) {
-        pathD += ` L ${pt.x * gridSize} ${pt.y * gridSize}`;
-      }
-    } else if (!wire.direct && Math.abs(x1 - x2) > 0.01 && Math.abs(y1 - y2) > 0.01) {
-      // Orthogonal Manhattan routing: route horizontally then vertically
-      pathD += ` L ${x2} ${y1}`;
+    if (isWireHighlighted) {
+      svgParts.push(
+        `<path d="${pathD}" fill="none" stroke="${effectiveWireColor}" stroke-opacity="0.25" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"${dataAttr} />`,
+      );
     }
-    pathD += ` L ${x2} ${y2}`;
 
     svgParts.push(
-      `<path d="${pathD}" fill="none" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`,
+      `<path d="${pathD}" fill="none" stroke="${effectiveWireColor}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"${dataAttr} />`,
     );
+
+    // Render interactive waypoint handles when wire is selected and not in direct mode
+    if (options.interactiveOverlay && isWireHighlighted && !wire.direct && wire.waypoints && wire.waypoints.length > 0) {
+      for (let i = 0; i < wire.waypoints.length; i++) {
+        const wp = wire.waypoints[i];
+        const wpx = wp.x * gridSize;
+        const wpy = wp.y * gridSize;
+        svgParts.push(
+          `<circle cx="${wpx}" cy="${wpy}" r="5.5" fill="#ffffff" stroke="${effectiveWireColor}" stroke-width="2.5" class="goodobsidian-waypoint-handle" data-waypoint-wire="${escapeXml(wire.id)}" data-waypoint-index="${i}" style="cursor: grab;" />`,
+        );
+      }
+    }
   }
 
   // Render component terminal leads to connected nodes
   for (const lead of routedTerminalLeads) {
+    const leadDataAttr = options.interactiveOverlay
+      ? ` data-lead-comp="${escapeXml(lead.componentId)}" data-lead-port="${escapeXml(lead.portId)}"`
+      : "";
     svgParts.push(
-      `<path d="${lead.pathD}" fill="none" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`,
+      `<path d="${lead.pathD}" fill="none" stroke="${wireColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${leadDataAttr} />`,
     );
   }
 
@@ -450,22 +493,30 @@ export function renderCircuitToSvg(
       transform += ` scale(-1, 1)`;
     }
 
-    svgParts.push(`<g transform="${transform}">`);
+    const compDataAttr = options.interactiveOverlay ? ` data-component-id="${escapeXml(comp.id)}"` : "";
+    svgParts.push(`<g transform="${transform}"${compDataAttr}>`);
     svgParts.push(renderComponentSymbol(comp, strokeColor, isHighlighted, gridSize));
     svgParts.push(`</g>`);
 
     // Render component label & value (in world orientation for readability)
     const placed = placedLabels.get(comp.id);
     if (placed && (placed.labelText || placed.valueText)) {
-      svgParts.push(`<g font-family="system-ui, -apple-system, sans-serif" text-anchor="${placed.anchor}">`);
+      const labelDataAttr = options.interactiveOverlay ? ` data-label-comp="${escapeXml(comp.id)}"` : "";
+      svgParts.push(`<g font-family="system-ui, -apple-system, sans-serif" text-anchor="${placed.anchor}"${labelDataAttr}>`);
       if (placed.labelText) {
+        const textDataAttr = options.interactiveOverlay
+          ? ` data-label-offset-x="${placed.labelX - cx}" data-label-offset-y="${placed.labelY - cy}"`
+          : "";
         svgParts.push(
-          `<text x="${placed.labelX}" y="${placed.labelY}" font-size="12" font-weight="600" fill="${strokeColor}">${escapeXml(placed.labelText)}</text>`,
+          `<text x="${placed.labelX}" y="${placed.labelY}" font-size="12" font-weight="600" fill="${strokeColor}"${textDataAttr}>${escapeXml(placed.labelText)}</text>`,
         );
       }
       if (placed.valueText && placed.valueX !== undefined && placed.valueY !== undefined) {
+        const textDataAttr = options.interactiveOverlay
+          ? ` data-label-offset-x="${placed.valueX - cx}" data-label-offset-y="${placed.valueY - cy}"`
+          : "";
         svgParts.push(
-          `<text x="${placed.valueX}" y="${placed.valueY}" font-size="11" font-weight="400" fill="${labelColor}">${escapeXml(placed.valueText)}</text>`,
+          `<text x="${placed.valueX}" y="${placed.valueY}" font-size="11" font-weight="400" fill="${labelColor}"${textDataAttr}>${escapeXml(placed.valueText)}</text>`,
         );
       }
       svgParts.push(`</g>`);
@@ -478,8 +529,11 @@ export function renderCircuitToSvg(
         for (const port of def.ports) {
           const ppos = getComponentPortPosition(comp, port.id);
           if (ppos) {
+            const portDataAttr = options.interactiveOverlay
+              ? ` data-port-comp="${escapeXml(comp.id)}" data-port-id="${escapeXml(port.id)}" data-port-node="${escapeXml(comp.ports[port.id] || "")}" style="cursor: pointer;"`
+              : "";
             svgParts.push(
-              `<circle cx="${ppos.x * gridSize}" cy="${ppos.y * gridSize}" r="3" fill="#3b82f6" opacity="0.75" />`,
+              `<circle cx="${ppos.x * gridSize}" cy="${ppos.y * gridSize}" r="3.5" fill="#3b82f6" opacity="0.85"${portDataAttr} />`,
             );
           }
         }
@@ -496,13 +550,17 @@ export function renderCircuitToSvg(
 
     if (isJunction) {
       // Standard junction dot
-      svgParts.push(`<circle cx="${nx}" cy="${ny}" r="3.5" fill="${wireColor}" />`);
+      const juncDataAttr = options.interactiveOverlay ? ` data-node-id="${escapeXml(node.id)}"` : "";
+      svgParts.push(`<circle cx="${nx}" cy="${ny}" r="3.5" fill="${wireColor}"${juncDataAttr} />`);
     }
 
     if (options.showNodes || isHighlighted) {
       const dotColor = isHighlighted ? "#ef4444" : nodeColor;
+      const nodeDataAttr = options.interactiveOverlay
+        ? ` data-node-id="${escapeXml(node.id)}" style="cursor: pointer;"`
+        : "";
       svgParts.push(
-        `<circle cx="${nx}" cy="${ny}" r="5" fill="${dotColor}" stroke="#ffffff" stroke-width="1.5" />`,
+        `<circle cx="${nx}" cy="${ny}" r="5" fill="${dotColor}" stroke="#ffffff" stroke-width="1.5"${nodeDataAttr} />`,
       );
       if (node.label) {
         svgParts.push(

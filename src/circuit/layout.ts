@@ -763,6 +763,80 @@ export function autoLayoutCircuit(
   return circuit;
 }
 
+/**
+ * Re-routes specified circuit wires (or all wires if wireIds omitted) using obstacle-avoiding
+ * orthogonal Manhattan routing without modifying any component or node positions.
+ */
+export function rerouteCircuitWires(
+  circuit: KirchhoffCircuit,
+  wireIds?: string[],
+  options: { snapGrid?: number } = {},
+): KirchhoffCircuit {
+  const result = cloneCircuit(circuit);
+  const snapStep = options.snapGrid ?? 0.5;
+  const targetIds = wireIds ? new Set(wireIds) : null;
+
+  const nodeToComps: Record<string, Array<{ comp: CircuitComponent; portId: string }>> = {};
+  for (const comp of Object.values(result.components)) {
+    for (const [pId, nId] of Object.entries(comp.ports)) {
+      if (!nodeToComps[nId]) nodeToComps[nId] = [];
+      nodeToComps[nId].push({ comp, portId: pId });
+    }
+  }
+
+  for (const wire of result.wires) {
+    if (targetIds && !targetIds.has(wire.id)) continue;
+
+    const fromNode = result.nodes[wire.fromNode];
+    const toNode = result.nodes[wire.toNode];
+    if (!fromNode || !toNode) continue;
+
+    const fromComps = nodeToComps[wire.fromNode] || [];
+    const toComps = nodeToComps[wire.toNode] || [];
+    const fromCompId = fromComps.length === 1 ? fromComps[0].comp.id : undefined;
+    const toCompId = toComps.length === 1 ? toComps[0].comp.id : undefined;
+    const endpointCompIds = new Set<string>();
+    for (const fc of fromComps) endpointCompIds.add(fc.comp.id);
+    for (const tc of toComps) endpointCompIds.add(tc.comp.id);
+
+    let preferHV = true;
+    if (fromComps.length === 1) {
+      const def = COMPONENT_CATALOG[fromComps[0].comp.type];
+      const p = def?.ports.find((port) => port.id === fromComps[0].portId);
+      if (p && Math.abs(p.x) < Math.abs(p.y)) {
+        preferHV = false;
+      }
+    }
+
+    const layoutDiagnostics: CircuitDiagnostic[] = [];
+    const waypoints = routeWireBetweenPoints(
+      { x: fromNode.x, y: fromNode.y },
+      { x: toNode.x, y: toNode.y },
+      result,
+      {
+        fromCompId,
+        toCompId,
+        endpointCompIds,
+        ignoreNodeIds: new Set([wire.fromNode, wire.toNode]),
+        ignoreWireId: wire.id,
+        preferHV,
+        snapGrid: snapStep,
+        diagnostics: layoutDiagnostics,
+      },
+    );
+
+    wire.waypoints = waypoints.length > 0 ? waypoints : undefined;
+    wire.direct = false;
+    if (layoutDiagnostics.length > 0) {
+      result.diagnostics = [...(result.diagnostics || []), ...layoutDiagnostics];
+    }
+  }
+
+  return result;
+}
+
+export { autoLayoutCircuit as layoutCircuit };
+
 export interface RoutedTerminalLead {
   componentId: string;
   portId: string;

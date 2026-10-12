@@ -326,12 +326,16 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
     const toAnchor = getAnchorForNode(wire.toNode);
 
     let pathStr = fromAnchor || `(${toTikzCoord(from.x)}, ${toTikzCoord(-from.y)})`;
-    if (wire.waypoints) {
+    if (!wire.direct && wire.waypoints && wire.waypoints.length > 0) {
       for (const wp of wire.waypoints) {
         pathStr += ` -- (${toTikzCoord(wp.x)}, ${toTikzCoord(-wp.y)})`;
       }
+      pathStr += ` -- ${toAnchor || `(${toTikzCoord(to.x)}, ${toTikzCoord(-to.y)})`}`;
+    } else if (!wire.direct && Math.abs(from.x - to.x) > 0.01 && Math.abs(from.y - to.y) > 0.01) {
+      pathStr += ` -| ${toAnchor || `(${toTikzCoord(to.x)}, ${toTikzCoord(-to.y)})`}`;
+    } else {
+      pathStr += ` -- ${toAnchor || `(${toTikzCoord(to.x)}, ${toTikzCoord(-to.y)})`}`;
     }
-    pathStr += ` -- ${toAnchor || `(${toTikzCoord(to.x)}, ${toTikzCoord(-to.y)})`}`;
 
     lines.push(`  \\draw ${pathStr};`);
   }
