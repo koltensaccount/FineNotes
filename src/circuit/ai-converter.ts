@@ -112,11 +112,15 @@ export async function convertSelectionToCircuit(
   const base64Data = await blobToBase64(pngBlob);
 
   // 2. Prepare Google Gemini generateContent payload
+  const model = input.modelOverride || defaultModelFor("google");
   const endpoint = jsonEndpoint({
     vendor: "google",
-    model: input.modelOverride || defaultModelFor("google"),
+    model,
     apiKey: apiKey.trim(),
   });
+
+  const isGemini15 = model.includes("1.5");
+  const maxOutputTokens = isGemini15 ? 8192 : 32768;
 
   const body = {
     systemInstruction: {
@@ -133,13 +137,13 @@ export async function convertSelectionToCircuit(
             },
           },
           {
-            text: "Extract all electrical components, labels, values, nodes, and wire connections from this handwritten circuit diagram into kirchhoff-ir/1.0 JSON format.",
+            text: "Extract all electrical components, labels, values, nodes, and wire connections from this handwritten circuit diagram into kirchhoff-ir/1.0 JSON format. Output only the structured JSON immediately.",
           },
         ],
       },
     ],
     generationConfig: {
-      maxOutputTokens: 4096,
+      maxOutputTokens,
       responseMimeType: "application/json",
     },
   };
@@ -167,9 +171,6 @@ export async function convertSelectionToCircuit(
 
   const firstCandidate = candidates[0];
   const finishReason = firstCandidate?.finishReason;
-  if (finishReason === "MAX_TOKENS") {
-    throw new Error("Gemini hit output token limits before completing the circuit representation.");
-  }
 
   const content = firstCandidate?.content as Record<string, unknown> | undefined;
   const parts = content?.parts as Array<Record<string, unknown>> | undefined;
@@ -203,6 +204,9 @@ export async function convertSelectionToCircuit(
   try {
     parsed = JSON.parse(cleanJsonText);
   } catch (err) {
+    if (finishReason === "MAX_TOKENS") {
+      throw new Error("Gemini hit output token limits before completing the circuit representation.");
+    }
     throw new Error(`Failed to parse circuit JSON from Gemini output: ${String(err)}`);
   }
 
