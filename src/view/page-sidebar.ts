@@ -592,8 +592,14 @@ export class PageSidebar {
     this.thumbs.forEach((view, index) => {
       view.root.dataset.pageId = pages[index].id;
       view.check.toggleClass("is-hidden", !this.selecting);
-      setIcon(view.check, this.selected.has(pages[index].id) ? "check" : "circle");
-      view.root.toggleClass("is-page-selected", this.selected.has(pages[index].id));
+      const isSelected = this.selected.has(pages[index].id);
+      view.check.toggleClass("is-page-checked", isSelected);
+      if (isSelected) {
+        setIcon(view.check, "check");
+      } else {
+        view.check.empty();
+      }
+      view.root.toggleClass("is-page-selected", isSelected);
       view.root
         .querySelector(".goodobsidian-thumb-frame")
         ?.setAttribute(

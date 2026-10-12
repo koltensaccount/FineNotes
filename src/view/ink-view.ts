@@ -1062,6 +1062,11 @@ export class InkView extends TextFileView {
         onMore: (anchor) => this.toggleMorePanel(anchor),
         onWritingGuides: (anchor) => this.toggleGuidePopover(anchor),
         writingGuidesEnabled: () => this.guidesEnabled,
+        onToolbarLayoutChange: (order, hidden) => {
+          this.settings.toolbarToolOrder = order;
+          this.settings.hiddenToolbarTools = hidden;
+          void this.plugin.saveSettings();
+        },
       },
       {
         defaultSize: this.settings.defaultSize,
@@ -1080,6 +1085,8 @@ export class InkView extends TextFileView {
             ? (page.backdrop.paperColor ?? paperTheme(this.surface?.darkPaper ?? false).paper)
             : paperTheme(this.surface?.darkPaper ?? false).paper;
         },
+        toolbarToolOrder: this.settings.toolbarToolOrder,
+        hiddenToolbarTools: this.settings.hiddenToolbarTools,
       },
     );
 
@@ -2015,6 +2022,13 @@ export class InkView extends TextFileView {
         goToPage: (at) => surface.goToPage(at, true),
         clear: (at) => act("clear", at),
         remove: (at) => act("delete", at),
+        hiddenTools: this.toolbar?.getHiddenTools() ?? [],
+        unhideTool: (id) => {
+          this.toolbar?.unhideTool(id as any, true);
+        },
+        resetToolbarLayout: () => {
+          this.toolbar?.resetToolbarLayout();
+        },
       },
     );
   }

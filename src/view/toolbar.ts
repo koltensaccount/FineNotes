@@ -145,6 +145,37 @@ import { type PenGestures, penGesturesOf } from "../ink/pen-gestures";
 /** Tools selectable in the toolbar. Pen, highlighter and shape produce strokes. */
 export type ActiveTool = "pen" | "highlighter" | "eraser" | "select" | "text" | "shape";
 
+/** Identifiers for tools that can be reordered or hidden in the main toolbar. */
+export type ConfigurableToolId = "select" | "pen" | "eraser" | "text" | "shape" | "image" | "record";
+
+export interface ConfigurableToolMeta {
+  id: ConfigurableToolId;
+  icon: string;
+  label: string;
+  name: string;
+}
+
+export const CONFIGURABLE_TOOLS: Record<ConfigurableToolId, ConfigurableToolMeta> = {
+  select: { id: "select", icon: "lasso", label: "Lasso select (V)", name: "Lasso select" },
+  pen: { id: "pen", icon: "pen-tool", label: "Pen (P)", name: "Pen" },
+  eraser: { id: "eraser", icon: "eraser", label: "Eraser (E)", name: "Eraser" },
+  text: { id: "text", icon: "type", label: "Text box (T)", name: "Text box" },
+  shape: { id: "shape", icon: "shapes", label: "Shapes (S)", name: "Shapes" },
+  image: { id: "image", icon: "image", label: "Insert image", name: "Insert image" },
+  record: { id: "record", icon: "mic", label: "Record audio", name: "Record audio" },
+};
+
+export const DEFAULT_TOOL_ORDER: readonly ConfigurableToolId[] = [
+  "select",
+  "pen",
+  "eraser",
+  "text",
+  "shape",
+  "image",
+  "record",
+];
+
+
 /**
  * Pen types, as GoodNotes presents them. The highlighter is a pen type there,
  * not a top-level tool, so tier 1 shows one "pen" button and the type is chosen
@@ -387,6 +418,8 @@ export interface ToolbarCallbacks {
   onShapeColorChange?: (color: string) => void;
   /** A custom colour was picked: the new recent list. Hosts persist it. */
   onRecentColors?: (colors: string[]) => void;
+  /** The toolbar tool layout changed (reordered or hidden/unhidden). */
+  onToolbarLayoutChange?: (order: ConfigurableToolId[], hidden: ConfigurableToolId[]) => void;
 }
 
 export interface ToolbarOptions {
@@ -396,6 +429,8 @@ export interface ToolbarOptions {
   defaultSize?: number;
   highlighterAlpha?: number;
   previewPaper?: () => string;
+  toolbarToolOrder?: string[];
+  hiddenToolbarTools?: string[];
 }
 
 /** Minimum gap between the pill and the edge of the page area, in CSS px. */
@@ -436,6 +471,21 @@ export class Toolbar {
   private thumbnailsButton: HTMLButtonElement | null = null;
   /** The writing tools, centred on the bar while there is room. */
   private toolsGroup: HTMLElement | null = null;
+  private toolOrder: ConfigurableToolId[] = [...DEFAULT_TOOL_ORDER];
+  private readonly hiddenTools = new Set<ConfigurableToolId>();
+  private readonly toolButtonsMap = new Map<ConfigurableToolId, HTMLButtonElement>();
+  private activeHidePopover: HTMLElement | null = null;
+  private dragButton: HTMLButtonElement | null = null;
+  private holdTimer: number | null = null;
+  private holdTriggered = false;
+  private hasDragged = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private suppressClickUntil = 0;
+  private activePointerId: number | null = null;
+  private isRecording = false;
+  private popoverOpenTimer: number | null = null;
+  private gestureDocCleanup: (() => void) | null = null;
   /** The record button (0.5). */
   private recordButton: HTMLButtonElement | null = null;
   /** The add-page button. */
@@ -527,6 +577,24 @@ export class Toolbar {
     this.optionsEl = host.createDiv({ cls: "goodobsidian-options is-floating" });
     this.optionsEl.setAttribute("role", "toolbar");
     this.optionsEl.setAttribute("aria-label", "Tool options");
+    if (this.options.toolbarToolOrder && Array.isArray(this.options.toolbarToolOrder)) {
+      const valid = this.options.toolbarToolOrder.filter(
+        (id): id is ConfigurableToolId => id in CONFIGURABLE_TOOLS,
+      );
+      const present = new Set(valid);
+      for (const def of DEFAULT_TOOL_ORDER) {
+        if (!present.has(def)) valid.push(def);
+      }
+      this.toolOrder = valid;
+    }
+    if (this.options.hiddenToolbarTools && Array.isArray(this.options.hiddenToolbarTools)) {
+      for (const id of this.options.hiddenToolbarTools) {
+        if (id in CONFIGURABLE_TOOLS) this.hiddenTools.add(id as ConfigurableToolId);
+      }
+      if (this.hiddenTools.size >= this.toolOrder.length) {
+        this.hiddenTools.clear();
+      }
+    }
 
     this.buildBar();
     this.buildOptions();
@@ -621,15 +689,7 @@ export class Toolbar {
     // The writing tools, centred on the bar (styles.css), as GoodNotes has them.
     const tools = this.barEl.createDiv({ cls: "goodobsidian-bar-group is-tools" });
     this.toolsGroup = tools;
-    this.addToolButton(tools, "select", "lasso", "Lasso select (V)");
-    this.addToolButton(tools, "pen", "pen-tool", "Pen (P)");
-    this.addToolButton(tools, "eraser", "eraser", "Eraser (E)");
-    this.addToolButton(tools, "text", "type", "Text box (T)");
-    this.addToolButton(tools, "shape", "shapes", "Shapes (S)");
-    this.barButton(tools, "image", "Insert image", cb.onInsertImage);
-    // The note's recordings live in the page sidebar's Audio tab, as in
-    // GoodNotes; the mic only starts and stops one.
-    this.recordButton = this.barButton(tools, "mic", "Record audio", cb.onRecord);
+    this.renderToolsGroup();
 
     // The document's own actions, right: add a page, GoodNotes' share
     // button (export as PDF), its ⋯ sheet for the page being read
@@ -702,20 +762,452 @@ export class Toolbar {
       return button;
     }
     button.addEventListener("click", () => {
+      if (Date.now() < this.suppressClickUntil) return;
       if (!button.disabled) handler(button);
     });
     return button;
   }
 
-  private addToolButton(parent: HTMLElement, tool: ActiveTool, icon: string, label: string): void {
-    const button = this.barButton(parent, icon, label, () => this.tapTool(tool, button));
-    button.setAttribute("data-tool", tool);
-    if (tool === "select") {
-      button.addClass("has-caret");
-      iconOrText(button.createSpan({ cls: "goodobsidian-tool-caret" }), "chevron-down", "");
-      button.setAttribute("aria-haspopup", "dialog");
+  private renderToolsGroup(): void {
+    if (this.gestureDocCleanup) {
+      this.gestureDocCleanup();
+      this.gestureDocCleanup = null;
     }
-    this.toolButtons.set(tool, button);
+    if (this.holdTimer !== null) {
+      window.clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+    this.activePointerId = null;
+    this.dragButton = null;
+    this.holdTriggered = false;
+    this.hasDragged = false;
+
+    const tools = this.toolsGroup;
+    if (!tools) return;
+    tools.empty();
+    this.toolButtons.clear();
+    this.toolButtonsMap.clear();
+    this.recordButton = null;
+
+    for (const toolId of this.toolOrder) {
+      if (this.hiddenTools.has(toolId)) continue;
+      const meta = CONFIGURABLE_TOOLS[toolId];
+      if (!meta) continue;
+      const button = this.createConfigurableToolButton(tools, meta);
+      this.toolButtonsMap.set(toolId, button);
+      this.installToolGestures(button, toolId);
+    }
+    this.syncActive();
+  }
+
+  private createConfigurableToolButton(
+    parent: HTMLElement,
+    meta: ConfigurableToolMeta,
+  ): HTMLButtonElement {
+    const cb = this.callbacks;
+    switch (meta.id) {
+      case "select":
+      case "pen":
+      case "eraser":
+      case "text":
+      case "shape": {
+        const button = this.barButton(parent, meta.icon, meta.label, () =>
+          this.tapTool(meta.id as ActiveTool, button),
+        );
+        button.setAttribute("data-tool", meta.id);
+        button.dataset.toolId = meta.id;
+        if (meta.id === "select") {
+          button.addClass("has-caret");
+          iconOrText(button.createSpan({ cls: "goodobsidian-tool-caret" }), "chevron-down", "");
+          button.setAttribute("aria-haspopup", "dialog");
+        }
+        this.toolButtons.set(meta.id as ActiveTool, button);
+        return button;
+      }
+      case "image": {
+        const button = this.barButton(parent, meta.icon, meta.label, cb.onInsertImage);
+        button.dataset.toolId = meta.id;
+        return button;
+      }
+      case "record": {
+        const button = this.barButton(parent, meta.icon, meta.label, cb.onRecord);
+        button.dataset.toolId = meta.id;
+        this.recordButton = button;
+        if (this.isRecording) {
+          button.addClass("is-recording");
+          button.setAttribute("aria-pressed", "true");
+          button.setAttribute("aria-label", "Stop recording");
+        }
+        return button;
+      }
+    }
+  }
+
+  private installToolGestures(button: HTMLButtonElement, toolId: ConfigurableToolId): void {
+    const cleanupDoc = (): void => {
+      if (this.gestureDocCleanup) {
+        this.gestureDocCleanup();
+        this.gestureDocCleanup = null;
+      }
+    };
+
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return;
+      if (this.activePointerId !== null) return;
+      this.activePointerId = e.pointerId;
+      this.dragStartX = e.clientX;
+      this.dragStartY = e.clientY;
+      this.dragButton = button;
+      this.holdTriggered = false;
+      this.hasDragged = false;
+
+      window.clearTimeout(this.holdTimer ?? undefined);
+      this.holdTimer = window.setTimeout(() => {
+        this.onHoldTriggered(button, e.pointerId);
+      }, 400);
+
+      const doc = button.ownerDocument;
+      const onDocMove = (ev: PointerEvent): void => {
+        if (ev.pointerId !== this.activePointerId) return;
+        onPointerMove(ev);
+      };
+      const onDocUp = (ev: PointerEvent): void => {
+        if (ev.pointerId !== this.activePointerId) return;
+        cleanupDoc();
+        onPointerUp(ev);
+      };
+      const onDocCancel = (ev: PointerEvent): void => {
+        if (ev.pointerId !== this.activePointerId) return;
+        cleanupDoc();
+        onPointerCancel(ev);
+      };
+
+      cleanupDoc();
+      this.gestureDocCleanup = () => {
+        doc.removeEventListener("pointermove", onDocMove);
+        doc.removeEventListener("pointerup", onDocUp);
+        doc.removeEventListener("pointercancel", onDocCancel);
+      };
+
+      doc.addEventListener("pointermove", onDocMove);
+      doc.addEventListener("pointerup", onDocUp);
+      doc.addEventListener("pointercancel", onDocCancel);
+    };
+
+    const onPointerMove = (e: PointerEvent): void => {
+      if (this.dragButton !== button) return;
+      const dist = Math.hypot(e.clientX - this.dragStartX, e.clientY - this.dragStartY);
+
+      if (!this.holdTriggered) {
+        if (dist > 8) {
+          window.clearTimeout(this.holdTimer ?? undefined);
+          this.holdTimer = null;
+        }
+        return;
+      }
+
+      if (dist > 6) {
+        this.hasDragged = true;
+      }
+
+      if (this.hasDragged) {
+        e.preventDefault();
+        this.closeHidePopover();
+        button.addClass("is-dragging");
+        this.handleDragReorder(e.clientX, button);
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent): void => {
+      if (this.dragButton !== button) return;
+      cleanupDoc();
+      window.clearTimeout(this.holdTimer ?? undefined);
+      this.holdTimer = null;
+
+      if (this.holdTriggered) {
+        this.suppressClickUntil = Date.now() + 250;
+        try {
+          button.releasePointerCapture(e.pointerId);
+        } catch {}
+
+        button.removeClass("is-drag-held");
+        button.removeClass("is-dragging");
+        this.toolsGroup?.removeClass("is-reordering");
+
+        if (this.hasDragged) {
+          this.commitNewOrderFromDom();
+        } else {
+          this.showHidePopover(button, toolId);
+        }
+      }
+
+      this.activePointerId = null;
+      this.dragButton = null;
+      this.holdTriggered = false;
+      this.hasDragged = false;
+    };
+
+    const onPointerCancel = (e: PointerEvent): void => {
+      if (this.dragButton !== button) return;
+      cleanupDoc();
+      window.clearTimeout(this.holdTimer ?? undefined);
+      this.holdTimer = null;
+      try {
+        button.releasePointerCapture(e.pointerId);
+      } catch {}
+      button.removeClass("is-drag-held");
+      button.removeClass("is-dragging");
+      this.toolsGroup?.removeClass("is-reordering");
+
+      if (this.hasDragged) {
+        this.commitNewOrderFromDom();
+      }
+
+      this.activePointerId = null;
+      this.dragButton = null;
+      this.holdTriggered = false;
+      this.hasDragged = false;
+    };
+
+    const onLostPointerCapture = (e: PointerEvent): void => {
+      if (this.dragButton === button && this.holdTriggered) {
+        onPointerCancel(e);
+      }
+    };
+
+    const onContextMenu = (e: MouseEvent): void => {
+      e.preventDefault();
+      this.showHidePopover(button, toolId);
+    };
+
+    button.addEventListener("pointerdown", onPointerDown);
+    button.addEventListener("lostpointercapture", onLostPointerCapture);
+    button.addEventListener("contextmenu", onContextMenu);
+  }
+
+  private onHoldTriggered(button: HTMLButtonElement, pointerId: number): void {
+    this.holdTriggered = true;
+    try {
+      button.setPointerCapture(pointerId);
+    } catch {}
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      try {
+        navigator.vibrate(25);
+      } catch {}
+    }
+    this.toolsGroup?.addClass("is-reordering");
+    button.addClass("is-drag-held");
+  }
+
+  private handleDragReorder(clientX: number, draggedEl: HTMLButtonElement): void {
+    const tools = this.toolsGroup;
+    if (!tools) return;
+    const siblings = (Array.from(tools.children) as HTMLElement[]).filter((c) => c !== draggedEl);
+    if (siblings.length === 0) return;
+
+    let targetSibling: HTMLElement | null = null;
+    for (const sibling of siblings) {
+      const rect = sibling.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (clientX < midX) {
+        targetSibling = sibling;
+        break;
+      }
+    }
+
+    if (targetSibling) {
+      if (draggedEl.nextElementSibling !== targetSibling) {
+        tools.insertBefore(draggedEl, targetSibling);
+      }
+    } else {
+      if (tools.lastElementChild !== draggedEl) {
+        tools.appendChild(draggedEl);
+      }
+    }
+  }
+
+  private commitNewOrderFromDom(): void {
+    const tools = this.toolsGroup;
+    if (!tools) return;
+    const newOrder: ConfigurableToolId[] = [];
+    for (const child of Array.from(tools.children)) {
+      const id = (child as HTMLElement).dataset.toolId as ConfigurableToolId | undefined;
+      if (id && id in CONFIGURABLE_TOOLS) {
+        newOrder.push(id);
+      }
+    }
+    for (const id of this.toolOrder) {
+      if (!newOrder.includes(id)) {
+        newOrder.push(id);
+      }
+    }
+    this.toolOrder = newOrder;
+    this.callbacks.onToolbarLayoutChange?.(this.toolOrder, Array.from(this.hiddenTools));
+  }
+
+  private showHidePopover(button: HTMLButtonElement, toolId: ConfigurableToolId): void {
+    this.closeHidePopover();
+    const meta = CONFIGURABLE_TOOLS[toolId];
+    if (!meta) return;
+
+    const visibleCount = this.toolOrder.filter((id) => !this.hiddenTools.has(id)).length;
+    const canHide = visibleCount > 1;
+
+    const doc = this.host.ownerDocument;
+    const popover = doc.createElement("div");
+    popover.className = "goodobsidian-tool-popover";
+    popover.setAttribute("role", "dialog");
+    popover.setAttribute("aria-label", `Tool options for ${meta.name}`);
+
+    const hideBtn = popover.createEl("button", {
+      cls: "goodobsidian-tool-popover-item",
+    });
+    setIcon(hideBtn.createSpan({ cls: "goodobsidian-tool-popover-icon" }), "eye-off");
+    hideBtn.createSpan({ text: canHide ? `Hide ${meta.name}` : `Cannot hide last tool` });
+    hideBtn.disabled = !canHide;
+
+    hideBtn.addEventListener("click", () => {
+      this.closeHidePopover();
+      if (canHide) {
+        this.hideTool(toolId);
+      }
+    });
+
+    doc.body.appendChild(popover);
+    this.activeHidePopover = popover;
+
+    const btnRect = button.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    let left = btnRect.left + (btnRect.width - popoverRect.width) / 2;
+    left = Math.max(8, Math.min(doc.documentElement.clientWidth - popoverRect.width - 8, left));
+    let top = btnRect.bottom + 6;
+    if (top + popoverRect.height > doc.documentElement.clientHeight - 8) {
+      top = btnRect.top - popoverRect.height - 6;
+    }
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+
+    const onDocDown = (e: PointerEvent): void => {
+      if (!popover.contains(e.target as Node) && e.target !== button) {
+        this.closeHidePopover();
+      }
+    };
+    const onDocKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") {
+        this.closeHidePopover();
+      }
+    };
+
+    if (this.popoverOpenTimer !== null) {
+      window.clearTimeout(this.popoverOpenTimer);
+    }
+    this.popoverOpenTimer = window.setTimeout(() => {
+      this.popoverOpenTimer = null;
+      doc.addEventListener("pointerdown", onDocDown, true);
+      doc.addEventListener("keydown", onDocKey, true);
+    }, 10);
+
+    (popover as any)._cleanup = () => {
+      if (this.popoverOpenTimer !== null) {
+        window.clearTimeout(this.popoverOpenTimer);
+        this.popoverOpenTimer = null;
+      }
+      doc.removeEventListener("pointerdown", onDocDown, true);
+      doc.removeEventListener("keydown", onDocKey, true);
+      if (!this.hiddenTools.has(toolId) && this.toolButtonsMap.has(toolId)) {
+        try {
+          button.focus();
+        } catch {}
+      }
+    };
+
+    setTimeout(() => {
+      try {
+        hideBtn.focus();
+      } catch {}
+    }, 0);
+  }
+
+  private closeHidePopover(): void {
+    if (this.popoverOpenTimer !== null) {
+      window.clearTimeout(this.popoverOpenTimer);
+      this.popoverOpenTimer = null;
+    }
+    if (this.activeHidePopover) {
+      (this.activeHidePopover as any)._cleanup?.();
+      this.activeHidePopover.remove();
+      this.activeHidePopover = null;
+    }
+  }
+
+  hideTool(toolId: ConfigurableToolId): void {
+    const visible = this.toolOrder.filter((id) => !this.hiddenTools.has(id));
+    if (visible.length <= 1) return;
+
+    this.hiddenTools.add(toolId);
+    this.renderToolsGroup();
+    this.callbacks.onToolbarLayoutChange?.(this.toolOrder, Array.from(this.hiddenTools));
+
+    const activeKey = this.state.tool === "highlighter" ? "pen" : this.state.tool;
+    if (activeKey === toolId) {
+      const fallback = this.toolOrder.find(
+        (id) => !this.hiddenTools.has(id) && (id === "pen" || id === "select" || id === "eraser" || id === "text" || id === "shape"),
+      );
+      if (fallback) {
+        const btn = this.toolButtons.get(fallback as ActiveTool);
+        if (btn) this.tapTool(fallback as ActiveTool, btn);
+      }
+    }
+
+    const currentActive = this.state.tool === "highlighter" ? "pen" : this.state.tool;
+    const focusTarget =
+      this.toolButtons.get(currentActive as ActiveTool) ?? this.toolButtonsMap.values().next().value;
+    try {
+      focusTarget?.focus();
+    } catch {}
+  }
+
+  unhideTool(toolId: ConfigurableToolId, activate = false): void {
+    if (!this.hiddenTools.has(toolId)) return;
+    this.hiddenTools.delete(toolId);
+    this.renderToolsGroup();
+    this.callbacks.onToolbarLayoutChange?.(this.toolOrder, Array.from(this.hiddenTools));
+
+    const newlyUnhidden = this.toolButtonsMap.get(toolId);
+    try {
+      newlyUnhidden?.focus();
+    } catch {}
+
+    if (activate) {
+      if (toolId in { pen: 1, select: 1, eraser: 1, text: 1, shape: 1 }) {
+        const btn = this.toolButtons.get(toolId as ActiveTool) ?? null;
+        if (btn) this.tapTool(toolId as ActiveTool, btn);
+      } else if (toolId === "image") {
+        const btn = this.toolButtonsMap.get("image");
+        if (btn && this.callbacks.onInsertImage) this.callbacks.onInsertImage(btn);
+      } else if (toolId === "record") {
+        const btn = this.toolButtonsMap.get("record");
+        if (btn && this.callbacks.onRecord) this.callbacks.onRecord(btn);
+      }
+    }
+  }
+
+  getHiddenTools(): Array<{ id: ConfigurableToolId; icon: string; name: string; label: string }> {
+    const result: Array<{ id: ConfigurableToolId; icon: string; name: string; label: string }> = [];
+    for (const id of this.toolOrder) {
+      if (this.hiddenTools.has(id)) {
+        const meta = CONFIGURABLE_TOOLS[id];
+        if (meta) result.push(meta);
+      }
+    }
+    return result;
+  }
+
+  resetToolbarLayout(): void {
+    this.toolOrder = [...DEFAULT_TOOL_ORDER];
+    this.hiddenTools.clear();
+    this.renderToolsGroup();
+    this.callbacks.onToolbarLayoutChange?.(this.toolOrder, []);
   }
 
   /**
@@ -2248,7 +2740,7 @@ export class Toolbar {
   dismissPopover(): void { this.closePopover(); }
 
   private closePopover(): void {
-    for (const dispose of this.popoverDisposers) dispose();
+    for (const dispose of this.popoverDisposers ?? []) dispose();
     this.popoverDisposers = [];
     this.releaseTransient?.(); this.releaseTransient = null;
     this.popoverAnchor = null; this.popoverPresetId = null; this.popoverTool = null;
@@ -2545,6 +3037,7 @@ export class Toolbar {
 
   /** Show the record button as live (tinted) while a recording runs. */
   setRecording(active: boolean): void {
+    this.isRecording = active;
     this.recordButton?.toggleClass("is-recording", active);
     this.recordButton?.setAttribute("aria-pressed", active ? "true" : "false");
     this.recordButton?.setAttribute("aria-label", active ? "Stop recording" : "Record audio");
@@ -2552,6 +3045,19 @@ export class Toolbar {
 
   /** Close what is open, drop every listener outside the toolbar, and take both tiers away. */
   destroy(): void {
+    this.closeHidePopover();
+    if (this.gestureDocCleanup) {
+      this.gestureDocCleanup();
+      this.gestureDocCleanup = null;
+    }
+    if (this.holdTimer !== null) {
+      window.clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+    this.activePointerId = null;
+    this.dragButton = null;
+    this.holdTriggered = false;
+    this.hasDragged = false;
     for (const dispose of this.optionDisposers) dispose();
     this.optionDisposers = [];
     for (const dispose of this.widthInputDisposers) dispose();

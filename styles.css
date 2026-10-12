@@ -297,6 +297,91 @@ body,
   background: var(--gob-line);
 }
 
+/* Reorderable toolbar tools (Apple Home Screen style) */
+@keyframes fn-jiggle {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(-1.5deg) scale(1.02); }
+  75% { transform: rotate(1.5deg) scale(1.02); }
+  100% { transform: rotate(0deg); }
+}
+
+.goodobsidian-bar-group.is-tools .goodobsidian-tool {
+  touch-action: none;
+}
+
+.goodobsidian-bar-group.is-tools.is-reordering .goodobsidian-tool {
+  animation: fn-jiggle 0.28s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goodobsidian-bar-group.is-tools.is-reordering .goodobsidian-tool {
+    animation: none;
+  }
+}
+
+.goodobsidian-bar-group.is-tools.is-reordering .goodobsidian-tool.is-drag-held {
+  animation: none;
+  transform: scale(1.15) translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+  opacity: 0.95;
+  background: var(--gob-well);
+}
+
+.goodobsidian-bar-group.is-tools .goodobsidian-tool.is-dragging {
+  animation: none;
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+/* Tool context popover (Hide tool) */
+.goodobsidian-tool-popover {
+  position: fixed;
+  z-index: 1000;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--gob-shadow-popover, 0 8px 24px rgba(0, 0, 0, 0.22));
+  border-radius: var(--gob-radius-m, 8px);
+  padding: 4px;
+  min-width: 130px;
+  display: flex;
+  flex-direction: column;
+}
+.goodobsidian-tool-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--gob-radius-s, 4px);
+  background: transparent;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small, 13px);
+  cursor: pointer;
+  text-align: left;
+}
+.goodobsidian-tool-popover-item:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+.goodobsidian-tool-popover-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.goodobsidian-tool-popover-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.goodobsidian-tool-popover-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* --------------------------------------------------- toolbar, tier 2 */
 
 /* The active tool's options: a floating rounded pill directly below the bar.
@@ -4666,6 +4751,42 @@ input[type="range"].goodobsidian-player-scrubber {
   text-overflow: ellipsis;
 }
 
+.goodobsidian-more-hidden-tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.goodobsidian-more-unhide-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: var(--font-ui-smaller, 11px);
+  font-weight: 500;
+  border-radius: 12px;
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+  margin-left: auto;
+}
+
+.goodobsidian-more .goodobsidian-more-row.clickable-icon:hover .goodobsidian-more-unhide-badge {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, #ffffff);
+}
+
+.goodobsidian-unhide-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.goodobsidian-unhide-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
 .goodobsidian-more .goodobsidian-more-row.is-danger {
   color: var(--text-error);
 }
@@ -5769,13 +5890,44 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 }
 .goodobsidian-page-check {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 6px;
+  left: 6px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  line-height: 1;
+  border: 2px solid var(--interactive-accent);
   background: var(--background-primary);
   color: var(--interactive-accent);
-  padding: 4px;
   pointer-events: none;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.goodobsidian-page-check.is-page-checked {
+  background: var(--background-primary);
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+.goodobsidian-page-check svg {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  max-width: 14px;
+  max-height: 14px;
+  display: block;
+  flex-shrink: 0;
+  stroke-width: 2.5;
 }
 .goodobsidian-thumb.is-page-selected .goodobsidian-thumb-frame {
   box-shadow: 0 0 0 2px var(--interactive-accent);
@@ -5993,7 +6145,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-pages-header button.clickable-icon:hover { background: var(--background-modifier-hover); }
 .goodobsidian-pagesidebar-tabs button { gap: 5px; font-size: var(--font-ui-small); }
 .goodobsidian-pagesidebar-tabs button svg { width: 16px; height: 16px; }
-.goodobsidian-page-check svg { width: 16px; height: 16px; }
 .goodobsidian-page-bulk-actions { gap: 6px; }
 .goodobsidian-page-bulk-actions button { color: var(--text-normal); border-radius: var(--gob-radius-m); }
 .goodobsidian-popover.has-line-styles .goodobsidian-popover-body { padding: 8px; gap: 2px; }

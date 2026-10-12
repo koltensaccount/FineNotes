@@ -57,6 +57,15 @@ export interface MorePanelActions {
   goToPage: (index: number) => void;
   clear: (index: number) => void;
   remove: (index: number) => void;
+  hiddenTools?: HiddenToolItem[];
+  unhideTool?: (id: string) => void;
+  resetToolbarLayout?: () => void;
+}
+
+export interface HiddenToolItem {
+  id: string;
+  icon: string;
+  name: string;
 }
 
 const PANEL_WIDTH = 330;
@@ -101,6 +110,9 @@ export class MorePanel {
     this.keyboard.end();
     for (const d of this.dispose) d();
     this.el.remove();
+    try {
+      this.anchor.focus();
+    } catch {}
   }
 
   private render(): void {
@@ -144,6 +156,21 @@ export class MorePanel {
       text: page.cover ? "Change cover" : "Change template",
       run: (button) => actions.changeTemplate(page.index, button),
     });
+
+    if (actions.hiddenTools && actions.hiddenTools.length > 0) {
+      this.heading("Hidden tools");
+      const hiddenGroup = this.group();
+      for (const item of actions.hiddenTools) {
+        this.hiddenToolRow(hiddenGroup, item);
+      }
+      if (actions.resetToolbarLayout) {
+        this.row(hiddenGroup, {
+          icon: "rotate-ccw",
+          text: "Reset toolbar layout",
+          run: () => actions.resetToolbarLayout?.(),
+        });
+      }
+    }
 
     this.heading("Clear or delete page");
     const danger = this.group();
@@ -198,6 +225,30 @@ export class MorePanel {
       options.run(button);
     });
     return button;
+  }
+
+  private hiddenToolRow(parent: HTMLElement, item: HiddenToolItem): void {
+    const row = parent.createDiv({
+      cls: "goodobsidian-more-row goodobsidian-more-hidden-tool clickable-icon",
+    });
+    setIcon(row.createSpan({ cls: "goodobsidian-more-icon" }), item.icon);
+    row.createSpan({ cls: "goodobsidian-more-label", text: item.name });
+    const badge = row.createEl("span", { cls: "goodobsidian-more-unhide-badge" });
+    setIcon(badge.createSpan({ cls: "goodobsidian-unhide-icon" }), "eye");
+    badge.createSpan({ text: "Unhide" });
+    row.setAttribute("role", "button");
+    row.setAttribute("tabindex", "0");
+    const activate = (): void => {
+      this.close();
+      this.actions.unhideTool?.(item.id);
+    };
+    row.addEventListener("click", activate);
+    row.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    });
   }
 
   /** "Go to page (1 – N)": tapping it turns the hint into a number field. */

@@ -51,6 +51,10 @@ export interface GoodObsidianSettings {
   penLineStyle?: LineStyle;
   /** Optional versioned companion association registry; absent on existing installs. */
   companionPdfs?: CompanionStore;
+  /** Reordered tool order for the main toolbar. */
+  toolbarToolOrder?: string[];
+  /** Tool identifiers hidden from the main toolbar. */
+  hiddenToolbarTools?: string[];
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;
@@ -214,6 +218,17 @@ export const DEFAULT_SETTINGS: GoodObsidianSettings = {
   showNewNotebookInContextMenu: true,
   showNewNotebookInExplorer: false,
 };
+
+/** The default sequence of tools in the handwriting toolbar. */
+export const DEFAULT_TOOLBAR_TOOL_ORDER: readonly string[] = [
+  "select",
+  "pen",
+  "eraser",
+  "text",
+  "shape",
+  "image",
+  "record",
+];
 
 // --- Paper width -------------------------------------------------------------
 
