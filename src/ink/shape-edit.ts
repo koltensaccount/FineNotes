@@ -117,7 +117,8 @@ export function alignNewShape(kind: ShapeKind, pts: readonly number[]): number[]
   const frame = shapeFrame(kind, pts);
   if (!frame) return pts.slice();
   if (kind === "line" || kind === "arrow") {
-    const axis = Math.round(frame.angle / (Math.PI / 2)) * Math.PI / 2;
+    const step = Math.PI / 12; // 15-degree increment
+    const axis = Math.round(frame.angle / step) * step;
     return editEndpoint(kind, pts, "end", { x: pts[0] + frame.w * Math.cos(axis), y: pts[1] + frame.w * Math.sin(axis) });
   }
   if (kind === "circle" || kind === "cloud") return pts.slice();

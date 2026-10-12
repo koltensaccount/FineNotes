@@ -82,14 +82,36 @@ describe("new page-aligned creation and proportional outline scaling", () => {
     }
     expect(shapeFrame(kind,clean,0)!.cx).toBeCloseTo(shapeFrame(kind,original,0)!.cx,1);
   });
-  it("initial lines snap to the nearest page axis, then endpoints and arrowheads follow Pencil freely", () => {
+  it("initial lines snap to the nearest 15-degree increment, then endpoints and arrowheads follow Pencil freely", () => {
     for (const kind of ["line", "arrow"] as const) {
-      const pts = presetGeometry(kind,{ x: 100,y: 100 },{ x: 300,y: 160 },.5), aligned=alignNewShape(kind,pts);
-      expect(aligned[1]).toBe(aligned[4]); expect(aligned.slice(0,3)).toEqual(pts.slice(0,3));
-      const from={ x: 300,y: 160 }, to={ x: 320,y: 230 };
-      const moved=adjustHeldShape(kind,aligned,{ x: 100,y: 100 },from,to);
-      expect(moved[4]).toBe(170); expect(moved.slice(0,3)).toEqual(aligned.slice(0,3));
-      if(kind === "arrow") expect(Math.hypot(moved[9]-moved[3],moved[10]-moved[4])).toBeCloseTo(Math.hypot(aligned[9]-aligned[3],aligned[10]-aligned[4]),1);
+      // Near horizontal (0°):
+      const ptsHoriz = presetGeometry(kind, { x: 100, y: 100 }, { x: 300, y: 104 }, 0.5);
+      const alignedHoriz = alignNewShape(kind, ptsHoriz);
+      expect(alignedHoriz[1]).toBe(alignedHoriz[4]);
+      expect(alignedHoriz.slice(0, 3)).toEqual(ptsHoriz.slice(0, 3));
+
+      // Near 45°:
+      const pts45 = presetGeometry(kind, { x: 100, y: 100 }, { x: 298, y: 302 }, 0.5);
+      const aligned45 = alignNewShape(kind, pts45);
+      const frame45 = shapeFrame(kind, aligned45)!;
+      expect(frame45.angle).toBeCloseTo(Math.PI / 4, 2); // 45 degrees
+
+      // Near 15°:
+      const pts15 = presetGeometry(kind, { x: 100, y: 100 }, { x: 300, y: 160 }, 0.5);
+      const aligned15 = alignNewShape(kind, pts15);
+      const frame15 = shapeFrame(kind, aligned15)!;
+      expect(frame15.angle).toBeCloseTo(Math.PI / 12, 2); // 15 degrees
+
+      // Following Pencil freely:
+      const from = { x: 300, y: 160 }, to = { x: 320, y: 230 };
+      const moved = adjustHeldShape(kind, aligned15, { x: 100, y: 100 }, from, to);
+      expect(moved.slice(0, 3)).toEqual(aligned15.slice(0, 3));
+      if (kind === "arrow") {
+        expect(Math.hypot(moved[9] - moved[3], moved[10] - moved[4])).toBeCloseTo(
+          Math.hypot(aligned15[9] - aligned15[3], aligned15[10] - aligned15[4]),
+          1,
+        );
+      }
     }
   });
   it("held closed resizing changes axes independently without rotation", () => {
