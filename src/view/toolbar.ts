@@ -90,11 +90,10 @@ import { drawingToolOf, selectedTool } from "./tool-return";
 import { addIcon, setIcon } from "obsidian";
 import type { ToolbarPosition } from "../settings-data";
 
-const SQUARE_DASHED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-square-dashed"><rect x="2.5" y="2.5" width="19" height="19" rx="3.5" stroke-dasharray="4 2.5"/></svg>`;
+// addIcon takes paths in a 100-unit viewport, not a nested 24px SVG.
+const RECTANGULAR_LASSO_SVG = `<path d="M26 16H76Q86 16 86 26V62Q86 72 76 72H28Q18 72 18 62V26Q18 16 26 16Z M30 72C42 73 43 88 31 90C20 92 14 83 21 77C27 73 38 79 46 84" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
 try {
-  if (typeof addIcon === "function") {
-    addIcon("square-dashed", SQUARE_DASHED_SVG);
-  }
+  if (typeof addIcon === "function") addIcon("finenotes-rectangular-lasso", RECTANGULAR_LASSO_SVG);
 } catch {}
 import { DEFAULT_ERASER_SIZE, ERASER_SIZES, PALETTE, SIZES, HIGHLIGHTER_SIZES } from "../constants";
 import {
@@ -795,7 +794,7 @@ export class Toolbar {
     const button = this.toolButtonsMap.get("select");
     if (!button) return;
     const isRect = lassoModeFor(this.state) === "rect";
-    const iconName = isRect ? "square-dashed" : "lasso";
+    const iconName = isRect ? "finenotes-rectangular-lasso" : "lasso";
     const label = isRect ? "Rectangular select (V)" : "Lasso select (V)";
     button.setAttribute("aria-label", label);
     button.setAttribute("title", label);
@@ -2958,7 +2957,7 @@ export class Toolbar {
       candidatePos = this.computeDockCandidate(e, this.toolbarPosition, startX, startY);
 
       if (indicator) {
-        indicator.className = `goodobsidian-dock-indicator is-dock-${candidatePos}`;
+        this.updateDockPreview(indicator, candidatePos);
       }
     };
 
@@ -3010,9 +3009,7 @@ export class Toolbar {
             navigator.vibrate(25);
           } catch {}
         }
-        indicator = this.host.createDiv({
-          cls: `goodobsidian-dock-indicator is-dock-${this.toolbarPosition}`,
-        });
+        indicator = this.createDockPreview("bar", this.toolbarPosition);
       }, 400);
 
       doc.addEventListener("pointermove", onMove);
@@ -3101,7 +3098,7 @@ export class Toolbar {
       candidatePos = this.computeDockCandidate(e, this.optionsPosition, startX, startY);
 
       if (indicator) {
-        indicator.className = `goodobsidian-dock-indicator is-dock-${candidatePos}`;
+        this.updateDockPreview(indicator, candidatePos);
       }
     };
 
@@ -3153,9 +3150,7 @@ export class Toolbar {
             navigator.vibrate(25);
           } catch {}
         }
-        indicator = this.host.createDiv({
-          cls: `goodobsidian-dock-indicator is-dock-${this.optionsPosition}`,
-        });
+        indicator = this.createDockPreview("options", this.optionsPosition);
       }, 400);
 
       doc.addEventListener("pointermove", onMove);
@@ -3258,12 +3253,23 @@ export class Toolbar {
   applyPosition(): void {
     // A glide in progress would be measured as the pill's size.
     this.stopPillMorph();
+    this.positionOptionsPill(this.optionsEl, this.optionsPosition);
+
+    if (this.popover) {
+      this.popoverAnchor = this.resolvePopoverAnchor();
+      if (this.popoverAnchor) this.keepPopoverInside(this.popoverAnchor);
+      else this.closePopover();
+    }
+  }
+
+  /** Live pill and preview use the same orientation, measurements and reserved edges. */
+  private positionOptionsPill(pill: HTMLElement, pos: ToolbarPosition): void {
     const barPos = this.toolbarPosition;
-    const optPos = this.optionsPosition;
-    this.optionsEl.setCssStyles({ maxWidth: "", maxHeight: "" });
-    this.optionsEl.removeClass("is-pos-top", "is-pos-bottom", "is-pos-left", "is-pos-right");
-    this.optionsEl.addClass(`is-pos-${optPos}`);
-    this.fitTextPill();
+    const optPos = pos;
+    pill.setCssStyles({ maxWidth: "", maxHeight: "" });
+    pill.removeClass("is-pos-top", "is-pos-bottom", "is-pos-left", "is-pos-right");
+    pill.addClass(`is-pos-${optPos}`);
+    this.fitTextPill(pill);
 
     const hostBox = this.host.getBoundingClientRect();
     const barBox = this.barEl.getBoundingClientRect();
@@ -3279,25 +3285,45 @@ export class Toolbar {
     const width = Math.max(0, right - left);
     const height = Math.max(0, bottom - top);
     const vertical = optPos === "left" || optPos === "right";
-    this.optionsEl.setCssStyles({
+    pill.setCssStyles({
       maxWidth: `${Math.floor(vertical ? Math.min(60, width) : width)}px`,
       maxHeight: `${Math.floor(height)}px`,
     });
     // Measure after the orientation and constraints have taken effect.
-    const pill = this.optionsEl.getBoundingClientRect();
-    const pillWidth = Math.min(pill.width, width);
-    const pillHeight = Math.min(pill.height, height);
-    this.optionsEl.setCssStyles({
+    const pillBox = pill.getBoundingClientRect();
+    const pillWidth = Math.min(pillBox.width, width);
+    const pillHeight = Math.min(pillBox.height, height);
+    pill.setCssStyles({
       left: `${Math.round(optPos === "right" ? right - pillWidth :
         vertical ? left : left + (width - pillWidth) / 2)}px`,
       top: `${Math.round(optPos === "bottom" ? bottom - pillHeight : top)}px`,
     });
 
-    if (this.popover) {
-      this.popoverAnchor = this.resolvePopoverAnchor();
-      if (this.popoverAnchor) this.keepPopoverInside(this.popoverAnchor);
-      else this.closePopover();
+  }
+
+  /** Silhouettes only: preserve control layout, but hide contents and disable interaction. */
+  private createDockPreview(kind: "bar" | "options", active: ToolbarPosition): HTMLElement {
+    this.stopPillMorph();
+    const layer = this.host.createDiv({ cls: "goodobsidian-dock-previews", attr: { "aria-hidden": "true", inert: "" } });
+    for (const pos of ["top", "bottom", "left", "right"] as const) {
+      const frame = layer.createDiv({ cls: `goodobsidian-dock-preview goodobsidian-view is-pos-${pos}`, attr: { "data-dock": pos } });
+      const source = kind === "bar" ? this.barEl : this.optionsEl;
+      const clone = source.cloneNode(true) as HTMLElement;
+      clone.removeClass("is-bar-held", "is-pill-held", "is-pos-top", "is-pos-bottom", "is-pos-left", "is-pos-right");
+      clone.addClass(`is-pos-${pos}`, "goodobsidian-dock-silhouette");
+      clone.style.overflow = ""; clone.style.touchAction = "";
+      clone.removeAttribute("id");
+      for (const child of clone.querySelectorAll("[id]")) child.removeAttribute("id");
+      frame.append(clone);
+      if (kind === "bar") frame.createDiv({ cls: "goodobsidian-dock-preview-space" });
+      else this.positionOptionsPill(clone, pos);
     }
+    this.updateDockPreview(layer, active);
+    return layer;
+  }
+
+  private updateDockPreview(layer: HTMLElement, active: ToolbarPosition): void {
+    for (const frame of layer.querySelectorAll<HTMLElement>(".goodobsidian-dock-preview")) frame.toggleClass("is-active", frame.getAttribute("data-dock") === active);
   }
 
   /** The floating pill's box in host px, or `null` while it is not shown. */
@@ -3360,8 +3386,7 @@ export class Toolbar {
    * the pin's label and narrows its dropdowns rather than overflow; anything
    * still too wide scrolls inside the pill instead of leaving the screen.
    */
-  private fitTextPill(): void {
-    const pill = this.optionsEl;
+  private fitTextPill(pill: HTMLElement = this.optionsEl): void {
     pill.removeClass("is-compact");
     if (!pill.hasClass("is-text")) return;
     const room = this.host.getBoundingClientRect().width - this.leftInset - 2 * EDGE_INSET;

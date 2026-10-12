@@ -100,6 +100,16 @@ class MockEl {
     }
   }
 
+  cloneNode(deep = false): MockEl {
+    const clone = new MockEl(this.tag);
+    clone.ownerDocument = this.ownerDocument;
+    clone.attrs = { ...this.attrs }; clone.dataset = { ...this.dataset };
+    clone.classes = new Set(this.classes); clone.style = { ...this.style };
+    clone.text = this.text;
+    if (deep) for (const child of this.children) clone.append(child.cloneNode(true));
+    return clone;
+  }
+
   append(...e: MockEl[]): void {
     for (const child of e) {
       child.remove();
@@ -815,7 +825,7 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
     }
   });
 
-  it("dynamically toggles lasso icon between lasso and square-dashed when mode changes", () => {
+  it("dynamically toggles lasso icon between freehand and rectangular lasso when mode changes", () => {
     const { toolbar, state } = createTestToolbar();
     const selectBtn = host.querySelector('[data-tool-id="select"]')!;
     expect(selectBtn.getAttribute("aria-label")).toBe("Lasso select (V)");
@@ -1022,13 +1032,38 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
     }
   });
 
-  it("verifies sidebar z-index hierarchy and square-dashed icon SVG geometry", () => {
+  it("shows four noninteractive dock silhouettes and removes them on cancellation", () => {
+    vi.useFakeTimers();
+    try {
+      createTestToolbar();
+      const bar = host.querySelector(".goodobsidian-toolbar")!;
+      bar.dispatchEvent("pointerdown", { button: 0, pointerId: 20, clientX: 10, clientY: 10, target: bar });
+      vi.advanceTimersByTime(400);
+      const layer = host.querySelector(".goodobsidian-dock-previews")!;
+      expect(layer.getAttribute("aria-hidden")).toBe("true");
+      const previews = layer.querySelectorAll(".goodobsidian-dock-preview");
+      expect(previews).toHaveLength(4);
+      for (const frame of previews) {
+        const ghost = frame.querySelector(".goodobsidian-dock-silhouette")!;
+        expect(ghost.hasClass(`is-pos-${frame.getAttribute("data-dock")}`)).toBe(true);
+        expect(ghost.querySelectorAll("button").length).toBe(bar.querySelectorAll("button").length);
+        expect(ghost.handlers.size).toBe(0);
+      }
+      doc.dispatchEvent("pointercancel", { pointerId: 20 });
+      expect(host.querySelector(".goodobsidian-dock-previews")).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("verifies sidebar z-index hierarchy and rectangular lasso icon registration", () => {
     const fs = require("fs");
     const stylesCss = fs.readFileSync(path.resolve(__dirname, "../../styles.css"), "utf8");
     const toolbarTs = fs.readFileSync(path.resolve(__dirname, "../../src/view/toolbar.ts"), "utf8");
 
-    // Verify SQUARE_DASHED_SVG uses a prominent, bold, full-sized rounded rectangle
-    expect(toolbarTs).toContain('rect x="2.5" y="2.5" width="19" height="19" rx="3.5" stroke-dasharray="4 2.5"');
+    // Obsidian supplies the icon viewport; nesting a 24px svg made the icon tiny.
+    const icon = toolbarTs.match(/const RECTANGULAR_LASSO_SVG = `([^`]+)`/)?.[1];
+    expect(icon?.startsWith("<path")).toBe(true);
+    expect(icon?.includes("<svg")).toBe(false);
+    expect(toolbarTs.includes('isRect ? "finenotes-rectangular-lasso" : "lasso"')).toBe(true);
 
     // Verify .goodobsidian-pagesidebar-top has z-index: 10
     expect(stylesCss).toMatch(/\.goodobsidian-pagesidebar-top\s*\{[^}]*z-index:\s*10;/);

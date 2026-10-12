@@ -304,43 +304,33 @@ body,
   margin-top: auto;
 }
 
-/* Dock indicator when dragging the bar to an edge */
-.goodobsidian-dock-indicator {
+/* Dock silhouettes follow the same flex orientation and pill placement as the real bars. */
+.goodobsidian-dock-previews {
   position: absolute;
+  inset: 0;
   z-index: 1000;
   pointer-events: none;
-  background: var(--interactive-accent);
-  opacity: 0.35;
-  border-radius: var(--gob-radius-m, 8px);
-  transition: all 0.15s ease-out;
 }
-
-.goodobsidian-dock-indicator.is-dock-top {
-  top: 4px;
-  left: 8px;
-  right: 8px;
-  height: 44px;
+.goodobsidian-dock-previews .goodobsidian-dock-preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: none;
 }
-
-.goodobsidian-dock-indicator.is-dock-bottom {
-  bottom: 4px;
-  left: 8px;
-  right: 8px;
-  height: 44px;
+.goodobsidian-dock-preview-space { flex: 1 1 auto; min-width: 0; min-height: 0; }
+.goodobsidian-dock-previews .goodobsidian-dock-silhouette {
+  pointer-events: none;
+  background: color-mix(in srgb, var(--interactive-accent) 5%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+  box-shadow: none;
+  animation: none;
+  transition: background 120ms ease, border-color 120ms ease;
 }
-
-.goodobsidian-dock-indicator.is-dock-left {
-  top: 8px;
-  bottom: 8px;
-  left: 4px;
-  width: 44px;
-}
-
-.goodobsidian-dock-indicator.is-dock-right {
-  top: 8px;
-  bottom: 8px;
-  right: 4px;
-  width: 44px;
+.goodobsidian-dock-silhouette > * { visibility: hidden; }
+.goodobsidian-dock-preview.is-active .goodobsidian-dock-silhouette {
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  border-color: var(--interactive-accent);
+  border-style: solid;
 }
 
 .goodobsidian-toolbar.is-bar-held {
@@ -1864,6 +1854,26 @@ body.is-mobile .goodobsidian-scrollthumb {
   border: none;
   border-radius: 50%;
   background-clip: content-box;
+}
+
+/* Fixed square targets also keep content-box colour discs round in vertical docks. */
+.goodobsidian-options:is(.is-pos-left, .is-pos-right) button.goodobsidian-swatch,
+.goodobsidian-options:is(.is-pos-left, .is-pos-right) button.goodobsidian-color-more {
+  width: 44px;
+  height: 44px;
+  min-width: 44px !important;
+  min-height: 44px;
+  max-width: 44px;
+  max-height: 44px;
+  flex: 0 0 44px;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+}
+.goodobsidian-options:is(.is-pos-left, .is-pos-right) .goodobsidian-color-strip {
+  width: 44px;
+  min-width: 44px;
+  flex: 0 1 auto;
+  align-items: center;
 }
 
 .goodobsidian-options .goodobsidian-swatch.is-active {
