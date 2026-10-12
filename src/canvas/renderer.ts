@@ -55,6 +55,7 @@ import {
   type Tool,
   strokeBounds,
 } from "../model/document";
+import { drawPlacedCircuit } from "../circuit/circuit-render";
 import { imageBounds, rotationOf } from "./image-geometry";
 import type { DocumentLayout, PageBox } from "./page-layout";
 import { baselineOffset, canvasFont, decorationMetrics, layoutTextBox } from "./text-layout";
@@ -957,6 +958,7 @@ export class Renderer {
     });
     if (this.writingGuides) paintWritingGuides(ctx, page, region, this.writingGuides, paperColorOf(page, this.paper), this.view.scale, level);
     this.paintImages(ctx, page, region, level);
+    this.paintCircuits(ctx, page, region);
     // Inset by half a device pixel so the hairline lies inside the clip.
     const hair = 1 / level;
     ctx.strokeStyle = this.paper.edge;
@@ -977,6 +979,19 @@ export class Renderer {
       if (this.hiddenImages.has(image)) continue;
       if (!overlaps(imageBounds(image), region)) continue;
       drawPlacedImage(ctx, image, painter, level);
+    }
+  }
+
+  /** The page's circuit diagrams that overlap `region`. */
+  private paintCircuits(
+    ctx: CanvasRenderingContext2D,
+    page: Page,
+    region: Bounds,
+  ): void {
+    if (!page.circuits || page.circuits.length === 0) return;
+    for (const circuit of page.circuits) {
+      if (!overlaps(imageBounds(circuit), region)) continue;
+      drawPlacedCircuit(ctx, circuit, () => this.invalidateAll());
     }
   }
 
@@ -1371,6 +1386,10 @@ export function renderPageThumbnail(
   }
   if (options.images) {
     for (const image of page.images) drawPlacedImage(ctx, image, options.images, k);
+  }
+
+  if (page.circuits) {
+    for (const circuit of page.circuits) drawPlacedCircuit(ctx, circuit);
   }
 
   for (const box of page.textBoxes) paintTextBox(ctx, box);

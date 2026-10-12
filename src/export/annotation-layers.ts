@@ -7,7 +7,7 @@ export interface AnnotationLayer {
 }
 
 export function* annotationLayers(page: Page): Generator<AnnotationLayer> {
-  if (page.images.length || page.textBoxes.length) {
+  if (page.images.length || page.textBoxes.length || (page.circuits && page.circuits.length)) {
     yield { page: { ...page, strokes: [] }, multiply: false };
   }
   let start = 0;
@@ -17,7 +17,7 @@ export function* annotationLayers(page: Page): Generator<AnnotationLayer> {
     while (end < page.strokes.length && (page.strokes[end].tool === "highlighter") === multiply)
       end++;
     yield {
-      page: { ...page, images: [], textBoxes: [], strokes: page.strokes.slice(start, end) },
+      page: { ...page, images: [], textBoxes: [], circuits: [], strokes: page.strokes.slice(start, end) },
       multiply,
     };
     start = end;

@@ -25,6 +25,7 @@ import {
   paintTextBox,
   styleOf,
 } from "../canvas/renderer";
+import { drawPlacedCircuit } from "../circuit/circuit-render";
 
 function releaseCanvas(canvas: HTMLCanvasElement): void {
   canvas.width = 0;
@@ -37,6 +38,7 @@ export interface RenderSelectionOptions {
   images?: ImagePainter | null;
   padding?: number;
   scale?: number;
+  backgroundColor?: string;
 }
 
 /**
@@ -101,10 +103,19 @@ export async function renderSelectionToPng(
     ctx.scale(scale, scale);
     ctx.translate(-minX, -minY);
 
+    if (options.backgroundColor) {
+      ctx.fillStyle = options.backgroundColor;
+      ctx.fillRect(minX, minY, w, h);
+    }
+
     if (options.images && pictures.length > 0) {
       for (const image of pictures) {
         drawPlacedImage(ctx, image, options.images, scale);
       }
+    }
+
+    for (const circuit of elements.circuits ?? []) {
+      drawPlacedCircuit(ctx, circuit);
     }
 
     const pressure = options.pressure !== false;

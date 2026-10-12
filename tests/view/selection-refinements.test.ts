@@ -6,7 +6,7 @@ import { polygonOf } from "../../src/canvas/lasso";
 import { shapeFrame } from "../../src/ink/shape-edit";
 import { presetGeometry } from "../../src/ink/shape-geometry";
 import { PasteGate } from "../../src/view/clipboard-read";
-vi.mock("obsidian", () => ({ Notice: class {}, Platform: {}, setIcon: vi.fn() }));
+vi.mock("obsidian", () => ({ Modal: class {}, Notice: class {}, Platform: {}, setIcon: vi.fn() }));
 const { InkSurface } = await import("../../src/view/ink-surface");
 type State = Record<string, unknown>;
 function call<T = unknown>(s: State, name: string, ...args: unknown[]): T {

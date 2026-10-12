@@ -78,6 +78,7 @@ export class InkClipboard {
         strokes: elements.strokes.map((stroke) => structuredClone(stroke)),
         images: elements.images.map((image) => structuredClone(image)),
         textBoxes: elements.textBoxes.map((textBox) => structuredClone(textBox)),
+        circuits: (elements.circuits ?? []).map((circuit) => structuredClone(circuit)),
       },
       bounds: { ...bounds },
     };
@@ -101,7 +102,12 @@ export class InkClipboard {
   canPaste(withImages = true): boolean {
     const e = this.entry?.elements;
     if (!e) return withImages && this.png !== null;
-    return e.strokes.length > 0 || e.textBoxes.length > 0 || (withImages && e.images.length > 0);
+    return (
+      e.strokes.length > 0 ||
+      e.textBoxes.length > 0 ||
+      (withImages && e.images.length > 0) ||
+      (e.circuits !== undefined && e.circuits.length > 0)
+    );
   }
 
   /**
@@ -139,9 +145,9 @@ export function pasteCopies(
   dy: number,
   withImages = true,
 ): ElementLists {
-  const { strokes, images, textBoxes } = entry.elements;
+  const { strokes, images, textBoxes, circuits } = entry.elements;
   const copies = copyElements(
-    { strokes, images: withImages ? images : [], textBoxes },
+    { strokes, images: withImages ? images : [], textBoxes, circuits },
     ids,
     dx,
     dy,

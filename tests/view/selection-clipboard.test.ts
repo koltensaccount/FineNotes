@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("obsidian", () => ({ Notice: class {}, Platform: {}, setIcon: vi.fn() }));
+vi.mock("obsidian", () => ({ Modal: class {}, Notice: class {}, Platform: {}, setIcon: vi.fn() }));
 import type { Bounds, Stroke, TextBoxElement, ImageElement } from "../../src/model/document";
 import type { PageElements } from "../../src/model/selection-commands";
 import { InkClipboard } from "../../src/model/clipboard";

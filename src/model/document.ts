@@ -283,6 +283,23 @@ export interface TextBoxElement {
   fill?: string;
 }
 
+export interface CircuitElement {
+  id: string;
+  /** Top-left and dimensions in page coordinates */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation?: number;
+  locked?: boolean;
+  /** Structured circuit netlist */
+  ir: import("../circuit/ir").KirchhoffCircuit;
+  /** Optional cached or user-edited CircuitikZ code */
+  tikz?: string;
+  /** Optional cached rendered SVG string */
+  svg?: string;
+}
+
 export type PageKind = "ink";
 
 export interface Page {
@@ -293,6 +310,7 @@ export interface Page {
   strokes: Stroke[];
   images: ImageElement[];
   textBoxes: TextBoxElement[];
+  circuits?: CircuitElement[];
   /**
    * Wall-clock time (ms since the Unix epoch) that this page's stroke `t0`
    * values count from: the pen-down of the first timestamped stroke. Absent

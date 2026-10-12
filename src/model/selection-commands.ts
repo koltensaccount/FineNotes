@@ -14,6 +14,7 @@
 import { CompositeCommand } from "./page-commands";
 import type { Command } from "./commands";
 import {
+  type CircuitElement,
   type ImageElement,
   type InkDocument,
   type Page,
@@ -28,6 +29,7 @@ export interface PageElements {
   strokes: readonly Stroke[];
   images: readonly ImageElement[];
   textBoxes: readonly TextBoxElement[];
+  circuits?: readonly CircuitElement[];
 }
 
 /** The same elements as fresh, mutable lists. */
@@ -35,6 +37,7 @@ export interface ElementLists {
   strokes: Stroke[];
   images: ImageElement[];
   textBoxes: TextBoxElement[];
+  circuits?: CircuitElement[];
 }
 
 /** Which of `elements` are on `page` right now, in page order. */
@@ -43,13 +46,17 @@ export function elementsOnPage(page: Page, elements: PageElements): ElementLists
     strokes: present(page.strokes, elements.strokes),
     images: present(page.images, elements.images),
     textBoxes: present(page.textBoxes, elements.textBoxes),
+    circuits: present(page.circuits ?? [], elements.circuits ?? []),
   };
 }
 
 /** Whether a selection holds nothing. */
 export function isEmptySelection(elements: PageElements): boolean {
   return (
-    elements.strokes.length === 0 && elements.images.length === 0 && elements.textBoxes.length === 0
+    elements.strokes.length === 0 &&
+    elements.images.length === 0 &&
+    elements.textBoxes.length === 0 &&
+    (!elements.circuits || elements.circuits.length === 0)
   );
 }
 
@@ -75,6 +82,7 @@ export class TranslateElements implements Command {
     strokes: Array<{ stroke: Stroke; pts: number[] }>;
     images: Array<{ image: ImageElement; x: number; y: number }>;
     textBoxes: Array<{ textBox: TextBoxElement; x: number; y: number }>;
+    circuits?: Array<{ circuit: CircuitElement; x: number; y: number }>;
   } | null = null;
 
   constructor(
@@ -108,6 +116,12 @@ export class TranslateElements implements Command {
         textBox.y += dy;
         return saved;
       }),
+      circuits: (on.circuits ?? []).map((circuit) => {
+        const saved = { circuit, x: circuit.x, y: circuit.y };
+        circuit.x += dx;
+        circuit.y += dy;
+        return saved;
+      }),
     };
   }
 
@@ -123,6 +137,10 @@ export class TranslateElements implements Command {
       textBox.x = x;
       textBox.y = y;
     }
+    for (const { circuit, x, y } of moved.circuits ?? []) {
+      circuit.x = x;
+      circuit.y = y;
+    }
     this.moved = null;
   }
 }
@@ -136,6 +154,7 @@ export class RemoveElements implements Command {
     strokes: Array<Removed<Stroke>>;
     images: Array<Removed<ImageElement>>;
     textBoxes: Array<Removed<TextBoxElement>>;
+    circuits: Array<Removed<CircuitElement>>;
   } | null = null;
 
   constructor(
@@ -152,6 +171,7 @@ export class RemoveElements implements Command {
       strokes: removeFrom(page.strokes, this.elements.strokes),
       images: removeFrom(page.images, this.elements.images),
       textBoxes: removeFrom(page.textBoxes, this.elements.textBoxes),
+      circuits: removeFrom(page.circuits ?? [], this.elements.circuits ?? []),
     };
   }
 
@@ -162,6 +182,9 @@ export class RemoveElements implements Command {
     restoreTo(page.strokes, removed.strokes);
     restoreTo(page.images, removed.images);
     restoreTo(page.textBoxes, removed.textBoxes);
+    if (page.circuits && removed.circuits) {
+      restoreTo(page.circuits, removed.circuits);
+    }
     this.removed = null;
   }
 }
@@ -183,6 +206,10 @@ export class AddElements implements Command {
     page.strokes.push(...this.elements.strokes);
     page.images.push(...this.elements.images);
     page.textBoxes.push(...this.elements.textBoxes);
+    if (this.elements.circuits && this.elements.circuits.length > 0) {
+      if (!page.circuits) page.circuits = [];
+      page.circuits.push(...this.elements.circuits);
+    }
   }
 
   invert(doc: InkDocument): void {
@@ -191,6 +218,9 @@ export class AddElements implements Command {
     removeFrom(page.strokes, this.elements.strokes);
     removeFrom(page.images, this.elements.images);
     removeFrom(page.textBoxes, this.elements.textBoxes);
+    if (page.circuits && this.elements.circuits) {
+      removeFrom(page.circuits, this.elements.circuits);
+    }
   }
 }
 
@@ -227,6 +257,7 @@ export interface IdSource {
   stroke: () => string;
   image: () => string;
   textBox: () => string;
+  circuit?: () => string;
 }
 
 /**
@@ -241,6 +272,7 @@ export function copyElements(
   dx: number,
   dy: number,
 ): ElementLists {
+  let circuitCounter = 1;
   return {
     strokes: elements.strokes.map((stroke) => {
       const copy = structuredClone(stroke);
@@ -259,6 +291,13 @@ export function copyElements(
     textBoxes: elements.textBoxes.map((textBox) => {
       const copy = structuredClone(textBox);
       copy.id = ids.textBox();
+      copy.x += dx;
+      copy.y += dy;
+      return copy;
+    }),
+    circuits: (elements.circuits ?? []).map((circuit) => {
+      const copy = structuredClone(circuit);
+      copy.id = ids.circuit ? ids.circuit() : `c_dup_${Date.now()}_${circuitCounter++}`;
       copy.x += dx;
       copy.y += dy;
       return copy;

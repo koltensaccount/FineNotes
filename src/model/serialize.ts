@@ -33,9 +33,11 @@ import {
 import { normalizeAttachmentFolders } from "./attachment-folders";
 import { normalizePageTitle } from "./contents";
 import { SAVE_LEVEL, deflateToBase64, inflateFromBase64 } from "./compress";
+import { validateAndNormalizeCircuit } from "../circuit/ir";
 import {
   type AttachmentFolders,
   type Backdrop,
+  type CircuitElement,
   type ImageElement,
   type InkDocument,
   type Page,
@@ -147,6 +149,7 @@ interface StoredPage {
   title?: string;
   images: ImageElement[];
   textBoxes: TextBoxElement[];
+  circuits?: CircuitElement[];
   strokes: StoredStroke[];
 }
 
@@ -215,6 +218,7 @@ function storePage(page: Page): StoredPage {
     title: normalizePageTitle(page.title),
     images: page.images,
     textBoxes: page.textBoxes,
+    circuits: page.circuits && page.circuits.length > 0 ? page.circuits : undefined,
     strokes: page.strokes.map(storeStroke),
   };
 }
@@ -529,6 +533,26 @@ function maxNumericId(raw: readonly unknown[], prefix: string): number {
   return max;
 }
 
+function normalizeCircuit(raw: unknown, mintId: () => string): CircuitElement | null {
+  if (!isRecord(raw)) return null;
+  const id = typeof raw.id === "string" ? raw.id : mintId();
+  const ir = validateAndNormalizeCircuit(raw.ir);
+  return {
+    id,
+    x: num(raw.x, 0),
+    y: num(raw.y, 0),
+    w: Math.max(1, num(raw.w, 100)),
+    h: Math.max(1, num(raw.h, 100)),
+    ...(typeof raw.rotation === "number" && Number.isFinite(raw.rotation)
+      ? { rotation: raw.rotation }
+      : {}),
+    ...(raw.locked === true ? { locked: true } : {}),
+    ir,
+    ...(typeof raw.tikz === "string" ? { tikz: raw.tikz } : {}),
+    ...(typeof raw.svg === "string" ? { svg: raw.svg } : {}),
+  };
+}
+
 function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page {
   const page = isRecord(raw) ? raw : {};
   const images: ImageElement[] = [];
@@ -545,6 +569,13 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     const normalized = normalizeTextBox(textBox, () => `t${++lastTextBoxId}`);
     if (normalized) textBoxes.push(normalized);
   });
+  const circuits: CircuitElement[] = [];
+  const circuitsRaw = Array.isArray(page.circuits) ? page.circuits : [];
+  let lastCircuitId = maxNumericId(circuitsRaw, "c");
+  circuitsRaw.forEach((c) => {
+    const norm = normalizeCircuit(c, () => `c${++lastCircuitId}`);
+    if (norm) circuits.push(norm);
+  });
   return {
     id: typeof page.id === "string" ? page.id : `p${index + 1}`,
     kind: "ink",
@@ -553,6 +584,7 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     strokes: readStrokes(page.strokes),
     images,
     textBoxes,
+    circuits: circuits.length > 0 ? circuits : undefined,
     ...(isEpoch(page.epoch) ? { epoch: Math.round(page.epoch) } : {}),
     // Only a literal `true`: anything else in the file is "not bookmarked".
     ...(page.bookmarked === true ? { bookmarked: true as const } : {}),

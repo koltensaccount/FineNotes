@@ -123,6 +123,7 @@ export function companionContent(
       strokes: page.strokes.map(({ id: _id, t0: _t0, ...graphics }) => graphics),
       images: page.images.map(({ id: _id, ...image }) => image),
       textBoxes: page.textBoxes.map(({ id: _id, ...text }) => text),
+      circuits: (page.circuits ?? []).map(({ id: _id, ...circuit }) => circuit),
     })),
     options,
     resources,

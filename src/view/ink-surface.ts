@@ -55,7 +55,8 @@ import type { PdfRenderArea } from "../canvas/pdf-raster";
  * bug quoted in research/RESEARCH.md).
  */
 
-import { Notice, Platform, setIcon } from "obsidian";
+import { type App, Notice, Platform, setIcon } from "obsidian";
+import { errorMessage } from "../util/errors";
 import {
   DEFAULT_HIGHLIGHTER_ALPHA,
   FALLBACK_PRESSURE,
@@ -186,6 +187,7 @@ import {
 } from "../ink/table-geometry";
 import {
   type Bounds,
+  type CircuitElement,
   type ImageCrop,
   type ImageElement,
   type InkDocument,
@@ -194,9 +196,19 @@ import {
   type Stroke,
   type TextBoxElement,
   type Tool,
+  pageById,
   strokeBounds,
   strokeCount,
 } from "../model/document";
+import { convertSelectionToCircuit as runAiCircuitConversion } from "../circuit/ai-converter";
+import {
+  AddCircuitCommand,
+  ReplaceStrokesWithCircuitCommand,
+  UpdateCircuitCommand,
+} from "../circuit/circuit-commands";
+import { CircuitModal } from "./circuit-modal";
+import { circuitToTikz } from "../circuit/ir2tikz";
+import { renderCircuitToSvg } from "../circuit/svg-render";
 import { DUPLICATE_OFFSET, duplicateImage, nextImageId } from "../model/images";
 import {
   AddElements,
@@ -416,6 +428,7 @@ export interface InkSurfaceOptions {
   debug: boolean;
   /** Colours the selection's "Colour" row offers (the pen's palette); default {@link PALETTE}. */
   palette?: readonly string[];
+  app?: import("obsidian").App;
 }
 
 /** What the surface tells its host, and asks it. Only `onChange` is required. */
@@ -440,6 +453,7 @@ export interface InkSurfaceCallbacks {
    * written (the host says why).
    */
   isLocked?: () => boolean;
+  getKeyStore?: () => import("../recognition/key-store").KeyStore | undefined;
   /** A custom colour was picked (the lasso's recolour): the new recent list. */
   onRecentColors?: (colors: string[]) => void;
   /** A key press switched tools; the host's toolbar should show the new one. */
@@ -924,6 +938,7 @@ export class InkSurface {
   private selectionOutline: { loop: number[]; count: number } | null = null;
   private readonly actionBar: SelectionActionBar;
   private readonly palette: readonly string[];
+  private readonly app?: App;
 
   // Placed images (0.5). One image is selected at a time, held by identity
   // (ids can repeat in a hand-edited file) and resolved against the live
@@ -1099,6 +1114,7 @@ export class InkSurface {
   ) {
     this.paperIsDark = options.darkPaper === true;
     this.paper = paperTheme(this.paperIsDark);
+    this.app = options.app;
     this.toolSeen = toolState.tool;
     this.drawingTool = drawingToolOf("pen", toolState.tool);
 
@@ -1541,7 +1557,7 @@ export class InkSurface {
     this.pasteGate.cancel();
     this.pasteRequest = null;
     this.lastPastePoint = {};
-    this.resetMultiTouch();
+    this.resetMultiTouch?.();
     this.doc = doc;
     this.strokeIds.restart(strokeIdsOf(doc));
     this.textBoxIds.restart(textBoxIdsOf(doc));
@@ -1774,7 +1790,7 @@ export class InkSurface {
       // Zoomed in, a row is held to the page being read (`ensurePaperSize`),
       // so a glide to another page stopped at this one's edge. Move the hold
       // to the new page and land on its top-left corner, at the same zoom.
-      this.resetMultiTouch();
+      this.resetMultiTouch?.();
       this.dismissPressMenu();
       this.pageIndex = clamped;
       this.ensurePaperSize();
@@ -1833,7 +1849,7 @@ export class InkSurface {
   setTool(tool: ActiveTool): void {
     this.cancelShapeDraft();
     this.cancelGroupDrag();
-    this.resetMultiTouch();
+    this.resetMultiTouch?.();
     this.dismissPressMenu();
     // The toolbar shares `toolState` and has already written the new tool
     // into it, so the one being replaced is read from `toolSeen`.
@@ -2261,7 +2277,7 @@ export class InkSurface {
     this.indicatorEl.setText(total > 0 ? `${index + 1} of ${total}` : "0 of 0");
     this.indicatorEl.toggleClass("is-hidden", total === 0);
     if (index !== this.pageIndex) {
-      this.resetMultiTouch();
+      this.resetMultiTouch?.();
       this.dismissPressMenu();
       this.pageIndex = index;
       this.callbacks.onPageChange?.(index, total);
@@ -3517,8 +3533,9 @@ export class InkSurface {
       this.blurTextBox();
     }
     if (this.toolState.tool === "shape") {
-      const stroke = this.shapeAt(this.doc.pages[box.index], local, this.atFitZoom(12));
-      if (stroke?.shape && this.editableShape({ pageId: this.doc.pages[box.index].id, strokes: [stroke], images: [], textBoxes: [] })) {
+      const page = this.doc?.pages?.[box.index];
+      const stroke = page && this.shapeAt ? this.shapeAt(page, local, this.atFitZoom?.(12) ?? 12) : null;
+      if (stroke?.shape && page && this.editableShape({ pageId: page.id, strokes: [stroke], images: [], textBoxes: [] })) {
         this.shapeTap = { box, at: local, stroke, sample };
         return;
       }
@@ -3531,7 +3548,7 @@ export class InkSurface {
   private finishToolGesture(box: PageBox | null, sample: PointerSample | null): void {
     if (this.shapeTap) {
       const pending = this.shapeTap; this.shapeTap = null; this.activePage = null;
-      if (sample && pending.stroke) this.select(this.doc.pages[pending.box.index].id, { strokes: [pending.stroke], images: [], textBoxes: [] });
+      if (sample && pending.stroke && this.doc?.pages?.[pending.box.index]) this.select(this.doc.pages[pending.box.index].id, { strokes: [pending.stroke], images: [], textBoxes: [] });
       return;
     }
     const tool = this.toolState.tool;
@@ -4747,6 +4764,9 @@ export class InkSurface {
             boxInLasso(this.textBoxFrameOf(page.id, textBox), poly),
           )
         : [],
+      circuits: page.circuits
+        ? page.circuits.filter((circuit) => circuit.locked !== true && boxInLasso(circuit, poly))
+        : [],
     };
   }
 
@@ -5204,9 +5224,10 @@ export class InkSurface {
 
   /** Bounds of everything in a selection, page space. */
   private groupBounds(sel: GroupSelection): Bounds | null {
+    const circuitsAsImages = sel.circuits ?? [];
     return selectionBounds(
       sel.strokes,
-      sel.images,
+      [...sel.images, ...circuitsAsImages],
       sel.textBoxes.map((textBox) => this.textBoxFrameOf(sel.pageId, textBox)),
     );
   }
@@ -5232,7 +5253,7 @@ export class InkSurface {
 
   /** Put the selection's dashed frame where it is (or where a drag has it), and its bar. */
   private editableInk(sel: GroupSelection | null): boolean {
-    return !!sel && sel.strokes.length > 0 && !sel.images.length && !sel.textBoxes.length;
+    return !!sel && (sel.strokes?.length ?? 0) > 0 && !sel.images?.length && !sel.textBoxes?.length;
   }
   private frameForInk(sel: GroupSelection): ShapeFrame | null {
     const bounds = this.groupBounds(sel); if (!bounds) return null;
@@ -5240,7 +5261,7 @@ export class InkSurface {
   }
 
   private editableShape(sel: GroupSelection | null): Stroke | null {
-    if (!sel || sel.strokes.length !== 1 || sel.images.length || sel.textBoxes.length) return null;
+    if (!sel || !sel.strokes || sel.strokes.length !== 1 || (sel.images && sel.images.length) || (sel.textBoxes && sel.textBoxes.length)) return null;
     const stroke = sel.strokes[0];
     if (!stroke.shape || !shapeFrame(stroke.shape, stroke.pts)) return null;
     // Tables are ungrouped ink. Conservatively retain group behavior for connected
@@ -5565,6 +5586,31 @@ export class InkSurface {
         },
       });
     }
+    if (sel.strokes.length > 0) {
+      actions.push({
+        id: "convert-circuitikz",
+        icon: "cpu",
+        label: "Convert to CircuitikZ",
+        group: "edit",
+        bar: true,
+        run: () => {
+          void this.convertSelectionToCircuit(sel);
+        },
+      });
+    }
+    if (sel.circuits && sel.circuits.length === 1) {
+      const circuit = sel.circuits[0];
+      actions.push({
+        id: "edit-circuit",
+        icon: "edit-3",
+        label: "Edit Circuit",
+        group: "edit",
+        bar: true,
+        run: () => {
+          this.openCircuitEditor(sel.pageId, circuit);
+        },
+      });
+    }
     actions.push({
       id: "delete",
       icon: "trash-2",
@@ -5694,6 +5740,124 @@ export class InkSurface {
     return true;
   }
 
+  /**
+   * Apply a command produced asynchronously without clearing the active selection,
+   * preserving ongoing user interactions.
+   */
+  private applyBackgroundCommand(command: Command, pageId: string, bounds?: Bounds): void {
+    this.history.push(this.doc, command);
+    this.strokeIndex.rebuild(this.doc.pages);
+    const box = this.boxForPage(pageId);
+    if (box && bounds) {
+      this.renderer?.invalidateRegion(box.index, bounds);
+    } else {
+      this.renderer?.invalidateAll();
+    }
+    this.renderDry();
+    this.changed();
+  }
+
+  /** Asynchronously converts selected ink into a CircuitikZ diagram using Gemini. */
+  private async convertSelectionToCircuit(sel: GroupSelection): Promise<void> {
+    if (this.callbacks.isLocked?.()) return;
+    const bounds = this.groupBounds(sel);
+    if (!bounds) return;
+
+    const pageId = sel.pageId;
+    const strokesToConvert = [...sel.strokes];
+    const docRef = this.doc;
+
+    // Dismiss selection immediately so user can freely write and navigate
+    this.clearSelection();
+
+    const keyStore = this.callbacks.getKeyStore?.();
+    if (!keyStore || !keyStore.get("google")?.trim()) {
+      new Notice("Google Gemini API key not found. Please set your key in Settings -> FineNotes.");
+      return;
+    }
+
+    new Notice("Converting circuit to CircuitikZ diagram...", 3000);
+
+    try {
+      const ir = await runAiCircuitConversion({
+        elements: { strokes: strokesToConvert, images: [], textBoxes: [] },
+        bounds,
+        keyStore,
+      });
+
+      // Verification checks upon return
+      if (this.doc !== docRef) return;
+      const page = pageById(this.doc, pageId);
+      if (!page) return;
+
+      const currentStrokesSet = new Set(page.strokes);
+      const intactStrokes = strokesToConvert.filter((s) => currentStrokesSet.has(s));
+
+      const w = Math.max(80, bounds.maxX - bounds.minX);
+      const h = Math.max(60, bounds.maxY - bounds.minY);
+      const circuitId = `c_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const tikz = circuitToTikz(ir);
+      const svg = renderCircuitToSvg(ir, { theme: "light", backgroundColor: "transparent" });
+
+      const circuitElement: CircuitElement = {
+        id: circuitId,
+        x: bounds.minX,
+        y: bounds.minY,
+        w,
+        h,
+        rotation: 0,
+        ir,
+        tikz,
+        svg,
+      };
+
+      if (intactStrokes.length === strokesToConvert.length) {
+        // Full match: swap handwriting with circuit
+        this.applyBackgroundCommand(
+          new ReplaceStrokesWithCircuitCommand(pageId, intactStrokes, circuitElement),
+          pageId,
+          bounds,
+        );
+        new Notice("Circuit converted to CircuitikZ diagram!", 4000);
+      } else {
+        // Partial or changed ink: add circuit non-destructively so modified ink is preserved
+        this.applyBackgroundCommand(
+          new AddCircuitCommand(pageId, circuitElement),
+          pageId,
+          bounds,
+        );
+        new Notice("Circuit diagram placed on page (handwriting was modified during conversion).", 5000);
+      }
+    } catch (err) {
+      new Notice(`Circuit conversion failed: ${errorMessage(err)}`, 6000);
+    }
+  }
+
+  /** Opens the interactive 3-view circuit editor modal. */
+  private openCircuitEditor(pageId: string, circuit: CircuitElement): void {
+    if (!this.app) {
+      new Notice("Obsidian application context unavailable.");
+      return;
+    }
+    new CircuitModal(this.app, {
+      circuit: circuit.ir,
+      onSave: (updatedIr, tikz, svg) => {
+        const next: CircuitElement = {
+          ...circuit,
+          ir: updatedIr,
+          tikz,
+          svg,
+        };
+        this.applyBackgroundCommand(
+          new UpdateCircuitCommand(pageId, circuit.id, next),
+          pageId,
+          imageBounds(circuit),
+        );
+        new Notice("Circuit updated!");
+      },
+    }).open();
+  }
+
   // --- Cut, Copy and Paste (0.5) ---------------------------------------------
   //
   // One clipboard for the whole window (`clipboard` above), holding deep
@@ -5753,7 +5917,7 @@ export class InkSurface {
       });
       // Nobody else may be left holding an unhandled rejection.
       png.catch(() => undefined);
-      if (this.callbacks.onCopySelection || (typeof navigator !== "undefined" && navigator.clipboard?.write && typeof ClipboardItem !== "undefined")) clipboard.markSelectionPng();
+      if (this.callbacks.onCopySelection || (typeof navigator !== "undefined" && Boolean(navigator.clipboard?.write) && typeof ClipboardItem !== "undefined")) clipboard.markSelectionPng();
       if (this.callbacks.onCopySelection) {
         this.callbacks.onCopySelection(png, marker);
       } else {
@@ -6105,7 +6269,6 @@ export class InkSurface {
     const box = this.boxForPage(session.pageId);
     if (box) this.renderer?.invalidateRegion(box.index, imageBounds(session.full));
     if (this.direction === "horizontal" && !this.turnsPages) {
-      if (changed && drag.targetPageId) this.pageIndex = this.doc.pages.findIndex(p => p.id === drag.targetPageId);
       this.ensurePaperSize(); this.requestFrame();
     }
     this.renderDry();

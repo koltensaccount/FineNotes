@@ -1143,6 +1143,7 @@ export class InkView extends TextFileView {
       this.doc,
       this.toolState,
       {
+        app: this.app,
         desynchronizedCanvas: this.settings.desynchronizedCanvas,
         highlighterAlpha: this.settings.highlighterAlpha,
         debug: this.showHud,
@@ -1165,6 +1166,7 @@ export class InkView extends TextFileView {
         onStatus: () => { this.matchPdfResolution(); this.refreshGuideContext(); },
         onPen: (down) => this.penActivity(down),
         isLocked: () => this.isProtected(),
+        getKeyStore: () => this.plugin.keys,
         returnToPenOnReselect: () => this.settings.returnToPenOnReselect === true,
         returnToPenAfterUse: () => this.settings.returnToPenAfterUse === true,
         onToolChange: (tool) => {
