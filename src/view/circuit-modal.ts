@@ -2381,8 +2381,9 @@ export class CircuitModal extends Modal {
     const hasErrors = this.codeDiagnostics.some((d) => d.severity === "error") ||
       (this.circuit.diagnostics || []).some((d) => d.severity === "error" || d.code === "INVALID_PORT");
     if (hasErrors) {
-      new Notice("Fix the highlighted syntax or connection errors before saving.");
-      return;
+      new Notice(this.codeDraftDirty
+        ? "Saving the current diagram. Invalid CircuitikZ edits were not applied."
+        : "Saving circuit with validation warnings.");
     }
 
     const tikz = circuitToTikz(this.circuit);

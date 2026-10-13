@@ -206,3 +206,13 @@ it.each(["pen", "touch"])(
     expect(terminalPartition(m.circuit)).toEqual(nets);
   },
 );
+
+it("allows saving the displayed circuit despite validation errors", () => {
+  const m = editor();
+  m.codeDiagnostics = [{line:1,severity:"error",message:"Unrecognized command"}];
+  m.close = vi.fn();
+  m.handleSave();
+  expect(m.onSave).toHaveBeenCalledOnce();
+  expect(m.onSave.mock.calls[0][0]).toBe(m.circuit);
+  expect(m.close).toHaveBeenCalledOnce();
+});
