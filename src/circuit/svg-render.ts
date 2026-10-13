@@ -670,7 +670,7 @@ export function renderCircuitToSvg(
       );
       if (node.label) {
         svgParts.push(
-          `<text x="${nx + 8}" y="${ny - 6}" font-size="11" font-family="monospace" fill="${dotColor}" font-weight="bold">${escapeXml(node.label)}</text>`,
+          renderLatexLabelToSvg(node.label, nx + 8, ny - 6, { fontSize: 11, color: dotColor, fontWeight: "bold" }),
         );
       }
     }

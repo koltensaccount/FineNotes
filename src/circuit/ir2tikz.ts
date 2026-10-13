@@ -1,3 +1,4 @@
+import { stripMathDelimiters } from "./math-label";
 /**
  * Bidirectional CircuitikZ LaTeX serializer and parser.
  *
@@ -184,7 +185,7 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       const x = node ? node.x : comp.x;
       const y = node ? -node.y : -comp.y;
       const tikzShape = comp.type === "node_filled" ? "circ" : "ocirc";
-      const labelPart = comp.label ? `, label={$${comp.label}$}` : "";
+      const labelPart = comp.label ? `, label={$${tikzMath(comp.label)}$}` : "";
       lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${tikzShape}${labelPart}] (${comp.id}) {};`);
       compVisited.add(comp.id);
       continue;
@@ -213,7 +214,7 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       const x = comp.x;
       const y = -comp.y;
       const opts: string[] = ["op amp"];
-      if (comp.label) opts.push(`l=$${comp.label}$`);
+      if (comp.label) opts.push(`l=$${tikzMath(comp.label)}$`);
       if (comp.rotation) {
         const tikzRot = ((-comp.rotation % 360) + 360) % 360;
         if (tikzRot !== 0) opts.push(`rotate=${tikzRot}`);
@@ -233,7 +234,7 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       else if (comp.type === "transistor_pmos") qType = "pmos";
 
       const opts: string[] = [qType];
-      if (comp.label) opts.push(`l=$${comp.label}$`);
+      if (comp.label) opts.push(`l=$${tikzMath(comp.label)}$`);
       if (comp.rotation) {
         const tikzRot = ((-comp.rotation % 360) + 360) % 360;
         if (tikzRot !== 0) opts.push(`rotate=${tikzRot}`);
@@ -303,10 +304,10 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       // Build options string
       const opts: string[] = [tikzType];
       if (comp.label) {
-        opts.push(`l=$${comp.label}$`);
+        opts.push(`l=$${tikzMath(comp.label)}$`);
       }
       if (comp.value) {
-        opts.push(`v=$${comp.value}$`);
+        opts.push(`v=$${tikzMath(comp.value)}$`);
       }
 
       lines.push(
@@ -958,4 +959,9 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
     circuit: validateAndNormalizeCircuit(circuit),
     diagnostics,
   };
+}
+
+/** Match inline SVG notation and avoid nested math delimiters in CircuitikZ. */
+function tikzMath(source: string): string {
+  return stripMathDelimiters(source);
 }

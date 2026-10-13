@@ -66,6 +66,10 @@ The terminal offsets below are at rotation 0. Resistors/capacitors/diodes are ho
 ${terminalGuide}
 
 Copy labels and values as drawn; omit unreadable values and explain in uncertainties.
+Finally perform a typography-only label cleanup. Preserve each label's meaning, case, numerical value, sign, decimal precision, unit prefix, polarity, and association with its original component or node. Never rename or renumber components, calculate values, convert units, or repair an unconventional circuit.
+Use concise inline LaTeX for clearly intended mathematical notation: R_1, V_{in}, I_D, and V_{GS}; use subscripts only when the drawing clearly indicates an index or qualifier, not for arbitrary words. Keep ordinary names as plain text.
+Use upright units and a thin space after a number: 10\\,\\mathrm{k}\\Omega, 100\\,\\mathrm{nF}, 5\\,\\mathrm{V}. Preserve lowercase/uppercase prefixes exactly (m is not M). Use Greek LaTeX commands only for clearly identifiable symbols. Do not invent units or add labels absent from the drawing.
+Store math expressions WITHOUT dollar signs, display delimiters, environments, or document-level commands. Escape LaTeX backslashes correctly in JSON. Check braces and sub/superscripts before returning. If a character, unit prefix, or label is ambiguous, record it in uncertainties instead of choosing prettier notation.
 Respond only with JSON. This is a complete electrically valid RC example, not a template to impose on the image:
 ${JSON.stringify(RECOGNITION_EXAMPLE, null, 2)}`;
 

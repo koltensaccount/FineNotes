@@ -339,7 +339,8 @@ export function formatSvgTextFallback(source: string): string {
 
   // 3. Simple fraction fallback: \frac{A}{B} -> A/B
   text = text.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2");
-  text = text.replace(/\\text\{([^{}]+)\}/g, "$1");
+  text = text.replace(/\\(?:text|mathrm)\{([^{}]+)\}/g, "$1");
+  text = text.replace(/\\[,;:!]/g, " ").replace(/\\times/g, "×").replace(/\\cdot/g, "·");
 
   // 4. Handle subscripts X_{abc} or X_a
   text = text.replace(/_\{([^{}]+)\}/g, '<tspan baseline-shift="sub" font-size="0.75em">$1</tspan>');

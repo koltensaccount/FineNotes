@@ -1,3 +1,5 @@
+import { circuitToTikz } from "../../src/circuit/ir2tikz";
+import { editorFixture } from "./editor-fixture";
 import { describe, expect, it } from "vitest";
 import {
   formatSvgTextFallback,
@@ -46,4 +48,21 @@ describe("Circuit LaTeX Math Labels", () => {
     expect(svgPlain).toContain('y="75"');
     expect(svgPlain).toContain("10k");
   });
+});
+
+it("renders upright SI units and spacing without leaking LaTeX commands", () => {
+  const text = formatSvgTextFallback("10\\,\\mathrm{k}\\Omega");
+  expect(text).toBe("10 kΩ");
+  expect(formatSvgTextFallback("100\\,\\mathrm{nF}")).toBe("100 nF");
+  expect(formatSvgTextFallback("5\\,\\mathrm{mV}")).not.toBe(formatSvgTextFallback("5\\,\\mathrm{MV}"));
+});
+
+it("exports inline LaTeX labels and values with exactly one math wrapper", () => {
+  const c = editorFixture();
+  c.components.r.label = "$R_1$";
+  c.components.r.value = "$10\\,\\mathrm{k}\\Omega$";
+  const code = circuitToTikz(c);
+  expect(code).toContain("l=$R_1$");
+  expect(code).toContain("v=$10\\,\\mathrm{k}\\Omega$");
+  expect(code).not.toContain("$$");
 });
