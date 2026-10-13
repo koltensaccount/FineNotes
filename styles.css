@@ -7229,3 +7229,23 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   color: #0f172a;
 }
 
+
+/* Circuit editing reserves space for mode hints, keeping pointer coordinates stable. */
+.goodobsidian-circuit-banner-container { min-height: 44px; flex: 0 0 44px; overflow: hidden; }
+.goodobsidian-circuit-toolbar { flex-wrap: nowrap; overflow-x: auto; flex: 0 0 auto; scrollbar-width: none; padding: 6px; }
+.goodobsidian-circuit-toolbar > *, .goodobsidian-circuit-toolbar .goodobsidian-circuit-btn { flex-shrink: 0; }
+.goodobsidian-circuit-toolbar .goodobsidian-circuit-btn { padding: 6px 10px; }
+.goodobsidian-circuit-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.goodobsidian-circuit-workspace:not(.has-details) > .goodobsidian-circuit-context { display: none; }
+.goodobsidian-circuit-workspace.has-details { grid-template-columns: minmax(0, 1fr) 280px; }
+.goodobsidian-circuit-layout-menu { position: relative; }
+.goodobsidian-circuit-layout-menu > summary { min-height: 44px; display: flex; align-items: center; padding: 6px 10px; cursor: pointer; border-radius: var(--gob-radius-m); }
+.goodobsidian-circuit-layout-actions { display: flex; gap: 4px; }
+.goodobsidian-circuit-layout-menu:not([open]) .goodobsidian-circuit-layout-actions { display: none; }
+@media (max-width: 900px) {
+  .goodobsidian-circuit-workspace.has-details { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(200px, 1fr) minmax(0, 28%); }
+  .goodobsidian-circuit-workspace:not(.has-details) { grid-template-rows: minmax(0, 1fr); }
+}
+.goodobsidian-circuit-layout-menu[open] { display: flex; align-items: center; }
+.goodobsidian-circuit-banner { box-sizing: border-box; height: 44px; margin: 0; padding: 0 10px; align-items: center; }
+.goodobsidian-circuit-review-issues { min-height: 24px; }

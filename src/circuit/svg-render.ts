@@ -536,7 +536,7 @@ export function renderCircuitToSvg(
     }
 
     // Optional port pins indicator
-    if (options.showPorts) {
+    if (options.showPorts || (options.interactiveOverlay && isHighlighted)) {
       const def = COMPONENT_CATALOG[comp.type];
       if (def) {
         for (const port of def.ports) {
