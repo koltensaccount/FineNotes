@@ -144,6 +144,8 @@ export interface ScrollExtent {
    */
   leadX?: number;
   trailX?: number;
+  /** Extra room to scroll past the content's bottom edge (e.g. while editing above on-screen keyboard). */
+  trailY?: number;
   /** Stretch sideways even when nothing is wider than the pane (a one-page row). */
   alwaysBounceX?: boolean;
   /**
@@ -263,7 +265,8 @@ export class KineticScroller {
       this.minX = range.min;
       this.maxX = Math.max(range.min, range.max);
     }
-    this.maxY = Math.max(0, extent.contentHeight - extent.viewportHeight);
+    const trailY = Math.max(0, extent.trailY ?? 0);
+    this.maxY = Math.max(0, extent.contentHeight - extent.viewportHeight + trailY);
     this.bounceX =
       extent.alwaysBounceX === true ||
       extent.contentWidth + lead + trail > extent.viewportWidth + 0.5;

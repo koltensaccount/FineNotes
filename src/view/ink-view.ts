@@ -1151,6 +1151,13 @@ export class InkView extends TextFileView {
       },
       {
         onRecentColors: (colors) => this.plugin.saveRecentColors(colors),
+        onOpenLink: (target) => {
+          if (/^https?:\/\//i.test(target)) {
+            window.open(target, "_blank");
+          } else {
+            void this.app.workspace.openLinkText(target, this.file?.path ?? "", false);
+          }
+        },
         onChange: () => {
           if (this.surface) this.sidebar?.setDocument(this.surface.document);
           // Undoing or redoing "Convert to notebook" flips `single`.

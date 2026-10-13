@@ -261,6 +261,7 @@ import {
   textStyleOf,
 } from "../model/text-style";
 import { type ListKind, type TextEdit, continueList, toggleList } from "../model/text-list";
+import { isWebUrl, tokenizeTextBoxLinks } from "../model/text-box-links";
 import { keyboardHeight } from "./keyboard";
 import { DEFAULT_SHAPE_COLOR, pushRecentColor, sameColor } from "../model/colors";
 import {
@@ -437,6 +438,8 @@ export interface InkSurfaceCallbacks {
    * page cleared, an undo or redo — and is due to be saved.
    */
   onChange: () => void;
+  /** Open an internal vault note or external link tapped in a text box. */
+  onOpenLink?: (target: string) => void;
   onCopyPdfRegion?: (page: Page, region: PdfRegion) => Promise<File>;
   onCopyPdfClipboard?: (png: Promise<File>, marker: string) => void;
   onCopySelection?: (png: Promise<Blob>, marker: string) => void;
@@ -536,6 +539,7 @@ interface PenGesture {
 interface TextBoxView {
   root: HTMLElement;
   input: HTMLTextAreaElement;
+  display: HTMLElement;
   pageId: string;
   id: string;
   /** Width + font size the auto-height was last measured at; skips needless reflow. */
@@ -2213,6 +2217,7 @@ export class InkSurface {
       row && !this.turnsPages && !this.draggingBetweenPages
         ? rowPageScrollRange(this.pageLayout, this.pageIndex, scale, this.cssW)
         : undefined;
+    const extraBottom = this.editingTextView() ? Math.max(keyboardHeight(), 320) : 0;
     this.scroller.setExtent({
       contentWidth: width,
       contentHeight: height,
@@ -2220,6 +2225,7 @@ export class InkSurface {
       viewportHeight: this.cssH,
       leadX: insets.lead,
       trailX: insets.trail,
+      trailY: extraBottom,
       // Even a one-page row stretches sideways, so it can be pulled to add a page.
       alwaysBounceX: row,
       rangeX,
@@ -2713,6 +2719,25 @@ export class InkSurface {
           height: fixedHeight ? `${100 / shrink}%` : input.style.height,
           transform: shrink < 1 ? `scale(${shrink})` : "",
         });
+        view.display.setCssStyles({
+          fontSize: `${(fontPx / shrink).toFixed(2)}px`,
+          fontFamily: fontFamilyOf(textBox),
+          fontWeight: textBox.bold ? "700" : "400",
+          fontStyle: textBox.italic ? "italic" : "normal",
+          textDecoration: textDecorationOf(textBox),
+          textAlign: textBox.align ?? "left",
+          lineHeight: String(lineHeight),
+          padding: `${(TEXT_PAD_Y * unit).toFixed(2)}px ${(TEXT_PAD_X * unit).toFixed(2)}px`,
+          minHeight: fixedHeight
+            ? "0"
+            : `${((textBox.fontSize * lineHeight + 2 * TEXT_PAD_Y) * unit).toFixed(2)}px`,
+          color: textBox.color,
+          width: `${100 / shrink}%`,
+          height: fixedHeight ? `${100 / shrink}%` : view.display.style.height,
+          transform: shrink < 1 ? `scale(${shrink})` : "",
+          transformOrigin: "top left",
+        });
+        this.updateTextBoxDisplay(view, textBox.text);
         view.styleKey = `${input.style.fontFamily}|${input.style.fontWeight}|${input.style.fontStyle}|${lineHeight}|${input.style.padding}`;
         if (!fixedHeight) this.autoSize(view, heightModeChanged);
       }
@@ -2738,13 +2763,14 @@ export class InkSurface {
 
   /** Grow an auto-height box to fit its text. Measures only when something changed. */
   private autoSize(view: TextBoxView, force: boolean): void {
-    const { input, root } = view;
+    const { input, display, root } = view;
     const key = `${root.style.width}|${input.style.fontSize}|${view.shrink}|${view.styleKey}`;
     if (!force && view.measuredAt === key) return;
     view.measuredAt = key;
     input.setCssStyles({ height: "auto" });
     const h = input.scrollHeight;
     input.setCssStyles({ height: `${h}px` });
+    display.setCssStyles({ height: `${h}px` });
     // The transform does not affect layout, so the frame is sized explicitly.
     root.setCssStyles({ height: `${Math.ceil(h * view.shrink)}px` });
   }
@@ -2778,10 +2804,34 @@ export class InkSurface {
     return view.fitW;
   }
 
+  private updateTextBoxDisplay(view: TextBoxView, text: string): void {
+    const { display } = view;
+    if (!display) return;
+    display.empty();
+    const tokens = tokenizeTextBoxLinks(text);
+    for (const token of tokens) {
+      if (token.type === "link" && token.target) {
+        display.createSpan({
+          cls: "goodobsidian-textbox-link",
+          text: token.text,
+          attr: {
+            "data-link-target": token.target,
+            "data-is-url": token.isUrl ? "true" : "false",
+          },
+        });
+      } else {
+        display.createSpan({ text: token.text });
+      }
+    }
+  }
+
   private createTextBoxView(pageId: string, textBox: TextBoxElement, key: string): TextBoxView {
     const root = this.textBoxesEl.createDiv({
       cls: "goodobsidian-page-textbox",
       attr: { "data-textbox-key": key },
+    });
+    const display = root.createDiv({
+      cls: "goodobsidian-page-textbox-display",
     });
     const input = root.createEl("textarea", {
       cls: "goodobsidian-page-textbox-input",
@@ -2799,6 +2849,7 @@ export class InkSurface {
     const view: TextBoxView = {
       root,
       input,
+      display,
       pageId,
       id: textBox.id,
       measuredAt: "",
@@ -2808,6 +2859,27 @@ export class InkSurface {
       fitKey: "",
       fitW: textBox.w,
     };
+    this.updateTextBoxDisplay(view, textBox.text);
+
+    display.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      const targetEl = (event.target as HTMLElement).closest(".goodobsidian-textbox-link");
+      if (targetEl && this.toolState.tool !== "text") {
+        event.preventDefault();
+        const target = targetEl.getAttribute("data-link-target");
+        if (target) {
+          if (this.callbacks.onOpenLink) {
+            this.callbacks.onOpenLink(target);
+          } else if (isWebUrl(target)) {
+            window.open(target, "_blank");
+          }
+        }
+        return;
+      }
+      if (document.activeElement !== input) this.pendingFocusHold = this.scrollSnapshot();
+      root.addClass("is-editing");
+      input.focus();
+    });
 
     // Text editing must never start an ink gesture on the scroll overlay
     // beneath it. Snapshot the scroll position before the browser focuses the
@@ -2817,6 +2889,8 @@ export class InkSurface {
       if (document.activeElement !== input) this.pendingFocusHold = this.scrollSnapshot();
     });
     input.addEventListener("focus", () => {
+      root.addClass("is-editing");
+      this.ensurePaperSize();
       // Typing again in a kept box, or in another one: nothing is held now.
       if (this.heldText === view) {
         this.heldText = null;
@@ -2830,6 +2904,9 @@ export class InkSurface {
       if (live) this.callbacks.onTextEditing?.(textStyleOf(live));
     });
     input.addEventListener("blur", (event) => {
+      root.removeClass("is-editing");
+      this.ensurePaperSize();
+      this.updateTextBoxDisplay(view, input.value);
       if (!this.renderer) return;
       // A handle drag finishes the edit itself when it lets go.
       if (root.hasClass("is-dragging")) return;
@@ -2853,6 +2930,7 @@ export class InkSurface {
       const live = this.liveTextBox(pageId, textBox.id);
       if (!live) return;
       live.text = input.value;
+      this.updateTextBoxDisplay(view, input.value);
       // A fitted box widens with its text: a full sync sets the width first.
       // The height is measured after it either way: a new line adds height
       // without changing the width, which the sync's own measure keys on.

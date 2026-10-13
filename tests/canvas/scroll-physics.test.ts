@@ -472,4 +472,41 @@ describe("KineticScroller: page glide", () => {
     expect(s.position.y).toBe(300);
     expect(s.glideTarget).toBeNull();
   });
+
+  it("trailY expands vertical scroll bounds and pulls back when cleared", () => {
+    const s = new KineticScroller();
+    // One page fitting the screen exactly
+    s.setExtent({
+      contentWidth: 800,
+      contentHeight: 600,
+      viewportWidth: 800,
+      viewportHeight: 600,
+    });
+    expect(s.bounds.maxY).toBe(0);
+
+    // Editing text adds keyboard inset (trailY)
+    s.setExtent({
+      contentWidth: 800,
+      contentHeight: 600,
+      viewportWidth: 800,
+      viewportHeight: 600,
+      trailY: 300,
+    });
+    expect(s.bounds.maxY).toBe(300);
+
+    // Scroll up into the extra space
+    s.setPosition(0, 250);
+    expect(s.position.y).toBe(250);
+
+    // When editing ends, trailY returns to 0 and position springs back to bounds
+    s.setExtent({
+      contentWidth: 800,
+      contentHeight: 600,
+      viewportWidth: 800,
+      viewportHeight: 600,
+    });
+    expect(s.bounds.maxY).toBe(0);
+    settle(s, 0);
+    expect(s.position.y).toBe(0);
+  });
 });

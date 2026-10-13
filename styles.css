@@ -1536,6 +1536,58 @@ body,
   transform-origin: 0 0;
 }
 
+.goodobsidian-page-textbox-display {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  overflow: hidden;
+  background: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  user-select: text;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.goodobsidian-page-textbox.has-fixed-height .goodobsidian-page-textbox-display {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.goodobsidian-page-textbox.is-editing .goodobsidian-page-textbox-display {
+  display: none;
+}
+
+.goodobsidian-page-textbox.is-editing .goodobsidian-page-textbox-input {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.goodobsidian-page-textbox:not(.is-editing) .goodobsidian-page-textbox-display {
+  display: block;
+  pointer-events: auto;
+}
+
+.goodobsidian-page-textbox:not(.is-editing) .goodobsidian-page-textbox-input {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.goodobsidian-textbox-link {
+  color: var(--text-accent, var(--interactive-accent, #705dcf));
+  text-decoration: underline;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.goodobsidian-textbox-link:hover {
+  filter: brightness(1.15);
+}
+
 /* While a page text box is being edited on mobile, let the on-screen keyboard
    cover the lower part of the page instead of shrinking Obsidian's window.
    On iPad, Obsidian's `max-height: calc(100vh - var(--keyboard-height))` cap
