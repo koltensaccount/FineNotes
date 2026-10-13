@@ -396,7 +396,7 @@ export function renderCircuitToSvg(
   const svgParts: string[] = [];
 
   svgParts.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" data-finenotes-renderer="2" viewBox="${viewMinX} ${viewMinY} ${viewWidth} ${viewHeight}" width="100%" height="100%">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" data-finenotes-renderer="2" viewBox="${viewMinX} ${viewMinY} ${viewWidth} ${viewHeight}" width="100%" height="100%">`,
   );
 
   // Optional background

@@ -99,16 +99,9 @@ function tryRenderWithObsidianMathJax(
     const targetH = vbH * scale;
 
     // Extract sanitized inner HTML (glyph defs and g elements)
-    let inner = svgEl.innerHTML
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-      .replace(/on\w+="[^"]*"/g, "");
-
-    // Scope glyph IDs with a {{SCOPE}} placeholder to eliminate collisions across components
-    // and provide both modern href and legacy xlink:href for reliable PDF export.
-    inner = inner
-      .replace(/\bid="(MJX-[^"]+)"/g, 'id="{{SCOPE}}_$1"')
-      .replace(/\bhref="#(MJX-[^"]+)"/g, 'href="#{{SCOPE}}_$1" xlink:href="#{{SCOPE}}_$1"')
-      .replace(/\bxlink:href="#(MJX-[^"]+)"/g, 'xlink:href="#{{SCOPE}}_$1"');
+    // using proper DOM/XML manipulation to guarantee unique IDs, valid references,
+    // and no duplicate attributes.
+    const inner = scopeMathJaxGlyphs(svgEl, "{{SCOPE}}");
 
     return {
       svgContent: `<g fill="${color}" stroke="${color}" transform="scale(${scale.toFixed(4)})">${inner}</g>`,
@@ -119,6 +112,214 @@ function tryRenderWithObsidianMathJax(
   } catch {
     return null;
   }
+}
+
+/**
+ * Scopes element IDs and glyph references within MathJax SVG markup using proper DOM/XML manipulation.
+ *
+ * Ensures:
+ * 1. All defined element IDs are prefixed with `scopeId`.
+ * 2. All `<use>` references (and any elements referencing IDs via `href` or `xlink:href`)
+ *    point to the scoped ID.
+ * 3. Both modern `href` and legacy `xlink:href` are provided for PDF export compatibility.
+ * 4. No duplicate attributes exist (preventing regex collisions between `href` and `xlink:href`).
+ * 5. Scripts and inline event handlers (`on*`) are sanitized.
+ */
+export function scopeMathJaxGlyphs(
+  input: Element | string,
+  scopeId: string,
+): string {
+  if (typeof input !== "string") {
+    return scopeMathJaxElement(input, scopeId);
+  }
+
+  if (typeof DOMParser !== "undefined") {
+    try {
+      const isSvgTag = /^\s*<svg\b/i.test(input);
+      const wrapped = isSvgTag
+        ? input
+        : `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${input}</svg>`;
+      const doc = new DOMParser().parseFromString(wrapped, "image/svg+xml");
+      const parserError = doc.querySelector("parsererror");
+      if (!parserError && doc.documentElement) {
+        scopeMathJaxElement(doc.documentElement, scopeId);
+        return isSvgTag ? doc.documentElement.outerHTML : doc.documentElement.innerHTML;
+      }
+    } catch {
+      // Fall through to XML parser below
+    }
+  }
+
+  return scopeMathJaxXml(input, scopeId);
+}
+
+function scopeMathJaxElement(svgEl: Element, scopeId: string): string {
+  // 1. Remove any <script> elements
+  const scripts = svgEl.querySelectorAll("script");
+  for (let i = 0; i < scripts.length; i++) {
+    scripts[i].remove();
+  }
+
+  // 2. Remove inline on* event handler attributes
+  const allElements = svgEl.querySelectorAll("*");
+  for (let i = 0; i < allElements.length; i++) {
+    const el = allElements[i];
+    const toRemove: string[] = [];
+    for (let j = 0; j < el.attributes.length; j++) {
+      const attr = el.attributes[j];
+      if (attr.name.toLowerCase().startsWith("on")) {
+        toRemove.push(attr.name);
+      }
+    }
+    for (const name of toRemove) {
+      el.removeAttribute(name);
+    }
+  }
+
+  // 3. Ensure xmlns:xlink is present if the element is <svg>
+  if (svgEl.tagName.toLowerCase() === "svg" && !svgEl.hasAttribute("xmlns:xlink")) {
+    svgEl.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  }
+
+  // 4. Map all element IDs to scoped IDs
+  const idMap = new Map<string, string>();
+  const elementsWithId = svgEl.querySelectorAll("[id]");
+  for (let i = 0; i < elementsWithId.length; i++) {
+    const el = elementsWithId[i];
+    const oldId = el.getAttribute("id");
+    if (oldId) {
+      const newId = `${scopeId}_${oldId}`;
+      idMap.set(oldId, newId);
+      el.setAttribute("id", newId);
+    }
+  }
+
+  // 5. Update all glyph references (use elements or anything with href/xlink:href)
+  const useElements = svgEl.querySelectorAll("use, [href], [*|href]");
+  for (let i = 0; i < useElements.length; i++) {
+    const el = useElements[i];
+    const href = el.getAttribute("href");
+    const xlinkHref = el.getAttribute("xlink:href") || el.getAttributeNS("http://www.w3.org/1999/xlink", "href");
+
+    let refTarget: string | null = null;
+    if (href && href.startsWith("#")) {
+      refTarget = href.slice(1);
+    } else if (xlinkHref && xlinkHref.startsWith("#")) {
+      refTarget = xlinkHref.slice(1);
+    }
+
+    if (refTarget) {
+      const newRef = idMap.has(refTarget) ? idMap.get(refTarget)! : `${scopeId}_${refTarget}`;
+      el.setAttribute("href", `#${newRef}`);
+      el.setAttribute("xlink:href", `#${newRef}`);
+    }
+  }
+
+  // 6. Update any url(#id) references in attributes
+  for (let i = 0; i < allElements.length; i++) {
+    const el = allElements[i];
+    for (let j = 0; j < el.attributes.length; j++) {
+      const attr = el.attributes[j];
+      if (attr.value && attr.value.includes("url(#")) {
+        let updatedVal = attr.value;
+        for (const [oldId, newId] of idMap.entries()) {
+          updatedVal = updatedVal.split(`url(#${oldId})`).join(`url(#${newId})`);
+        }
+        if (updatedVal !== attr.value) {
+          el.setAttribute(attr.name, updatedVal);
+        }
+      }
+    }
+  }
+
+  return svgEl.innerHTML;
+}
+
+function scopeMathJaxXml(xmlString: string, scopeId: string): string {
+  // Strip scripts
+  let xml = xmlString.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+
+  // Tag matcher: captures (fullTag, isClosing, tagName, attrString, isSelfClosing)
+  const tagRegex = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z0-9:_-]+)((?:\s+[^\s=/>]+(?:\s*=\s*(?:"[^"]*"|\x27[^\x27]*\x27|[^\s/>]+))?)*)\s*(\/?)>/g;
+
+  // Pass 1: Collect IDs
+  const idMap = new Map<string, string>();
+  let tagMatch: RegExpExecArray | null;
+  while ((tagMatch = tagRegex.exec(xml)) !== null) {
+    const [fullTag, isClosing, , attrString] = tagMatch;
+    if (fullTag.startsWith("<!--") || isClosing || !attrString) continue;
+
+    const attrRegex = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|\x27([^\x27]*)\x27|([^\s/>]+)))?/g;
+    let aMatch: RegExpExecArray | null;
+    while ((aMatch = attrRegex.exec(attrString)) !== null) {
+      if (aMatch[1] === "id") {
+        const idVal = aMatch[2] ?? aMatch[3] ?? aMatch[4];
+        if (idVal && !idMap.has(idVal)) {
+          idMap.set(idVal, `${scopeId}_${idVal}`);
+        }
+      }
+    }
+  }
+
+  // Pass 2: Reconstruct tags with scoped IDs and references
+  return xml.replace(tagRegex, (fullTag, isClosing, tagName, attrString, isSelfClosing) => {
+    if (fullTag.startsWith("<!--")) return fullTag;
+    if (isClosing) return `</${tagName}>`;
+
+    const attrs = new Map<string, string>();
+    if (attrString) {
+      const attrRegex = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|\x27([^\x27]*)\x27|([^\s/>]+)))?/g;
+      let aMatch: RegExpExecArray | null;
+      while ((aMatch = attrRegex.exec(attrString)) !== null) {
+        const name = aMatch[1];
+        const val = aMatch[2] ?? aMatch[3] ?? aMatch[4] ?? "";
+        if (!name.toLowerCase().startsWith("on")) {
+          attrs.set(name, val);
+        }
+      }
+    }
+
+    if (tagName.toLowerCase() === "svg") {
+      if (!attrs.has("xmlns:xlink")) {
+        attrs.set("xmlns:xlink", "http://www.w3.org/1999/xlink");
+      }
+    }
+
+    if (attrs.has("id")) {
+      const oldId = attrs.get("id")!;
+      attrs.set("id", idMap.get(oldId) ?? `${scopeId}_${oldId}`);
+    }
+
+    let refTarget: string | null = null;
+    if (attrs.has("href") && attrs.get("href")!.startsWith("#")) {
+      refTarget = attrs.get("href")!.slice(1);
+    } else if (attrs.has("xlink:href") && attrs.get("xlink:href")!.startsWith("#")) {
+      refTarget = attrs.get("xlink:href")!.slice(1);
+    }
+
+    if (refTarget) {
+      const newRef = idMap.has(refTarget) ? idMap.get(refTarget)! : `${scopeId}_${refTarget}`;
+      attrs.set("href", `#${newRef}`);
+      attrs.set("xlink:href", `#${newRef}`);
+    }
+
+    for (const [name, val] of attrs.entries()) {
+      if (val && val.includes("url(#")) {
+        let updatedVal = val;
+        for (const [oldId, newId] of idMap.entries()) {
+          updatedVal = updatedVal.split(`url(#${oldId})`).join(`url(#${newId})`);
+        }
+        attrs.set(name, updatedVal);
+      }
+    }
+
+    let res = `<${tagName}`;
+    for (const [k, v] of attrs) {
+      const escapedVal = v.replace(/"/g, "&quot;");
+      res += ` ${k}="${escapedVal}"`;
+    }
+    return res + (isSelfClosing ? " />" : ">");
+  });
 }
 
 /**
@@ -197,7 +398,7 @@ export function renderLatexLabelToSvg(
     if (anchor === "middle") offsetX = -mathResult.width / 2;
     else if (anchor === "end") offsetX = -mathResult.width;
 
-    const template = `<g transform="translate({{X}}, {{Y}})"${extraAttr} data-latex-source="${escapeXml(cleanSource)}">` +
+    const template = `<g transform="translate({{X}}, {{Y}})"${extraAttr} data-latex-source="${escapeXml(cleanSource)}" xmlns:xlink="http://www.w3.org/1999/xlink">` +
       `<g transform="translate(${offsetX.toFixed(2)}, ${(-mathResult.yOffset / 2).toFixed(2)})">` +
       mathResult.svgContent +
       `</g></g>`;
