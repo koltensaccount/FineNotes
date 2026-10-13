@@ -95,7 +95,7 @@ for (const viewport of [
   );
   assert(await page.locator(".goodobsidian-circuit-original").evaluate(el => el.open));
   assert(await page.locator(".goodobsidian-circuit-original img").isVisible());
-  await page.getByRole("button", { name: "Properties", exact: true }).first().click();
+  // Gemini integrated Properties into the live visual workspace.
   assert(await page.locator(".goodobsidian-visual-stage > svg").isVisible());
   await page.getByRole("button", { name: "Select", exact: true }).click();
   const resistor = await screen(8, 2);
@@ -111,7 +111,7 @@ for (const viewport of [
   const colors = await deletion.evaluate(el => ({fg:getComputedStyle(el).color,bg:getComputedStyle(el).backgroundColor}));
   assert.notEqual(colors.fg, colors.bg);
   await page.getByRole("button", { name: "Visual", exact: true }).click();
-  assert(!(await inspector.isVisible()));
+  assert(await inspector.isVisible());
   assert(await page.locator(".goodobsidian-circuit-original img").isVisible());
   await page.getByRole("button", { name: "Use circuit", exact: true }).click();
   assert(await page.evaluate(() => saved?.wires.length > 3));

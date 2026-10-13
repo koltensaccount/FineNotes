@@ -66,3 +66,10 @@ it("exports inline LaTeX labels and values with exactly one math wrapper", () =>
   expect(code).toContain("v=$10\\,\\mathrm{k}\\Omega$");
   expect(code).not.toContain("$$");
 });
+
+it("renders infinity and common electrical notation without partial command matches", () => {
+  expect(formatSvgTextFallback("R_{in} = \\infty")).toContain("∞");
+  expect(formatSvgTextFallback("\\pm 5\\% \\approx \\infty")).toContain("±");
+  expect(formatSvgTextFallback("\\thetasomething")).toContain("\\thetasomething");
+  expect(renderLatexLabelToSvg("\\infty", 0, 0)).toContain("∞");
+});

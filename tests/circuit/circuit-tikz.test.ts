@@ -727,3 +727,12 @@ describe("CircuitikZ Serializer & Parser", () => {
 
 
 
+
+it("round-trips standalone labels with nested math braces", () => {
+  const code = String.raw`\begin{circuitikz}
+\draw (0, 0) node (label1) {$V_{out}=\frac{V_{in}}{2}$};
+\end{circuitikz}`;
+  const result = tikzToCircuit(code);
+  const label = Object.values(result.circuit.components).find(c => c.type === "text_label");
+  expect(label?.label).toBe(String.raw`V_{out}=\frac{V_{in}}{2}`);
+});

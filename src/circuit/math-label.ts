@@ -33,6 +33,15 @@ const GREEK_SYMBOLS: Record<string, string> = {
   "\\phi": "φ",
   "\\omega": "ω",
   "\\Omega": "Ω",
+  "\\infty": "∞",
+  "\\pm": "±",
+  "\\mp": "∓",
+  "\\neq": "≠",
+  "\\approx": "≈",
+  "\\leq": "≤",
+  "\\geq": "≥",
+  "\\angle": "∠",
+  "\\degree": "°",
 };
 
 /** Checks whether a string contains LaTeX math syntax */
@@ -333,9 +342,7 @@ export function formatSvgTextFallback(source: string): string {
   text = escapeXml(text);
 
   // 2. Replace common Greek macros with Unicode glyphs
-  for (const [macro, glyph] of Object.entries(GREEK_SYMBOLS)) {
-    text = text.split(macro).join(glyph);
-  }
+  text = text.replace(/\\[a-zA-Z]+/g, (command) => GREEK_SYMBOLS[command] ?? command);
 
   // 3. Simple fraction fallback: \frac{A}{B} -> A/B
   text = text.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2");
@@ -415,7 +422,7 @@ export function renderLatexLabelToSvg(
   const formatted = formatSvgTextFallback(source);
   const svgFallback = `<text x="{{X}}" y="{{Y}}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${color}" text-anchor="${anchor}"${extraAttr} data-latex-source="${escapeXml(cleanSource)}">${formatted}</text>`;
 
-  MATH_SVG_CACHE.set(cacheKey, svgFallback);
+  // Do not cache a limited fallback: MathJax may become ready on a later render.
   return svgFallback
     .replace(/\{\{X\}\}/g, String(x))
     .replace(/\{\{Y\}\}/g, String(y))

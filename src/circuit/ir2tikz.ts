@@ -667,7 +667,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
 
     // 2b. Standalone text node: \draw (x, y) node (id) {text}; or \node at (x, y) {text};
     const textNodeMatch = rawLine.match(
-      /^(?:\\draw\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*node(?:\s*\[([^\]]*)\])?(?:\s*\(([a-zA-Z0-9_-]+)\))?\s*\{([^}]*)\}\s*;|\\node(?:\s*\[([^\]]*)\])?\s*at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)(?:\s*\(([a-zA-Z0-9_-]+)\))?\s*\{([^}]*)\}\s*;)/i,
+      /^(?:\\draw\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*node(?:\s*\[([^\]]*)\])?(?:\s*\(([a-zA-Z0-9_-]+)\))?\s*\{(.*)\}\s*;|\\node(?:\s*\[([^\]]*)\])?\s*at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)(?:\s*\(([a-zA-Z0-9_-]+)\))?\s*\{(.*)\}\s*;)/i,
     );
     if (textNodeMatch) {
       const xStr = textNodeMatch[1] ?? textNodeMatch[7];
