@@ -30,6 +30,9 @@ import {
 } from "../circuit/wire-geometry";
 
 const COMMON_COMPONENT_ORDER: ComponentType[] = [
+  "text_label",
+  "node_filled",
+  "node_open",
   "resistor",
   "capacitor",
   "inductor",
@@ -38,8 +41,6 @@ const COMMON_COMPONENT_ORDER: ComponentType[] = [
   "vsource",
   "isource",
   "ground",
-  "node_filled",
-  "node_open",
   "potentiometer",
   "ac_source",
   "switch_spst",
@@ -197,29 +198,49 @@ export class CircuitModal extends Modal {
     contentEl.empty();
     contentEl.addClass("goodobsidian-circuit-modal-content");
 
+    const isEditingText = (evt?: KeyboardEvent): boolean => {
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable ||
+          Boolean(active.closest("input, textarea, select, [contenteditable='true'], .goodobsidian-blocks-inspector, .goodobsidian-circuit-context")))
+      ) {
+        return true;
+      }
+      const target = evt?.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable ||
+          Boolean(target.closest("input, textarea, select, [contenteditable='true'], .goodobsidian-blocks-inspector, .goodobsidian-circuit-context")))
+      ) {
+        return true;
+      }
+      return false;
+    };
+
     // Register keyboard shortcuts
     this.scope.register(["Mod"], "z", (evt) => {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") {
-        return;
-      }
+      if (isEditingText(evt)) return;
       evt.preventDefault();
       this.undo();
       return false;
     });
     this.scope.register(["Mod", "Shift"], "z", (evt) => {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") {
-        return;
-      }
+      if (isEditingText(evt)) return;
       evt.preventDefault();
       this.redo();
       return false;
     });
-    this.scope.register([], "Backspace", () => {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
+    this.scope.register([], "Backspace", (evt) => {
+      if (isEditingText(evt)) return;
       this.handleDeleteSelected();
     });
-    this.scope.register([], "Delete", () => {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
+    this.scope.register([], "Delete", (evt) => {
+      if (isEditingText(evt)) return;
       this.handleDeleteSelected();
     });
     this.scope.register([], "Escape", () => {
@@ -268,8 +289,7 @@ export class CircuitModal extends Modal {
     this.visualViewEl = this.bodyContainerEl.createDiv({ cls: "goodobsidian-circuit-view is-visual" });
     this.visualToolbarEl = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-toolbar" });
     this.visualBannerEl = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-banner-container" });
-    const workspace = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-workspace" });
-    workspace.toggleClass("has-details", Boolean(this.recognitionReview));
+    const workspace = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-workspace has-details" });
     this.visualStageEl = workspace.createDiv({ cls: "goodobsidian-visual-stage" });
     const aside = workspace.createDiv({ cls: "goodobsidian-circuit-context" });
     if (this.recognitionReview) {
@@ -287,6 +307,7 @@ export class CircuitModal extends Modal {
       };
     }
     this.visualInspectorEl = aside.createDiv({ cls: "goodobsidian-blocks-inspector goodobsidian-circuit-context-inspector" });
+    this.visualInspectorEl.addEventListener("keydown", (e) => e.stopPropagation(), true);
 
     // Mount pointer event handlers ONCE on the persistent visualStageEl
     this.visualStageEl.onpointerdown = (ev) => this.handleStagePointerDown(ev);
@@ -317,7 +338,6 @@ export class CircuitModal extends Modal {
 
     const tabs: Array<{ id: CircuitEditorTab; label: string; icon: string }> = [
       { id: "visual", label: "Visual", icon: "layout-grid" },
-      { id: "blocks", label: "Properties", icon: "sliders" },
       { id: "code", label: "CircuitikZ Code", icon: "code" },
     ];
 
@@ -342,14 +362,12 @@ export class CircuitModal extends Modal {
 
     this.visualViewEl.toggleClass("is-hidden", tab === "code");
     this.blocksViewEl.toggleClass("is-hidden", true);
-    this.visualViewEl.querySelector(".goodobsidian-circuit-workspace")?.classList.toggle("has-details", Boolean(this.recognitionReview) || tab === "blocks");
-    this.visualInspectorEl.toggleClass("is-hidden", tab !== "blocks");
+    this.visualViewEl.querySelector(".goodobsidian-circuit-workspace")?.classList.add("has-details");
+    this.visualInspectorEl.classList.remove("is-hidden");
     this.codeViewEl.toggleClass("is-hidden", tab !== "code");
 
-    if (tab === "visual") {
+    if (tab === "visual" || tab === "blocks") {
       this.renderVisualView();
-    } else if (tab === "blocks") {
-      this.renderBlocksView();
     } else if (tab === "code") {
       if (!this.codeDraftDirty) {
         this.codeDraft = circuitToTikz(this.circuit);
@@ -568,6 +586,24 @@ export class CircuitModal extends Modal {
       this.renderVisualView();
     };
 
+    // 2b. Add Standalone Label Button
+    const addLabelBtn = this.visualToolbarEl.createEl("button", {
+      cls: `goodobsidian-circuit-btn ${this.pendingPlaceType === "text_label" ? "is-active" : ""}`,
+      title: "Add text or math label (tap schematic to place)",
+    });
+    const labelIcon = addLabelBtn.createSpan({ cls: "goodobsidian-btn-icon" });
+    setIcon(labelIcon, "type");
+    addLabelBtn.createSpan({ text: "Label" });
+    addLabelBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.showComponentPicker = false;
+      this.pendingPlaceType = this.pendingPlaceType === "text_label" ? null : "text_label";
+      this.renderVisualView();
+      if (this.pendingPlaceType) {
+        new Notice("Tap on schematic to place label.");
+      }
+    };
+
     // 3. Undo / Redo controls
     const historyGroup = this.visualToolbarEl.createDiv({ cls: "goodobsidian-circuit-btn-group" });
     const undoBtn = historyGroup.createEl("button", {
@@ -602,10 +638,6 @@ export class CircuitModal extends Modal {
     const details = layoutGroup.createEl("details", { cls: "goodobsidian-circuit-layout-menu" });
     details.createEl("summary", { text: "Layout", attr: { "aria-label": "Circuit layout actions" } });
     const layoutActions = details.createDiv({ cls: "goodobsidian-circuit-layout-actions" });
-    const inspect = layoutGroup.createEl("button", { text: "Properties", cls: "goodobsidian-circuit-btn", attr: { "aria-pressed": String(this.activeTab === "blocks") } });
-    inspect.onclick = () => {
-      this.switchTab(this.activeTab === "blocks" ? "visual" : "blocks");
-    };
     const cleanWiresBtn = layoutActions.createEl("button", {
       cls: "goodobsidian-circuit-btn",
       title: "Clean and orthogonally route all wires around obstacles",
@@ -1990,8 +2022,31 @@ export class CircuitModal extends Modal {
     }
 
     const def = COMPONENT_CATALOG[selectedComp.type];
+
+    if (selectedComp.type === "text_label") {
+      inspector.createEl("h3", { text: `Properties: ${selectedComp.label}` });
+      const labelGroup = inspector.createDiv({ cls: "setting-item" });
+      labelGroup.createDiv({ cls: "setting-item-name", text: "Text / LaTeX (e.g. + , - , Vo , 15V , \\infty)" });
+      const labelInput = labelGroup.createEl("input", { type: "text", value: selectedComp.label });
+      labelInput.placeholder = "Enter label text";
+      labelInput.onchange = () => {
+        this.mutateCircuit((c) => {
+          const comp = c.components[selectedComp.id];
+          if (comp) comp.label = labelInput.value.trim() || "Label";
+        });
+      };
+      labelInput.onkeydown = (e) => e.stopPropagation();
+
+      const deleteBtn = inspector.createEl("button", {
+        text: "Delete Label",
+        cls: "goodobsidian-circuit-btn mod-warning goodobsidian-delete-btn",
+      });
+      deleteBtn.onclick = () => this.deleteComponent(selectedComp.id);
+      return;
+    }
+
     inspector.createEl("h3", { text: `Properties: ${selectedComp.label}` });
-    if (Object.keys(selectedComp.ports).some((id) => !def.ports.some((port) => port.id === id))) {
+    if (Object.keys(selectedComp.ports).some((id) => !def?.ports.some((port) => port.id === id))) {
       const repair = inspector.createEl("button", { text: "Reset invalid terminals", cls: "goodobsidian-circuit-btn" });
       repair.onclick = () => {
         this.mutateCircuit((c) => changeComponentType(c, selectedComp.id, selectedComp.type));
@@ -2026,6 +2081,7 @@ export class CircuitModal extends Modal {
         if (comp) comp.label = labelInput.value.trim();
       });
     };
+    labelInput.onkeydown = (e) => e.stopPropagation();
 
     // Value
     const valueGroup = inspector.createDiv({ cls: "setting-item" });
@@ -2037,6 +2093,7 @@ export class CircuitModal extends Modal {
         if (comp) comp.value = valueInput.value.trim() || undefined;
       });
     };
+    valueInput.onkeydown = (e) => e.stopPropagation();
 
     // Rotation (Exact degree assignment)
     const rotGroup = inspector.createDiv({ cls: "setting-item" });

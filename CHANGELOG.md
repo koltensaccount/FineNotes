@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 49 — Standalone text labels, property input deletion fix, and streamlined single-page layout
+
+- **Text input deletion protection**: fixed critical bug where deleting characters inside property text boxes (e.g. editing component label or value) triggered global Backspace/Delete hotkey and deleted the entire circuit element; keystrokes are now strictly isolated to the input field.
+- **Standalone Labels (`text_label`) & Direct Tool**: added free-standing text/math annotations that can be placed anywhere on the schematic (ideal for terminal signs $+$, $-$, infinity $\infty$, $V_o$, $15\,\mathrm{V}$, or pin labels like $G, S, D$); added direct "+ Label" quick-placement button on the visual toolbar.
+- **Streamlined single-page layout**: removed the redundant "Properties" tab from header tabs and redundant toolbar button, as the properties inspector is permanently baked into the visual workspace alongside the schematic.
+- **CircuitikZ parser enhancement**: parses labeled `ocirc` and `circ` terminal nodes (e.g. `\draw ... node[ocirc, label={$15\,\mathrm{V}$}] ...`) and standalone text nodes (`\draw ... node {$V_o$};`) into native IR components.
+
 ### Beta 48 — Expanded circuit elements, namable nodes, and interactive PDF link preservation
 
 - Expanded schematic element catalog: added 11 new components to the circuit editor picker and IR catalog:
@@ -21,6 +28,10 @@ extracted from the matching section of this file by `release.yml`.
   - **Schottky Diode (`schottky_diode`)**: high-speed Schottky barrier diode symbol.
   - **Digital Logic Gates**: AND gate (`logic_and`), OR gate (`logic_or`), and Inverter / NOT gate (`logic_not`).
 - Component picker organization: placed filled nodes, open nodes, potentiometers, AC sources, and switches in the top priority section of the component menu with tap-to-place support.
+- **Standalone Labels (`text_label`) & Direct Tool**: added free-standing text/math annotations that can be placed anywhere on the schematic (ideal for terminal signs $+$, $-$, infinity $\infty$, $V_o$, $15\,\mathrm{V}$, or pin labels like $G, S, D$); added direct "+ Label" placement button on the visual toolbar.
+- **Text input deletion protection**: fixed critical editor bug where pressing Backspace or Delete inside property input boxes (e.g. changing component label or value) triggered global shortcut deletion and deleted the entire circuit element; keystrokes are now strictly isolated to the input field.
+- **Streamlined single-page layout**: removed the redundant "Properties" tab from header tabs and redundant toolbar button, as the properties inspector is permanently baked into the visual workspace alongside the schematic.
+- **CircuitikZ parser enhancement**: parses labeled `ocirc` and `circ` terminal nodes (e.g. `\draw ... node[ocirc, label={$15\,\mathrm{V}$}] ...`) and standalone text nodes (`\draw ... node {$V_o$};`) into native IR components.
 - Full CircuitikZ & SVG support for new elements: standard vector symbol rendering and round-trip TikZ serialization (`node[circ, label=$...$]`, `node[ocirc, label=$...$]`, etc.).
 - PDF Link Preservation: all text box links (external web URLs and Obsidian `[[WikiLinks]]` / `obsidian://open?vault=...&file=...`) are preserved as clickable ISO 32000-1 link annotations in exported PDFs across single page and notebook exports, as well as companion PDFs.
 

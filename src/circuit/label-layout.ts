@@ -240,6 +240,30 @@ export function layoutComponentLabels(
       continue;
     }
 
+    if (comp.type === "text_label") {
+      const labelX = comp.labelOffset ? cx + comp.labelOffset.x * gridSize : cx;
+      const labelY = comp.labelOffset ? cy + comp.labelOffset.y * gridSize : cy + 4;
+      const rect: Rect = {
+        minX: labelX - textW / 2,
+        maxX: labelX + textW / 2,
+        minY: labelY - 10,
+        maxY: labelY + 10,
+      };
+      const textPlacement: PlacedComponentLabels = {
+        componentId: comp.id,
+        position: "top",
+        labelText,
+        valueText,
+        labelX,
+        labelY,
+        anchor: "middle",
+        bounds: rect,
+      };
+      placed.set(comp.id, textPlacement);
+      placedRects.push(rect);
+      continue;
+    }
+
     const candidates: Array<"top" | "bottom" | "right" | "left"> = isHorizontal
       ? ["top", "bottom", "right", "left"]
       : ["right", "left", "top", "bottom"];

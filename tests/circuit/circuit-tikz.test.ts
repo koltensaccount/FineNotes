@@ -661,6 +661,66 @@ describe("CircuitikZ Serializer & Parser", () => {
     expect(tikz).toContain("\\draw (1, -2) node[circ, label={$V_in$}] (nin) {};");
     expect(tikz).toContain("\\draw (5, -2) node[ocirc, label={$V_out$}] (nout) {};");
   });
+
+  it("serializes and parses standalone text_label annotations", () => {
+    const circuit = createEmptyCircuit();
+    circuit.components["l1"] = {
+      id: "l1",
+      type: "text_label",
+      label: "V_o",
+      x: 10,
+      y: 5,
+      rotation: 0,
+      ports: {},
+    };
+
+    const tikz = circuitToTikz(circuit);
+    expect(tikz).toContain("\\draw (10, -5) node (l1) {$V_o$};");
+
+    const parsed = tikzToCircuit(tikz);
+    const parsedComp = parsed.circuit.components["l1"];
+    expect(parsedComp).toBeDefined();
+    expect(parsedComp.type).toBe("text_label");
+    expect(parsedComp.label).toBe("V_o");
+  });
+
+  it("parses PMOS circuit with AC source and labeled open terminal nodes", () => {
+    const userTikz = `
+\\begin{circuitikz}[american]
+  \\draw (3, -12.5) to[sV, l=$V_s$] (3, -15.5);
+  \\draw (5, -10) to[C, l=$C_1$, v=$\\infty$] (7, -10);
+  \\draw (12, -10) node[pmos, l=$M_1$] (m1) {};
+  \\draw (12, -2) node[ocirc, label={$15\\,\\mathrm{V}$}] (vcc_node) {};
+  \\draw (18, -12) node[ocirc, label={$+$}] (out_pos) {};
+  \\draw (18, -16) node[ocirc, label={$V_o$}] (out_neg) {};
+  \\node[circ] at (9, -15.5) {};
+\\end{circuitikz}
+`;
+    const { circuit, diagnostics } = tikzToCircuit(userTikz);
+    expect(diagnostics.filter((d) => d.severity === "error")).toHaveLength(0);
+
+    // AC source
+    const vs = Object.values(circuit.components).find((c) => c.label === "V_s");
+    expect(vs).toBeDefined();
+    expect(vs?.type === "vsource" || vs?.type === "ac_source").toBe(true);
+
+    // PMOS
+    const pmos = Object.values(circuit.components).find((c) => c.type === "transistor_pmos");
+    expect(pmos).toBeDefined();
+
+    // Labeled ocirc terminals
+    const vcc = Object.values(circuit.components).find((c) => c.label.includes("15"));
+    expect(vcc).toBeDefined();
+    expect(vcc?.type).toBe("node_open");
+
+    const outPos = Object.values(circuit.components).find((c) => c.label === "+");
+    expect(outPos).toBeDefined();
+    expect(outPos?.type).toBe("node_open");
+
+    const outNeg = Object.values(circuit.components).find((c) => c.label === "V_o");
+    expect(outNeg).toBeDefined();
+    expect(outNeg?.type).toBe("node_open");
+  });
 });
 
 

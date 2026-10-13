@@ -437,6 +437,15 @@ describe("Circuit SVG rendering regressions", () => {
           rotation: 0,
           ports: { p1: "n1", p2: "n2", wiper: "n3" },
         },
+        freelabel: {
+          id: "freelabel",
+          type: "text_label",
+          label: "\\infty",
+          x: 6,
+          y: 1,
+          rotation: 0,
+          ports: {},
+        },
       },
       wires: [],
     };
@@ -451,6 +460,8 @@ describe("Circuit SVG rendering regressions", () => {
     expect(svg).toContain("V_in");
     expect(svg).toContain("V_out");
     expect(svg).toContain("VR1");
+    // Free text label with math symbol renders
+    expect(svg).toContain("data-latex-source=\"\\infty\"");
   });
 });
 

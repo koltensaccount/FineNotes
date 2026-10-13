@@ -36,6 +36,7 @@ export type ComponentType =
   | "earth"
   | "node_filled"
   | "node_open"
+  | "text_label"
   | "switch_spst"
   | "switch_spdt"
   | "fuse"
@@ -363,6 +364,15 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     width: 0.8,
     height: 0.8,
     description: "Open Node / Terminal",
+  },
+  text_label: {
+    type: "text_label",
+    labelPrefix: "L",
+    defaultLabel: "Label",
+    ports: [],
+    width: 1,
+    height: 0.6,
+    description: "Text / Math Label",
   },
   potentiometer: {
     type: "potentiometer",

@@ -39,6 +39,7 @@ const TIKZ_TYPE_MAP: Record<string, string> = {
   lamp: "lamp",
   node_filled: "circ",
   node_open: "ocirc",
+  text_label: "node",
   potentiometer: "vR",
   ac_source: "sV",
   fuse: "fuse",
@@ -187,6 +188,16 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       const tikzShape = comp.type === "node_filled" ? "circ" : "ocirc";
       const labelPart = comp.label ? `, label={$${tikzMath(comp.label)}$}` : "";
       lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${tikzShape}${labelPart}] (${comp.id}) {};`);
+      compVisited.add(comp.id);
+      continue;
+    }
+
+    if (comp.type === "text_label") {
+      const x = comp.x;
+      const y = -comp.y;
+      const rawText = comp.label || "";
+      const text = rawText.startsWith("$") && rawText.endsWith("$") ? rawText : `$${rawText}$`;
+      lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node (${comp.id}) {${text}};`);
       compVisited.add(comp.id);
       continue;
     }
@@ -556,9 +567,31 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
       const optTokens = optsStr.split(",").map((s) => s.trim());
       const rawType = (optTokens[0] || "").toLowerCase();
 
-      if (rawType === "circ") {
+      if (rawType === "circ" && optTokens.length === 1 && !explicitId) {
         const nId = getOrCreateNode(x, y);
         circuit.nodes[nId].junction = true;
+        handledLines.add(lineNum);
+      } else if (rawType === "circ" || rawType === "ocirc") {
+        const isFilled = rawType === "circ";
+        const nId = getOrCreateNode(x, y);
+        const compId = getNextCompId(explicitId || (isFilled ? "N" : "T"));
+        let label = "";
+        for (const opt of optTokens.slice(1)) {
+          const lMatch = opt.match(/^label\s*=\s*(?:\{?\$?([^$}]+)\$?\}?|\$?([^$]+)\$?)$/i);
+          if (lMatch) label = (lMatch[1] || lMatch[2] || "").trim();
+        }
+        circuit.components[compId] = {
+          id: compId,
+          type: isFilled ? "node_filled" : "node_open",
+          label: label || (isFilled ? "N1" : "T1"),
+          x,
+          y,
+          rotation: 0,
+          ports: { p1: nId },
+        };
+        if (explicitId) {
+          tikzNameToCompId.set(explicitId, compId);
+        }
         handledLines.add(lineNum);
       } else if (rawType === "ground" || rawType === "earth") {
         const isEarth = rawType === "earth";
@@ -630,6 +663,37 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
         }
       }
       continue;
+    }
+
+    // 2b. Standalone text node: \draw (x, y) node (id) {text}; or \node at (x, y) {text};
+    const textNodeMatch = rawLine.match(
+      /^(?:\\draw\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)\s*node(?:\s*\[([^\]]*)\])?(?:\s*\(([a-zA-Z0-9_-]+)\))?\s*\{([^}]*)\}\s*;|\\node(?:\s*\[([^\]]*)\])?\s*at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)(?:\s*\(([a-zA-Z0-9_-]+)\))?\s*\{([^}]*)\}\s*;)/i,
+    );
+    if (textNodeMatch) {
+      const xStr = textNodeMatch[1] ?? textNodeMatch[7];
+      const yStr = textNodeMatch[2] ?? textNodeMatch[8];
+      const explicitId = textNodeMatch[4] ?? textNodeMatch[9];
+      const rawContent = (textNodeMatch[5] ?? textNodeMatch[10] ?? "").trim();
+      const x = parseCoord(xStr);
+      const y = parseCoord(yStr, true);
+      const labelText = rawContent.replace(/^\$|\$$/g, "").trim();
+      if (labelText) {
+        const compId = getNextCompId(explicitId || "L");
+        circuit.components[compId] = {
+          id: compId,
+          type: "text_label",
+          label: labelText,
+          x,
+          y,
+          rotation: 0,
+          ports: {},
+        };
+        if (explicitId) {
+          tikzNameToCompId.set(explicitId, compId);
+        }
+        handledLines.add(lineNum);
+        continue;
+      }
     }
   }
 
