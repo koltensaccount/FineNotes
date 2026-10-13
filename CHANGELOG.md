@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 47 — Clickable text box links, keyboard scroll headroom, and circuit comparison
+
+- Interactive links in page text boxes: type `[[Note]]`, `[[Note#Heading]]`, `[[Note|Alias]]`, `[label](url)`, or raw web URLs in text boxes; they render as styled accent-colored links when not editing; tap opens the note in Obsidian or external URL in browser; tap with Text tool enters text editing mode.
+- Keyboard scroll headroom: page scroll bounds expand dynamically while editing text boxes low on single-page notes or covers, allowing the note to scroll smoothly above the on-screen keyboard on iPad and mobile devices.
+- Circuit comparison and property editing: restored schematic comparison viewer alongside editing properties panel.
+- Unified schematic wiring: stabilized editable circuit wiring and schematic pointer interactions across touch and desktop.
+
 ### Beta 44 — MathJax SVG glyph reference and XML namespace fix
 
 - Robust DOM/XML glyph scoping: eliminate regex collisions between `href` and `xlink:href` by managing element attributes via discrete DOM/Map entries, preventing duplicate attribute generation.
