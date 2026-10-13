@@ -263,7 +263,7 @@ describe("Circuit SVG rendering regressions", () => {
 
   it("includes routed terminal lead detours in SVG bounds to prevent clipping with zero padding", () => {
     // Unlabeled resistor at (0,0), nodes at (-4,0)/(4,0), wire between them.
-    // Leads from component ports to nodes detour around the resistor body.
+    // An unrelated body blocks the left lead, requiring a real detour.
     const c: KirchhoffCircuit = {
       version: KIRCHHOFF_IR_VERSION,
       gridSize: 20,
@@ -284,6 +284,8 @@ describe("Circuit SVG rendering regressions", () => {
       },
       wires: [{ id: "w", fromNode: "a", toNode: "b" }],
     };
+
+    c.components.blocker = { id: "blocker", type: "resistor", label: "", x: -3, y: 0, rotation: 90, ports: {} };
 
     const bounds = computeCircuitBounds(c);
     // maxY must be at least 1.5 to accommodate the terminal lead detour

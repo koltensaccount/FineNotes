@@ -610,3 +610,19 @@ describe("Automatic Circuit Layout Engine", () => {
 
 
 
+
+describe("Imported wire cleanup", () => {
+  const circuit: KirchhoffCircuit = {
+    version: "kirchhoff-ir/1.0", gridSize: 20, components: {}, wires: [], nodes: {},
+  };
+  it("replaces a clear bottom zigzag with a straight wire", () => {
+    const options = { simplifyImported: true, existingWaypoints: [{x:0,y:2},{x:8,y:2}] };
+    expect(routeWireBetweenPoints({x:0,y:0},{x:8,y:0},circuit,options)).toEqual([]);
+    expect(routeWireBetweenPoints({x:0,y:0},{x:8,y:0},circuit,{...options,simplifyImported:false})).toEqual(options.existingWaypoints);
+  });
+  it("replaces a clear wrapping route with one bend", () => {
+    expect(routeWireBetweenPoints({x:0,y:0},{x:8,y:4},circuit,{
+      simplifyImported:true, existingWaypoints:[{x:-2,y:0},{x:-2,y:6},{x:8,y:6}],
+    })).toEqual([{x:8,y:0}]);
+  });
+});

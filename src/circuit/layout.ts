@@ -136,6 +136,8 @@ export interface RouteWireOptions {
   ignoreWireId?: string;
   existingWaypoints?: { x: number; y: number }[];
   preferHV?: boolean;
+  /** Prefer the shortest clear straight/L route over imported bends. */
+  simplifyImported?: boolean;
   snapGrid?: number;
   diagnostics?: CircuitDiagnostic[];
   netId?: string;
@@ -220,6 +222,8 @@ export function isSegmentObstructed(
   // 3. Overlapping wire segments of other wires
   for (const wire of circuit.wires) {
     if (wire.id === options?.ignoreWireId) continue;
+    // A terminal lead may share its own electrical net, without a detour.
+    if (options?.netId && options.ignoreNodeIds?.has(wire.fromNode) && options.ignoreNodeIds.has(wire.toNode)) continue;
     const wFrom = circuit.nodes[wire.fromNode];
     const wTo = circuit.nodes[wire.toNode];
     if (!wFrom || !wTo) continue;
@@ -289,6 +293,20 @@ export function routeWireBetweenPoints(
 ): Array<{ x: number; y: number }> {
   if (Math.hypot(p1.x - p2.x, p1.y - p2.y) < 0.05) {
     return [];
+  }
+
+  if (options?.simplifyImported) {
+    const clear = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      !isSegmentObstructed(a.x, a.y, b.x, b.y, circuit, options);
+    if (Math.abs(p1.x - p2.x) < 0.001 || Math.abs(p1.y - p2.y) < 0.001) {
+      if (clear(p1, p2)) return [];
+    } else {
+      const corners = [{ x: p2.x, y: p1.y }, { x: p1.x, y: p2.y }];
+      if (options.preferHV === false) corners.reverse();
+      for (const corner of corners) {
+        if (clear(p1, corner) && clear(corner, p2)) return [corner];
+      }
+    }
   }
 
   // 1. Preserve existing waypoints if strictly orthogonal and obstacle-free
@@ -765,6 +783,7 @@ export function autoLayoutCircuit(
         ignoreNodeIds: new Set([wire.fromNode, wire.toNode]),
         ignoreWireId: wire.id,
         existingWaypoints: wire.waypoints,
+        simplifyImported: !wire.userEdited,
         preferHV,
         snapGrid: snapStep,
         diagnostics: layoutDiagnostics,
@@ -868,6 +887,19 @@ export interface RoutedTerminalLead {
  * Computes obstacle-avoiding orthogonal routes for all component terminal leads in a circuit.
  * Ensures leads from distinct electrical nets do not share overlapping paths.
  */
+function connectedWireNodes(circuit: KirchhoffCircuit, start: string): Set<string> {
+  const nodes = new Set([start]);
+  const pending = [start];
+  while (pending.length) {
+    const id = pending.pop()!;
+    for (const wire of circuit.wires) {
+      const other = wire.fromNode === id ? wire.toNode : wire.toNode === id ? wire.fromNode : null;
+      if (other && !nodes.has(other)) { nodes.add(other); pending.push(other); }
+    }
+  }
+  return nodes;
+}
+
 export function routeAllTerminalLeads(circuit: KirchhoffCircuit): RoutedTerminalLead[] {
   const gridSize = circuit.gridSize || 20;
   const routedLeads: RoutedTerminalLead[] = [];
@@ -898,7 +930,7 @@ export function routeAllTerminalLeads(circuit: KirchhoffCircuit): RoutedTerminal
             fromCompId: comp.id,
             toCompId: toComp?.id,
             endpointCompIds,
-            ignoreNodeIds: new Set([nId]),
+            ignoreNodeIds: connectedWireNodes(circuit, nId),
             netId: nId,
             additionalObstacles: leadObstacles,
           },
