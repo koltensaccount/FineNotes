@@ -132,7 +132,6 @@ export class CircuitModal extends Modal {
   private zoomScale: number = 1.0;
   private viewportBasis: string | null = null;
   private hitPixels = 8;
-  private inspectorVisible = false;
   private panOffset: { x: number; y: number } = { x: 0, y: 0 };
   private isPanning: boolean = false;
   private panStart: { x: number; y: number } = { x: 0, y: 0 };
@@ -264,12 +263,12 @@ export class CircuitModal extends Modal {
     this.visualToolbarEl = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-toolbar" });
     this.visualBannerEl = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-banner-container" });
     const workspace = this.visualViewEl.createDiv({ cls: "goodobsidian-circuit-workspace" });
-    workspace.toggleClass("has-details", this.inspectorVisible);
+    workspace.toggleClass("has-details", Boolean(this.recognitionReview));
     this.visualStageEl = workspace.createDiv({ cls: "goodobsidian-visual-stage" });
     const aside = workspace.createDiv({ cls: "goodobsidian-circuit-context" });
     if (this.recognitionReview) {
       const original = aside.createEl("details", { cls: "goodobsidian-circuit-original" });
-      original.open = false;
+      original.open = true;
       original.createEl("summary", { text: "Original drawing" });
       original.createEl("img", { attr: { src: this.recognitionReview.originalImage, alt: "Selected handwritten circuit before conversion" } });
       original.createEl("p", { text: "Your ink stays unchanged until you choose Use circuit." });
@@ -335,8 +334,10 @@ export class CircuitModal extends Modal {
     this.activeTab = tab;
     this.buildTabButtons();
 
-    this.visualViewEl.toggleClass("is-hidden", tab !== "visual");
-    this.blocksViewEl.toggleClass("is-hidden", tab !== "blocks");
+    this.visualViewEl.toggleClass("is-hidden", tab === "code");
+    this.blocksViewEl.toggleClass("is-hidden", true);
+    this.visualViewEl.querySelector(".goodobsidian-circuit-workspace")?.classList.toggle("has-details", Boolean(this.recognitionReview) || tab === "blocks");
+    this.visualInspectorEl.toggleClass("is-hidden", tab !== "blocks");
     this.codeViewEl.toggleClass("is-hidden", tab !== "code");
 
     if (tab === "visual") {
@@ -595,11 +596,9 @@ export class CircuitModal extends Modal {
     const details = layoutGroup.createEl("details", { cls: "goodobsidian-circuit-layout-menu" });
     details.createEl("summary", { text: "Layout", attr: { "aria-label": "Circuit layout actions" } });
     const layoutActions = details.createDiv({ cls: "goodobsidian-circuit-layout-actions" });
-    const inspect = layoutGroup.createEl("button", { text: "Details", cls: "goodobsidian-circuit-btn", attr: { "aria-pressed": String(this.inspectorVisible) } });
+    const inspect = layoutGroup.createEl("button", { text: "Properties", cls: "goodobsidian-circuit-btn", attr: { "aria-pressed": String(this.activeTab === "blocks") } });
     inspect.onclick = () => {
-      this.inspectorVisible = !this.inspectorVisible;
-      this.visualViewEl.querySelector(".goodobsidian-circuit-workspace")?.classList.toggle("has-details", this.inspectorVisible);
-      inspect.setAttribute("aria-pressed", String(this.inspectorVisible));
+      this.switchTab(this.activeTab === "blocks" ? "visual" : "blocks");
     };
     const cleanWiresBtn = layoutActions.createEl("button", {
       cls: "goodobsidian-circuit-btn",
@@ -1855,60 +1854,8 @@ export class CircuitModal extends Modal {
   // --- View B: Blocks / Properties Editor ----------------------------------
 
   private renderBlocksView(): void {
-    this.blocksViewEl.empty();
-    const container = this.blocksViewEl.createDiv({ cls: "goodobsidian-blocks-container" });
-
-    // Left Sidebar: Component and Wire listings
-    const sidebar = container.createDiv({ cls: "goodobsidian-blocks-sidebar" });
-
-    sidebar.createEl("h4", { text: "Components" });
-    const compList = sidebar.createDiv({ cls: "goodobsidian-blocks-list" });
-    for (const comp of Object.values(this.circuit.components)) {
-      const def = COMPONENT_CATALOG[comp.type];
-      const item = compList.createDiv({
-        cls: `goodobsidian-blocks-item ${this.selectedComponentId === comp.id ? "is-selected" : ""}`,
-      });
-      item.createSpan({ cls: "goodobsidian-comp-label", text: comp.label });
-      item.createSpan({ cls: "goodobsidian-comp-type", text: def?.description || comp.type });
-      if (comp.value) {
-        item.createSpan({ cls: "goodobsidian-comp-val", text: comp.value });
-      }
-      item.onclick = () => {
-        this.selectedComponentId = comp.id;
-        this.selectedWireId = null;
-        this.selectedNodeId = null;
-        this.renderBlocksView();
-      };
-    }
-
-    const addBtn = sidebar.createEl("button", {
-      text: "+ Add Component",
-      cls: "goodobsidian-circuit-btn goodobsidian-add-comp-btn",
-    });
-    addBtn.onclick = () => this.addComponent("resistor");
-
-    sidebar.createEl("h4", { text: "Wires & Connections" });
-    const wireList = sidebar.createDiv({ cls: "goodobsidian-blocks-list" });
-    for (const wire of this.circuit.wires) {
-      const item = wireList.createDiv({
-        cls: `goodobsidian-blocks-item ${this.selectedWireId === wire.id ? "is-selected" : ""}`,
-      });
-      item.createSpan({ cls: "goodobsidian-comp-label", text: `Connection ${this.circuit.wires.indexOf(wire) + 1}` });
-      item.createSpan({ cls: "goodobsidian-comp-type", text: `${this.nodeDisplayName(wire.fromNode)} ↔ ${this.nodeDisplayName(wire.toNode)}` });
-      if (wire.waypoints && wire.waypoints.length > 0) {
-        item.createSpan({ cls: "goodobsidian-comp-val", text: `${wire.waypoints.length} waypoints` });
-      }
-      item.onclick = () => {
-        this.selectedWireId = wire.id;
-        this.selectedComponentId = null;
-        this.selectedNodeId = null;
-        this.renderBlocksView();
-      };
-    }
-
-    // Right Inspector Panel
-    const inspector = container.createDiv({ cls: "goodobsidian-blocks-inspector" });
-    this.renderInspector(inspector);
+    // Properties keeps the live schematic and its selection beside the inspector.
+    this.renderVisualView();
   }
 
   private renderInspector(inspector: HTMLElement): void {

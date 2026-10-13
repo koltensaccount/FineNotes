@@ -57,7 +57,7 @@ for (const viewport of [
     );
   }
   const before = await page.locator(".goodobsidian-visual-stage").boundingBox();
-  assert(before.height > viewport.height * 0.4);
+  assert(before.height > (await page.locator(".goodobsidian-circuit-modal").boundingBox()).height * 0.4);
   let from = await screen(8, 2),
     to = await screen(9, 3);
   await page.mouse.move(from.x, from.y);
@@ -93,6 +93,26 @@ for (const viewport of [
     await page.locator(".goodobsidian-visual-stage > svg").getAttribute("viewBox"),
     original.vb,
   );
+  assert(await page.locator(".goodobsidian-circuit-original").evaluate(el => el.open));
+  assert(await page.locator(".goodobsidian-circuit-original img").isVisible());
+  await page.getByRole("button", { name: "Properties", exact: true }).first().click();
+  assert(await page.locator(".goodobsidian-visual-stage > svg").isVisible());
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const resistor = await screen(8, 2);
+  await page.mouse.click(resistor.x, resistor.y);
+  const inspector = page.locator(".goodobsidian-circuit-context-inspector");
+  assert(await inspector.isVisible());
+  const label = inspector.locator('input[type="text"]').first();
+  await label.fill("R_test");
+  await label.press("Tab");
+  assert.equal(await page.evaluate(() => editor.circuit.components.r.label), "R_test");
+  const deletion = inspector.getByRole("button", { name: "Delete", exact: true });
+  assert(await deletion.isVisible());
+  const colors = await deletion.evaluate(el => ({fg:getComputedStyle(el).color,bg:getComputedStyle(el).backgroundColor}));
+  assert.notEqual(colors.fg, colors.bg);
+  await page.getByRole("button", { name: "Visual", exact: true }).click();
+  assert(!(await inspector.isVisible()));
+  assert(await page.locator(".goodobsidian-circuit-original img").isVisible());
   await page.getByRole("button", { name: "Use circuit", exact: true }).click();
   assert(await page.evaluate(() => saved?.wires.length > 3));
   assert.deepEqual(errors, []);

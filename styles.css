@@ -7249,3 +7249,18 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-circuit-layout-menu[open] { display: flex; align-items: center; }
 .goodobsidian-circuit-banner { box-sizing: border-box; height: 44px; margin: 0; padding: 0 10px; align-items: center; }
 .goodobsidian-circuit-review-issues { min-height: 24px; }
+
+/* Keep destructive actions readable under Obsidian's warning-button themes. */
+.goodobsidian-circuit-modal button.goodobsidian-circuit-btn.mod-warning {
+  background: var(--background-primary);
+  color: var(--text-error, #ef4444);
+}
+.goodobsidian-circuit-modal button.goodobsidian-circuit-btn.mod-warning:hover {
+  background: var(--background-modifier-hover);
+}
+.goodobsidian-circuit-modal button.goodobsidian-circuit-btn.mod-warning span {
+  color: inherit;
+}
+.goodobsidian-circuit-context-inspector.is-hidden { display: none; }
+
+.goodobsidian-circuit-context-inspector { order: -1; }
