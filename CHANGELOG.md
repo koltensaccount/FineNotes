@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 44 — MathJax SVG glyph reference and XML namespace fix
+
+- Robust DOM/XML glyph scoping: eliminate regex collisions between `href` and `xlink:href` by managing element attributes via discrete DOM/Map entries, preventing duplicate attribute generation.
+- XML namespace compliance: explicitly declare `xmlns:xlink="http://www.w3.org/1999/xlink"` on circuit SVG root and math label containers for strict XML/SVG validity.
+- Reliable vector math rendering: preserve unique scoped glyph IDs and dual `href` / `xlink:href` references across notebook canvases, saved files, and PDF export.
+
 ### Beta 43 — Circuit continuous dragging, resize undo, and math label stability
 
 - Continuous wire dragging: calculate reshaped waypoints from the pointer-down snapshot to maintain segment identity and prevent bend accumulation across successive pointer movements.
