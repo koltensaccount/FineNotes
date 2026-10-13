@@ -396,5 +396,59 @@ describe("Circuit SVG rendering regressions", () => {
       }
     }
   });
+
+  it("renders node_filled, node_open and newly supported components cleanly in SVG", () => {
+    const circuit: KirchhoffCircuit = {
+      version: KIRCHHOFF_IR_VERSION,
+      gridSize: 20,
+      nodes: {
+        n1: { id: "n1", x: 2, y: 2 },
+        n2: { id: "n2", x: 8, y: 2 },
+        n3: { id: "n3", x: 5, y: 3 },
+      },
+      components: {
+        vin: {
+          id: "vin",
+          type: "node_filled",
+          label: "V_in",
+          x: 2,
+          y: 2,
+          rotation: 0,
+          ports: { p1: "n1" },
+        },
+        vout: {
+          id: "vout",
+          type: "node_open",
+          label: "V_out",
+          x: 8,
+          y: 2,
+          rotation: 0,
+          ports: { p1: "n2" },
+        },
+        pot: {
+          id: "pot",
+          type: "potentiometer",
+          label: "VR1",
+          value: "10k",
+          x: 5,
+          y: 2,
+          rotation: 0,
+          ports: { p1: "n1", p2: "n2", wiper: "n3" },
+        },
+      },
+      wires: [],
+    };
+
+    const svg = renderCircuitToSvg(circuit);
+    expect(svg).toContain("<svg");
+    // Filled node has solid dot
+    expect(svg).toMatch(/<circle[^>]*cx="0"[^>]*cy="0"[^>]*r="0\.32"[^>]*fill="#1e293b"/);
+    // Open node has hollow circle
+    expect(svg).toMatch(/<circle[^>]*cx="0"[^>]*cy="0"[^>]*r="0\.34"[^>]*fill="#ffffff"/);
+    // Labels are present
+    expect(svg).toContain("V_in");
+    expect(svg).toContain("V_out");
+    expect(svg).toContain("VR1");
+  });
 });
 

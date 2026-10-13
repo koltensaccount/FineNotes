@@ -360,6 +360,99 @@ function renderComponentSymbol(
       break;
     }
 
+    case "node_filled": {
+      // Crisp solid connection dot
+      parts.push(`<circle cx="0" cy="0" r="0.32" fill="${mainStroke}" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "node_open": {
+      // Crisp hollow terminal ring
+      parts.push(`<circle cx="0" cy="0" r="0.34" fill="#ffffff" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
+      break;
+    }
+
+    case "potentiometer": {
+      // Resistor zig-zag with wiper arrow
+      const d = "M -1.5 0 L -1 0 " +
+        "L -0.8 -0.4 L -0.4 0.4 L 0 -0.4 L 0.4 0.4 L 0.8 -0.4 L 1 0 " +
+        "L 1.5 0";
+      parts.push(`<path d="${d}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
+      parts.push(`<line x1="0" y1="-1.2" x2="0" y2="-0.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<polygon points="0,-0.35 -0.18,-0.6 0.18,-0.6" fill="${mainStroke}" />`);
+      break;
+    }
+
+    case "ac_source": {
+      parts.push(`<line x1="0" y1="-1.5" x2="0" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0" y1="0.8" x2="0" y2="1.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<circle cx="0" cy="0" r="0.8" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      const sine = "M -0.45 0 C -0.22 -0.45, 0 -0.45, 0 0 C 0 0.45, 0.22 0.45, 0.45 0";
+      parts.push(`<path d="${sine}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "switch_spdt": {
+      parts.push(`<line x1="-1.5" y1="0" x2="-0.7" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<circle cx="-0.6" cy="0" r="0.12" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-0.5" y1="0" x2="0.5" y2="-0.6" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<circle cx="0.6" cy="-0.8" r="0.12" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0.7" y1="-0.8" x2="1.5" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<circle cx="0.6" cy="0.8" r="0.12" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0.7" y1="0.8" x2="1.5" y2="0.8" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "fuse": {
+      parts.push(`<rect x="-1" y="-0.4" width="2" height="0.8" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "transformer": {
+      parts.push(`<line x1="-1.5" y1="-1" x2="-0.6" y2="-1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<path d="M -0.6 -1 A 0.35 0.35 0 0 1 -0.6 -0.3 A 0.35 0.35 0 0 1 -0.6 0.3 A 0.35 0.35 0 0 1 -0.6 1" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-0.6" y1="1" x2="-1.5" y2="1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-0.15" y1="-1" x2="-0.15" y2="1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0.15" y1="-1" x2="0.15" y2="1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="1.5" y1="-1" x2="0.6" y2="-1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<path d="M 0.6 -1 A 0.35 0.35 0 0 0 0.6 -0.3 A 0.35 0.35 0 0 0 0.6 0.3 A 0.35 0.35 0 0 0 0.6 1" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0.6" y1="1" x2="1.5" y2="1" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "schottky_diode": {
+      parts.push(`<line x1="-1.2" y1="0" x2="-0.4" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0.4" y1="0" x2="1.2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<polygon points="-0.4,-0.5 -0.4,0.5 0.4,0" fill="${mainStroke}" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
+      parts.push(`<path d="M 0.25 -0.65 L 0.4 -0.65 L 0.4 0.65 L 0.55 0.65" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "logic_and": {
+      parts.push(`<line x1="-2" y1="-0.7" x2="-1" y2="-0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-2" y1="0.7" x2="-1" y2="0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<path d="M -1 -1.1 L 0.2 -1.1 A 1.1 1.1 0 0 1 0.2 1.1 L -1 1.1 Z" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
+      parts.push(`<line x1="1.3" y1="0" x2="2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "logic_or": {
+      parts.push(`<line x1="-2" y1="-0.7" x2="-0.8" y2="-0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-2" y1="0.7" x2="-0.8" y2="0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<path d="M -1.2 -1.1 Q -0.4 -1.1 1.3 0 Q -0.4 1.1 -1.2 1.1 Q -0.7 0 -1.2 -1.1 Z" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
+      parts.push(`<line x1="1.3" y1="0" x2="2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
+    case "logic_not": {
+      parts.push(`<line x1="-1.5" y1="0" x2="-0.8" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<polygon points="-0.8,-0.7 -0.8,0.7 0.6,0" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
+      parts.push(`<circle cx="0.8" cy="0" r="0.18" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="1" y1="0" x2="1.5" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      break;
+    }
+
     default: {
       // Generic rectangle
       parts.push(`<line x1="-1.5" y1="0" x2="-1" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);

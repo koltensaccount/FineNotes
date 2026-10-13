@@ -168,3 +168,32 @@ describe("pdfDate", () => {
     expect(pdfDate(new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe("D:20260102030405Z");
   });
 });
+
+describe("PDF link annotations in buildImagePdf", () => {
+  it("encodes URI link annotations in the Page dictionary", () => {
+    const testPage = page(1024, 1448);
+    testPage.links = [
+      {
+        rect: [100, 200, 300, 250],
+        uri: "https://example.com/doc",
+      },
+      {
+        rect: [50, 100, 150, 120],
+        uri: "obsidian://open?vault=MyVault&file=Notes%2FCalculus",
+      },
+    ];
+
+    const pdf = buildImagePdf([testPage], {
+      title: "Interactive Links",
+    });
+    const text = latin1(pdf);
+
+    expect(text).toContain("/Annots [");
+    expect(text).toContain("/Subtype /Link");
+    expect(text).toContain("/Rect [100 200 300 250]");
+    expect(text).toContain("/S /URI /URI (https://example.com/doc)");
+    expect(text).toContain("/Rect [50 100 150 120]");
+    expect(text).toContain("/URI (obsidian://open?vault=MyVault&file=Notes%2FCalculus)");
+  });
+});
+

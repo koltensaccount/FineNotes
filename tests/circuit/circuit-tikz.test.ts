@@ -631,6 +631,36 @@ describe("CircuitikZ Serializer & Parser", () => {
     // but must NOT be split or connected to the op amp!
     expect(circuit.wires.some((w) => Object.values(oa.ports).includes(w.fromNode) && (w.toNode === oa.ports["vcc"] || w.fromNode === oa.ports["vcc"]))).toBe(false);
   });
+
+  it("serializes namable node_filled and node_open terminals to CircuitikZ", () => {
+    const circuit = createEmptyCircuit();
+    circuit.nodes["n1"] = { id: "n1", x: 1, y: 2 };
+    circuit.nodes["n2"] = { id: "n2", x: 5, y: 2 };
+
+    circuit.components["nin"] = {
+      id: "nin",
+      type: "node_filled",
+      label: "V_in",
+      x: 1,
+      y: 2,
+      rotation: 0,
+      ports: { p1: "n1" },
+    };
+
+    circuit.components["nout"] = {
+      id: "nout",
+      type: "node_open",
+      label: "V_out",
+      x: 5,
+      y: 2,
+      rotation: 0,
+      ports: { p1: "n2" },
+    };
+
+    const tikz = circuitToTikz(circuit);
+    expect(tikz).toContain("\\draw (1, -2) node[circ, label={$V_in$}] (nin) {};");
+    expect(tikz).toContain("\\draw (5, -2) node[ocirc, label={$V_out$}] (nout) {};");
+  });
 });
 
 

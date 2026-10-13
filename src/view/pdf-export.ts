@@ -20,9 +20,11 @@ import { renderPageThumbnail } from "../canvas/renderer";
 import {
   POINTS_PER_PAGE_PX,
   type PdfImagePage,
+  type PdfLink,
   buildImagePdf,
   exportPixelScale,
 } from "../export/pdf-writer";
+import { isWebUrl, parseTextBoxLinks } from "../model/text-box-links";
 import type { Page } from "../model/document";
 import { VaultBackdropRenderer } from "./backdrop-renderer";
 import type { VaultImageCache } from "./image-cache";
@@ -42,6 +44,8 @@ export interface PdfExportSources {
   paper: PaperTheme;
   usePressure: boolean;
   highlighterAlpha: number;
+  /** Name of the active Obsidian vault for deep-linking. */
+  vaultName?: string;
 }
 
 export interface PdfExportOptions {
@@ -90,6 +94,48 @@ export async function exportPagesToPdf(
   });
 }
 
+/** Extract clickable link rectangles on a page in PDF points. */
+export function extractPagePdfLinks(page: Page, vaultName?: string): PdfLink[] {
+  const pdfLinks: PdfLink[] = [];
+  const pageH = page.geometry.height;
+
+  for (const tb of page.textBoxes) {
+    if (!tb.text) continue;
+    const links = parseTextBoxLinks(tb.text);
+    if (links.length === 0) continue;
+
+    const boxH = tb.h ?? Math.max(tb.fontSize * 1.4, 24);
+    const boxW = tb.w;
+
+    for (const link of links) {
+      const uri = isWebUrl(link.target)
+        ? link.target
+        : vaultName
+          ? `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(link.target)}`
+          : encodeURI(link.target);
+
+      const left = tb.x;
+      const right = tb.x + boxW;
+      const top = tb.y;
+      const bottom = tb.y + boxH;
+
+      const llx = left * POINTS_PER_PAGE_PX;
+      const urx = right * POINTS_PER_PAGE_PX;
+      const lly = Math.max(0, (pageH - bottom) * POINTS_PER_PAGE_PX);
+      const ury = (pageH - top) * POINTS_PER_PAGE_PX;
+
+      if (urx > llx && ury > lly) {
+        pdfLinks.push({
+          rect: [llx, lly, urx, ury],
+          uri,
+        });
+      }
+    }
+  }
+
+  return pdfLinks;
+}
+
 /** One page as a JPEG, sized for print, with its size in points. */
 export async function renderPageJpeg(page: Page, sources: PdfExportSources, quality: PdfQuality = "standard"): Promise<PdfImagePage> {
   const { width, height } = page.geometry;
@@ -109,12 +155,14 @@ export async function renderPageJpeg(page: Page, sources: PdfExportSources, qual
       ...(sources.images ? { images: sources.images } : {}),
     });
     const jpeg = await canvasToJpeg(canvas);
+    const links = extractPagePdfLinks(page, sources.vaultName);
     return {
       jpeg,
       pixelWidth: canvas.width,
       pixelHeight: canvas.height,
       widthPt: width * POINTS_PER_PAGE_PX,
       heightPt: height * POINTS_PER_PAGE_PX,
+      ...(links.length > 0 ? { links } : {}),
     };
   } finally {
     releaseCanvas(canvas);

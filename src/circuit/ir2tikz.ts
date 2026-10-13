@@ -34,7 +34,18 @@ const TIKZ_TYPE_MAP: Record<string, string> = {
   ground: "ground",
   earth: "earth",
   switch_spst: "closing switch",
+  switch_spdt: "cute spdt up",
   lamp: "lamp",
+  node_filled: "circ",
+  node_open: "ocirc",
+  potentiometer: "vR",
+  ac_source: "sV",
+  fuse: "fuse",
+  transformer: "transformer",
+  schottky_diode: "sD",
+  logic_and: "and gate US",
+  logic_or: "or gate US",
+  logic_not: "not gate US",
 };
 
 /** Reverse mapping from CircuitikZ bipole names to Kirchhoff component types */
@@ -63,6 +74,12 @@ const REVERSE_TIKZ_TYPE_MAP: Record<string, ComponentType> = {
   lamp: "lamp",
   "closing switch": "switch_spst",
   "open switch": "switch_spst",
+  circ: "node_filled",
+  ocirc: "node_open",
+  potentiometer: "potentiometer",
+  fuse: "fuse",
+  transformer: "transformer",
+  sd: "schottky_diode",
   generic: "generic_box",
 };
 
@@ -159,6 +176,19 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
   // Emit two-terminal and source components
   for (const comp of Object.values(circuit.components)) {
     const tikzType = TIKZ_TYPE_MAP[comp.type] || "generic";
+
+    if (comp.type === "node_filled" || comp.type === "node_open") {
+      const pId = Object.keys(comp.ports)[0] || "p1";
+      const connNode = comp.ports[pId];
+      const node = connNode ? circuit.nodes[connNode] : null;
+      const x = node ? node.x : comp.x;
+      const y = node ? -node.y : -comp.y;
+      const tikzShape = comp.type === "node_filled" ? "circ" : "ocirc";
+      const labelPart = comp.label ? `, label={$${comp.label}$}` : "";
+      lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${tikzShape}${labelPart}] (${comp.id}) {};`);
+      compVisited.add(comp.id);
+      continue;
+    }
 
     if (comp.type === "ground" || comp.type === "earth") {
       const pId = comp.ports["gnd"] ? "gnd" : (comp.ports["earth"] ? "earth" : Object.keys(comp.ports)[0]);

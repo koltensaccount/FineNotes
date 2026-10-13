@@ -14,7 +14,7 @@ vi.mock("../../src/canvas/renderer", () => ({
   }),
 }));
 const { renderPageThumbnail } = await import("../../src/canvas/renderer");
-const { exportPagesToPdf, renderPagePng } = await import("../../src/view/pdf-export");
+const { exportPagesToPdf, renderPagePng, extractPagePdfLinks } = await import("../../src/view/pdf-export");
 const jpg = readFileSync(new URL("../export/fixtures/white.jpg", import.meta.url));
 const png = Uint8Array.from(
   Buffer.from(
@@ -249,3 +249,75 @@ it("renders a page to PNG bytes using renderPagePng", async () => {
   expect(bytes.length).toBeGreaterThan(0);
   expect(renderPageThumbnail).toHaveBeenCalled();
 });
+
+describe("interactive note and web links preservation in exported PDF", () => {
+  it("extracts page PDF link rectangles and maps targets to Obsidian URI or web URL", () => {
+    const page = blankPage("p1");
+    page.textBoxes.push(
+      {
+        id: "t1",
+        x: 100,
+        y: 200,
+        w: 150,
+        h: 30,
+        fontSize: 16,
+        text: "See [Reference](https://example.com/paper)",
+        color: "#000",
+      },
+      {
+        id: "t2",
+        x: 100,
+        y: 400,
+        w: 200,
+        h: 40,
+        fontSize: 18,
+        text: "Refer to [[Calculus III#Stokes Theorem]]",
+        color: "#000",
+      },
+    );
+
+    const links = extractPagePdfLinks(page, "Personal Vault");
+    expect(links).toHaveLength(2);
+
+    // Web URL
+    expect(links[0].uri).toBe("https://example.com/paper");
+    expect(links[0].rect[0]).toBeCloseTo(100 * POINTS_PER_PAGE_PX, 1);
+    expect(links[0].rect[2]).toBeCloseTo(250 * POINTS_PER_PAGE_PX, 1);
+    // Y coordinates in PDF point space (origin bottom-left):
+    // bottom = 230 -> lly = (page.height - 230) * POINTS_PER_PAGE_PX
+    expect(links[0].rect[1]).toBeCloseTo((page.geometry.height - 230) * POINTS_PER_PAGE_PX, 1);
+    expect(links[0].rect[3]).toBeCloseTo((page.geometry.height - 200) * POINTS_PER_PAGE_PX, 1);
+
+    // Obsidian note deep link
+    expect(links[1].uri).toBe(
+      `obsidian://open?vault=${encodeURIComponent("Personal Vault")}&file=${encodeURIComponent("Calculus III#Stokes Theorem")}`,
+    );
+  });
+
+  it("preserves clickable link annotations in exported PDF output", async () => {
+    const page = blankPage("p1");
+    page.textBoxes.push({
+      id: "t1",
+      x: 50,
+      y: 50,
+      w: 200,
+      h: 30,
+      fontSize: 16,
+      text: "Check [Website](https://finenotes.app) and [[My Note]]",
+      color: "#000",
+    });
+
+    const bytes = await exportPagesToPdf(
+      [page],
+      { ...sources, vaultName: "MyVault" },
+      { title: "Preserved Links" },
+    );
+
+    const doc = await PDFDocument.load(bytes);
+    const pdfPage = doc.getPage(0);
+    const annots = pdfPage.node.Annots();
+    expect(annots).toBeDefined();
+    expect(annots?.size()).toBeGreaterThanOrEqual(2);
+  });
+});
+

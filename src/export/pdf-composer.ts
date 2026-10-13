@@ -1,5 +1,4 @@
-/** PDF composition only: source pages remain PDF content; annotations are PNG overlays. */
-import { BlendMode, PDFDocument, degrees, rgb, type PDFEmbeddedPage } from "pdf-lib";
+import { BlendMode, PDFDocument, PDFString, degrees, rgb, type PDFEmbeddedPage } from "pdf-lib";
 import type { Page } from "../model/document";
 import { POINTS_PER_PAGE_PX, type PdfImagePage } from "./pdf-writer";
 
@@ -34,6 +33,23 @@ export class PdfComposer {
     const target = this.output.addPage([page.widthPt, page.heightPt]);
     const image = await this.output.embedJpg(page.jpeg);
     target.drawImage(image, { width: page.widthPt, height: page.heightPt });
+    if (page.links && page.links.length > 0) {
+      for (const link of page.links) {
+        const annot = this.output.context.obj({
+          Type: "Annot",
+          Subtype: "Link",
+          Rect: link.rect,
+          Border: [0, 0, 0],
+          A: {
+            Type: "Action",
+            S: "URI",
+            URI: PDFString.of(link.uri),
+          },
+        });
+        const annotRef = this.output.context.register(annot);
+        target.node.addAnnot(annotRef);
+      }
+    }
   }
 
   /** Fails clearly if a source is missing/unreadable, never silently flattens it. */

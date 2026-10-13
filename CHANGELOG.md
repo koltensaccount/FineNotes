@@ -8,6 +8,22 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 48 — Expanded circuit elements, namable nodes, and interactive PDF link preservation
+
+- Expanded schematic element catalog: added 11 new components to the circuit editor picker and IR catalog:
+  - **Namable Filled Nodes (`node_filled`)**: solid terminal dots (`•`) for marking circuit junctions, labeled testpoints, and input/output pins ($V_{in}$, $V_{out}$, $V_{ref}$, node names).
+  - **Namable Open Nodes (`node_open`)**: hollow terminal circles (`○`) for external interfaces, ports, and connector pins.
+  - **Potentiometer (`potentiometer`)**: 3-terminal variable resistor with adjustable wiper terminal.
+  - **AC Voltage Source (`ac_source`)**: sine-wave AC voltage generator symbol.
+  - **SPDT Switch (`switch_spdt`)**: single-pole double-throw 3-terminal switch.
+  - **Fuse (`fuse`)**: circuit protection element.
+  - **Transformer (`transformer`)**: 4-terminal coupled inductor / transformer.
+  - **Schottky Diode (`schottky_diode`)**: high-speed Schottky barrier diode symbol.
+  - **Digital Logic Gates**: AND gate (`logic_and`), OR gate (`logic_or`), and Inverter / NOT gate (`logic_not`).
+- Component picker organization: placed filled nodes, open nodes, potentiometers, AC sources, and switches in the top priority section of the component menu with tap-to-place support.
+- Full CircuitikZ & SVG support for new elements: standard vector symbol rendering and round-trip TikZ serialization (`node[circ, label=$...$]`, `node[ocirc, label=$...$]`, etc.).
+- PDF Link Preservation: all text box links (external web URLs and Obsidian `[[WikiLinks]]` / `obsidian://open?vault=...&file=...`) are preserved as clickable ISO 32000-1 link annotations in exported PDFs across single page and notebook exports, as well as companion PDFs.
+
 ### Beta 47 — Clickable text box links, keyboard scroll headroom, and circuit comparison
 
 - Interactive links in page text boxes: type `[[Note]]`, `[[Note#Heading]]`, `[[Note|Alias]]`, `[label](url)`, or raw web URLs in text boxes; they render as styled accent-colored links when not editing; tap opens the note in Obsidian or external URL in browser; tap with Text tool enters text editing mode.

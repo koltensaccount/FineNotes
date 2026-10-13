@@ -1631,6 +1631,7 @@ export class InkView extends TextFileView {
       pdf: this.pdfCache,
       images: this.images,
       paper: paperTheme(false),
+      vaultName: this.app.vault.getName(),
       ...options,
     };
     return {
@@ -1734,6 +1735,7 @@ export class InkView extends TextFileView {
       pdf: this.pdfCache,
       images: this.images,
       paper: paperTheme(false),
+      vaultName: this.app.vault.getName(),
       usePressure: this.toolState.pressureEnabled,
       highlighterAlpha: this.settings.highlighterAlpha,
     };

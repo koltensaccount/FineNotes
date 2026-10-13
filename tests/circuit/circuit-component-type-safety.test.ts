@@ -50,4 +50,25 @@ describe("Component Type Change Safety & Disconnect", () => {
     expect(comp.ports.drain).toBe("nd");
     expect(comp.ports.source).toBe("ns");
   });
+
+  it("preserves terminal port p1 and label when switching between node_filled and node_open", () => {
+    const c = createEmptyCircuit("Node Type Conversion");
+    c.components["node1"] = {
+      id: "node1",
+      type: "node_filled",
+      label: "V_ref",
+      x: 3,
+      y: 3,
+      rotation: 0,
+      ports: { p1: "net_ref" },
+    };
+    c.nodes["net_ref"] = { id: "net_ref", x: 3, y: 3 };
+
+    changeComponentType(c, "node1", "node_open");
+
+    const comp = c.components["node1"];
+    expect(comp.type).toBe("node_open");
+    expect(comp.label).toBe("V_ref");
+    expect(comp.ports.p1).toBe("net_ref");
+  });
 });

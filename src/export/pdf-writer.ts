@@ -12,6 +12,14 @@
  * PURE: no DOM, no Obsidian.
  */
 
+/** Clickable link annotation on a PDF page. */
+export interface PdfLink {
+  /** [llx, lly, urx, ury] in PDF points (bottom-left origin). */
+  rect: [number, number, number, number];
+  /** Destination URI (e.g. web URL or obsidian://open?...). */
+  uri: string;
+}
+
 /** One page of the output. */
 export interface PdfImagePage {
   /** Baseline or progressive JPEG, three components (RGB). */
@@ -22,6 +30,8 @@ export interface PdfImagePage {
   /** The page's size in PDF points (1/72 in). */
   widthPt: number;
   heightPt: number;
+  /** Clickable link annotations on the page. */
+  links?: PdfLink[];
 }
 
 export interface PdfMetadata {
@@ -108,9 +118,19 @@ export function buildImagePdf(pages: readonly PdfImagePage[], meta: PdfMetadata 
     const w = num(page.widthPt);
     const h = num(page.heightPt);
 
+    const annotsStr =
+      page.links && page.links.length > 0
+        ? `/Annots [${page.links
+            .map(
+              (l) =>
+                `<< /Type /Annot /Subtype /Link /Rect [${num(l.rect[0])} ${num(l.rect[1])} ${num(l.rect[2])} ${num(l.rect[3])}] /Border [0 0 0] /A << /Type /Action /S /URI /URI ${pdfString(l.uri)} >> >>`,
+            )
+            .join(" ")}] `
+        : "";
+
     begin(n);
     out.text(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] ` +
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] ${annotsStr}` +
         `/Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>\n`,
     );
     end();

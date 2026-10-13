@@ -31,11 +31,22 @@ export type ComponentType =
   | "transistor_pmos"
   // Multi-terminal / active
   | "opamp"
-  // Connections / references
+  // Connections / references / nodes
   | "ground"
   | "earth"
+  | "node_filled"
+  | "node_open"
   | "switch_spst"
+  | "switch_spdt"
+  | "fuse"
   | "lamp"
+  | "potentiometer"
+  | "ac_source"
+  | "transformer"
+  | "schottky_diode"
+  | "logic_and"
+  | "logic_or"
+  | "logic_not"
   | "generic_box";
 
 export interface CircuitPort {
@@ -334,6 +345,141 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     width: 2.4,
     height: 2.4,
     description: "Lamp / Light Bulb",
+  },
+  node_filled: {
+    type: "node_filled",
+    labelPrefix: "N",
+    defaultLabel: "N1",
+    ports: [{ id: "p1", name: "•", x: 0, y: 0 }],
+    width: 0.8,
+    height: 0.8,
+    description: "Filled Node / Dot",
+  },
+  node_open: {
+    type: "node_open",
+    labelPrefix: "T",
+    defaultLabel: "T1",
+    ports: [{ id: "p1", name: "○", x: 0, y: 0 }],
+    width: 0.8,
+    height: 0.8,
+    description: "Open Node / Terminal",
+  },
+  potentiometer: {
+    type: "potentiometer",
+    labelPrefix: "POT",
+    defaultLabel: "POT1",
+    defaultValue: "10kΩ",
+    ports: [
+      { id: "p1", name: "1", x: -1.5, y: 0 },
+      { id: "p2", name: "2", x: 1.5, y: 0 },
+      { id: "wiper", name: "W", x: 0, y: -1.2 },
+    ],
+    width: 3,
+    height: 2.4,
+    description: "Potentiometer (3-Terminal)",
+  },
+  ac_source: {
+    type: "ac_source",
+    labelPrefix: "V",
+    defaultLabel: "V_AC",
+    defaultValue: "120V",
+    ports: [
+      { id: "p1", name: "~", x: 0, y: -1.5 },
+      { id: "p2", name: "~", x: 0, y: 1.5 },
+    ],
+    width: 2,
+    height: 3,
+    description: "AC Voltage Source",
+  },
+  switch_spdt: {
+    type: "switch_spdt",
+    labelPrefix: "SW",
+    defaultLabel: "SW1",
+    ports: [
+      { id: "com", name: "COM", x: -1.5, y: 0 },
+      { id: "t1", name: "1", x: 1.5, y: -0.8 },
+      { id: "t2", name: "2", x: 1.5, y: 0.8 },
+    ],
+    width: 3,
+    height: 2,
+    description: "SPDT Switch (3-Terminal)",
+  },
+  fuse: {
+    type: "fuse",
+    labelPrefix: "F",
+    defaultLabel: "F1",
+    defaultValue: "1A",
+    ports: [
+      { id: "p1", name: "1", x: -1.5, y: 0 },
+      { id: "p2", name: "2", x: 1.5, y: 0 },
+    ],
+    width: 3,
+    height: 1,
+    description: "Fuse",
+  },
+  transformer: {
+    type: "transformer",
+    labelPrefix: "TX",
+    defaultLabel: "TX1",
+    ports: [
+      { id: "p1", name: "P1", x: -1.5, y: -1 },
+      { id: "p2", name: "P2", x: -1.5, y: 1 },
+      { id: "s1", name: "S1", x: 1.5, y: -1 },
+      { id: "s2", name: "S2", x: 1.5, y: 1 },
+    ],
+    width: 3,
+    height: 3,
+    description: "Transformer",
+  },
+  schottky_diode: {
+    type: "schottky_diode",
+    labelPrefix: "D",
+    defaultLabel: "D1",
+    ports: [
+      { id: "anode", name: "+", x: -1.2, y: 0 },
+      { id: "cathode", name: "-", x: 1.2, y: 0 },
+    ],
+    width: 2.4,
+    height: 1.5,
+    description: "Schottky Diode",
+  },
+  logic_and: {
+    type: "logic_and",
+    labelPrefix: "U",
+    defaultLabel: "AND1",
+    ports: [
+      { id: "in1", name: "A", x: -2, y: -0.7 },
+      { id: "in2", name: "B", x: -2, y: 0.7 },
+      { id: "out", name: "Y", x: 2, y: 0 },
+    ],
+    width: 4,
+    height: 2.5,
+    description: "AND Logic Gate",
+  },
+  logic_or: {
+    type: "logic_or",
+    labelPrefix: "U",
+    defaultLabel: "OR1",
+    ports: [
+      { id: "in1", name: "A", x: -2, y: -0.7 },
+      { id: "in2", name: "B", x: -2, y: 0.7 },
+      { id: "out", name: "Y", x: 2, y: 0 },
+    ],
+    width: 4,
+    height: 2.5,
+    description: "OR Logic Gate",
+  },
+  logic_not: {
+    type: "logic_not",
+    labelPrefix: "U",
+    defaultLabel: "NOT1",
+    ports: [
+      { id: "in", name: "A", x: -1.5, y: 0 },
+      { id: "out", name: "Y", x: 1.5, y: 0 },
+    ],
+    width: 3,
+    height: 2,
+    description: "NOT Gate / Inverter",
   },
   generic_box: {
     type: "generic_box",
