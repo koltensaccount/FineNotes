@@ -160,4 +160,24 @@ describe("Circuit Wire Editing & Rerouting", () => {
     const dEmpty = buildWirePathD({ id: "wX", fromNode: "missing1", toNode: "missing2" }, circuit.nodes, 20);
     expect(dEmpty).toBe("");
   });
+
+  it("wire bends do not create junction dots automatically", () => {
+    const circuit = createEmptyCircuit("Bend Dot Test");
+    circuit.nodes["n_start"] = { id: "n_start", x: 0, y: 0 };
+    circuit.nodes["n_bend"] = { id: "n_bend", x: 4, y: 0, junction: false };
+    circuit.nodes["n_end"] = { id: "n_end", x: 4, y: 4 };
+
+    circuit.wires.push(
+      { id: "w1", fromNode: "n_start", toNode: "n_bend" },
+      { id: "w2", fromNode: "n_bend", toNode: "n_end" },
+    );
+
+    const svg = renderCircuitToSvg(circuit);
+    // There should be NO junction dot (<circle ... r="3.5" ...>) at the bend (4, 0) -> px (80, 0)
+    expect(svg).not.toMatch(/<circle[^>]*cx="80"[^>]*cy="0"[^>]*r="3\.5"/);
+
+    // Also check TikZ output does not emit \node[circ] at the bend
+    const tikz = circuitToTikz(circuit);
+    expect(tikz).not.toContain("\\node[circ]");
+  });
 });

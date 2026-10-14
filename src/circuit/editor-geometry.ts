@@ -50,8 +50,8 @@ export function materializeCircuitGeometry(c: KirchhoffCircuit): void {
       });
     }
   for (const node of Object.values(c.nodes)) {
-    if (c.wires.filter((w) => w.fromNode === node.id || w.toNode === node.id).length >= 3)
-      node.junction = true;
+    const degree = c.wires.filter((w) => w.fromNode === node.id || w.toNode === node.id).length;
+    node.junction = degree >= 3;
   }
 }
 

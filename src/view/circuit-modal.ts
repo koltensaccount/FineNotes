@@ -1061,34 +1061,33 @@ export class CircuitModal extends Modal {
         return;
       }
 
-      // If clicked blank space while drawing wire, create a new junction node
+      // If clicked blank space while drawing wire, create a new intermediate bend corner without a junction dot
       if (this.wireDrawStart) {
         const snapX = this.snapCoordinate(gridX);
         const snapY = this.snapCoordinate(gridY);
-        const juncNodeId = `n_junc_${Date.now().toString(36)}`;
+        const bendNodeId = `n_bend_${Date.now().toString(36)}`;
         const newWireId = `w_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
         const startEndpoint = this.wireDrawStart;
 
-        this.wireDrawStart = { nodeId: juncNodeId };
+        this.wireDrawStart = { nodeId: bendNodeId };
         this.selectedWireId = null;
         this.selectedComponentId = null;
-        this.selectedNodeId = juncNodeId;
+        this.selectedNodeId = null;
 
         this.mutateCircuit((c) => {
           const startN = this.resolveWireEndpoint(c, startEndpoint);
           if (!startN) {
-            new Notice("Cannot create junction: starting terminal no longer exists.");
+            new Notice("Cannot create bend: starting terminal no longer exists.");
             return;
           }
 
-          c.nodes[juncNodeId] = { id: juncNodeId, x: snapX, y: snapY, junction: true };
+          c.nodes[bendNodeId] = { id: bendNodeId, x: snapX, y: snapY, junction: false };
           c.wires.push({
             id: newWireId,
             fromNode: startN,
-            toNode: juncNodeId,
+            toNode: bendNodeId,
           });
         });
-
 
         return;
       }

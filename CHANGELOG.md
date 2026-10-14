@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 59 — Prevent automatic junction dots on wire bends
+
+- **Clean Wire Bends & Corners**:
+  - Drawing a wire with intermediate clicks in blank space to turn corners or create bends no longer spawns an automatic junction dot or selection handle.
+  - Wire bends (degree 2) and in-progress wire drawing endpoints (degree 1) are marked as non-junction corners (`junction: false`).
+  - Junction dots (`•`) now strictly appear only when 3 or more wire paths meet (true electrical branch / T-junctions) or when a Node component is intentionally placed.
+
 ### Beta 58 — Connection node scaling, live symbol previews, and expanded EE catalog
 
 - **Connection Node & Terminal Scaling**:
