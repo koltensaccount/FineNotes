@@ -40,15 +40,18 @@ export class PdfImportModal extends Modal {
     private readonly insert: (indices: number[], layout?: SlideLayout) => Promise<boolean>,
     private readonly firstPage?: {width:number;height:number},
     private readonly previewBytes?: () => Promise<ArrayBuffer>,
+    private readonly purpose: "import" | "notebook" = "import",
   ) {
     super(app);
   }
 
   override onOpen(): void {
-    this.titleEl.setText("Import PDF");
+    this.titleEl.setText(this.purpose === "notebook" ? "New notebook from PDF" : "Import PDF");
     this.modalEl.addClass("goodobsidian-dialog", "goodobsidian-slide-import-modal");
     this.contentEl.createEl("p", {
-      text: `${this.name} · ${this.total} pages. Added at your confirmed position; the original PDF is preserved.`,
+      text: this.purpose === "notebook"
+        ? `${this.name} · ${this.total} pages. Choose your notebook layout; the original PDF is preserved.`
+        : `${this.name} · ${this.total} pages. Added at your confirmed position; the original PDF is preserved.`,
     });
     this.keyboard = new DialogKeyboard(this.modalEl);
     const slideControls = this.contentEl.createDiv({cls:"goodobsidian-slide-import-controls"});
@@ -118,7 +121,7 @@ export class PdfImportModal extends Modal {
       .addButton((button) =>
         button
           .setClass("clickable-icon")
-          .setButtonText("Import")
+          .setButtonText(this.purpose === "notebook" ? "Create notebook" : "Import")
           .setCta()
           .onClick(async () => {
             if (this.busy) return;
@@ -133,7 +136,7 @@ export class PdfImportModal extends Modal {
             button.setDisabled(true);
             try {
               if (await this.insert(result.pages, this.slides ? {...this.layout} : undefined)) this.close();
-              else
+              else if(this.purpose === "import")
                 new Notice("PDF import stopped: the notebook is no longer available for editing.");
             } catch (error) {
               new Notice(`FineNotes: couldn't import PDF — ${errorMessage(error)}`, 8000);

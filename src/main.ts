@@ -1,3 +1,7 @@
+import { PdfImportModal } from "./view/pdf-import-modal";
+import { renderPdfSlides } from "./view/pdf-slides";
+import { saveImageAttachment } from "./view/image-import";
+import { type SavedScan } from "./model/scan-commands";
 import { diagnosticView } from "./view/diagnostic-view";
 import { writingGuidesOf } from "./model/writing-guides";
 import { pdfQuality } from "./export/pdf-quality";
@@ -63,6 +67,7 @@ import type { LassoFilter, LassoMode } from "./canvas/lasso";
 import {
   type NotebookChoices,
   buildNewDocument,
+  buildSlideNotebook,
   buildPdfNotebook,
   cleanTitle,
   joinVaultPath,
@@ -1059,11 +1064,11 @@ export default class GoodObsidianPlugin extends Plugin {
     title: string,
     choices: NotebookChoices,
     folder?: string,
-    build: (heading: string, attachments?: AttachmentFolders) => InkDocument = (
+    build: (heading: string, attachments?: AttachmentFolders) => InkDocument | Promise<InkDocument> = (
       heading,
       attachments,
     ) => buildNewDocument(choices, heading, attachments),
-  ): Promise<void> {
+  ): Promise<boolean> {
     const dir = normalizeFolder(folder ?? this.newNotebookFolder());
     try {
       const parent = dir ? this.app.vault.getFolderByPath(dir) : this.app.vault.getRoot();
@@ -1076,7 +1081,7 @@ export default class GoodObsidianPlugin extends Plugin {
       const heading = cleanTitle(title) || stripInkSuffix(name);
       const content = buildInkFile(
         newNoteBody(heading, new Date().toISOString()),
-        build(heading, paths.attachments),
+        await build(heading, paths.attachments),
       );
       const file = await this.app.vault.create(
         normalizePath(joinVaultPath(paths.folder, name)),
@@ -1086,8 +1091,10 @@ export default class GoodObsidianPlugin extends Plugin {
       const tab = this.app.workspace.getLeaf(false);
       await tab.setViewState({ type: VIEW_TYPE_INK, active: true, state: { file: file.path } });
       await this.app.workspace.revealLeaf(tab);
+      return true;
     } catch (error) {
       new Notice(`FineNotes: could not create the notebook — ${errorMessage(error)}`, 8000);
+      return false;
     }
   }
 
@@ -1098,26 +1105,34 @@ export default class GoodObsidianPlugin extends Plugin {
    */
   async createNotebookFromPdf(pdf: TFile): Promise<void> {
     const progress = new Notice("FineNotes: reading PDF pages…", 0);
-    let sizes: Array<{ width: number; height: number }>;
+    let bytes: ArrayBuffer;
+    let sizes: Array<{width:number;height:number}>;
     try {
-      sizes = await measurePdfPages(await this.app.vault.readBinary(pdf));
+      bytes = await this.app.vault.readBinary(pdf);
+      sizes = await measurePdfPages(bytes);
     } catch (error) {
       new Notice(`FineNotes: couldn't read the PDF — ${errorMessage(error)}`, 8000);
       return;
-    } finally {
-      progress.hide();
-    }
-    if (sizes.length === 0) {
-      new Notice("FineNotes: that PDF has no pages.");
-      return;
-    }
-    const choices: NotebookChoices = {
-      ...parseNotebookChoices(this.settings.lastNotebookChoices),
-      type: "notebook",
-    };
+    } finally { progress.hide(); }
+    const choices: NotebookChoices = { ...parseNotebookChoices(this.settings.lastNotebookChoices), type: "notebook" };
     const folder = pdf.parent && !pdf.parent.isRoot() ? pdf.parent.path : "";
-    await this.createNotebook(pdf.basename, choices, folder, (heading, attachments) =>
-      buildPdfNotebook(choices, heading, attachments, pdf.path, sizes),
-    );
+    new PdfImportModal(this.app, pdf.name, sizes.length, async (indices, layout) => {
+      return this.createNotebook(pdf.basename, choices, folder, async (heading, attachments) => {
+        if (!layout) return buildPdfNotebook(choices, heading, attachments, pdf.path, indices.map(page => ({...sizes[page], page})));
+        const saved: SavedScan[] = [];
+        const rendering = new Notice("FineNotes: rendering slides…", 0);
+        try {
+          for await (const slide of renderPdfSlides(bytes, indices)) {
+            const file = await saveImageAttachment(this.app, slide, `${pdf.basename} slide ${indices[saved.length]+1}`, pdf.path, attachments?.images);
+            saved.push({path:file.path,width:slide.width,height:slide.height,slideLayout:layout});
+            rendering.setMessage(`FineNotes: rendered ${saved.length} of ${indices.length} slides…`);
+          }
+          return buildSlideNotebook(choices, heading, attachments, saved);
+        } finally { rendering.hide(); }
+      });
+    }, sizes[0], async () => {
+      for await (const slide of renderPdfSlides(bytes,[0],800)) return slide.bytes;
+      throw new Error("No preview page");
+    }, "notebook").open();
   }
 }

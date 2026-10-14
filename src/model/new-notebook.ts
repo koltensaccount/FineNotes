@@ -18,7 +18,7 @@ import {
   SINGLE_PAGE_FILE_SUFFIX,
 } from "../constants";
 import { coverTitleBox } from "./cover";
-import { pdfPageGeometry } from "./scan-commands";
+import { buildScanInsert, pdfPageGeometry } from "./scan-commands";
 import {
   type AttachmentFolders,
   type CoverRuling,
@@ -378,7 +378,7 @@ export function buildPdfNotebook(
   title: string,
   attachments: AttachmentFolders | undefined,
   path: string,
-  sizes: ReadonlyArray<{ width: number; height: number }>,
+  sizes: ReadonlyArray<{ width: number; height: number; page?: number }>,
 ): InkDocument {
   const doc = buildNewDocument({ ...choices, type: "notebook" }, title, attachments);
   if (sizes.length === 0) return doc;
@@ -387,11 +387,25 @@ export function buildPdfNotebook(
     id: `p${index + 1}`,
     kind: "ink",
     geometry: pdfPageGeometry(base, size),
-    backdrop: { kind: "pdf", path, page: index },
+    backdrop: { kind: "pdf", path, page: size.page ?? index },
     strokes: [],
     images: [],
     textBoxes: [],
   }));
   doc.view.width = doc.pages[0].geometry.width;
+  return doc;
+}
+
+/** One large slide image per blank page, with the same layout as PDF import. */
+export function buildSlideNotebook(choices: NotebookChoices, title: string, attachments: AttachmentFolders | undefined, slides: readonly import("./scan-commands").SavedScan[]): InkDocument {
+  const doc = buildNewDocument({ ...choices, type: "notebook" }, title, attachments);
+  const geometry = sizeGeometry(choices.size, choices.landscape);
+  doc.pages = [{ id: "p0", kind: "ink", geometry, backdrop: { kind: "blank" }, strokes: [], images: [], textBoxes: [] }];
+  const insertion = buildScanInsert(doc, 0, slides, "Import slides", 0);
+  if (insertion) {
+    insertion.command.apply(doc);
+    doc.pages = doc.pages.filter(page => page.id !== "p0");
+  }
+  doc.view.width = geometry.width;
   return doc;
 }
