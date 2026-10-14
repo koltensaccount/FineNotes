@@ -737,7 +737,7 @@ it("round-trips standalone labels with nested math braces", () => {
   expect(label?.label).toBe(String.raw`V_{out}=\frac{V_{in}}{2}`);
 });
 
-it.each(["dependent_vsource", "dependent_isource", "logic_nand", "logic_nor", "logic_xor", "logic_xnor", "logic_buffer", "transistor_njfet", "transistor_pjfet"] as const)("round-trips new EE symbol %s", async type => {
+it.each(["dependent_vsource", "dependent_isource", "logic_nand", "logic_nor", "logic_xor", "logic_xnor", "logic_buffer", "transistor_njfet", "transistor_pjfet", "meter_voltage", "meter_current", "crystal", "photodiode"] as const)("round-trips new EE symbol %s", async type => {
   const {COMPONENT_CATALOG,getComponentPortPosition,createEmptyCircuit}=await import("../../src/circuit/ir");
   const c=createEmptyCircuit("EE");
   const comp={id:"x1",type,label:"X1",x:5,y:5,rotation:0,ports:{} as Record<string,string>};

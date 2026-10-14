@@ -8,6 +8,24 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 58 — Connection node scaling, live symbol previews, and expanded EE catalog
+
+- **Connection Node & Terminal Scaling**:
+  - Scaled filled nodes (`node_filled`) and open terminals (`node_open`) to match branch connection junction dots exactly ($r = 3.5\text{px}$, $0.175$ grid units).
+  - Placed filled nodes are solid connection dots identical to wire junctions; open terminals are crisp hollow rings.
+  - Added dedicated visual toolbar buttons for both "Node" (`circle-dot`) and "Terminal" (`circle`) with active-state toggle, tooltips, and tap-to-place instructions.
+  - Initialized default node labels to empty so dropping nodes onto schematics does not clutter the diagram with placeholder text, while retaining full namability in the properties inspector.
+- **Component Menu Previews & Categorization**:
+  - Live vector preview thumbnails for every component symbol in the picker menu.
+  - Structured component categorization by discipline (Nodes & Terminals, Passives, Sources & Instruments, Semiconductors & Diodes, Digital Logic Gates, Switches & Protection).
+  - Searchable by symbol name, prefix, description, or common abbreviations with instantaneous feedback.
+- **Expanded EE Schematic Catalog**:
+  - **Voltmeter (`meter_voltage`)**: standard circled $V$ voltage measurement instrument.
+  - **Ammeter (`meter_current`)**: standard circled $A$ current measurement instrument.
+  - **Quartz Crystal (`crystal`)**: quartz crystal resonator bipole symbol.
+  - **Photodiode (`photodiode`)**: optical sensor diode symbol with incoming illumination arrows.
+  - Full bidirectional CircuitikZ round-trip serialization and vector SVG rendering support.
+
 ### Beta 51 — Standalone text labels, property input deletion fix, and streamlined single-page layout
 
 - **Text input deletion protection**: fixed critical bug where deleting characters inside property text boxes (e.g. editing component label or value) triggered global Backspace/Delete hotkey and deleted the entire circuit element; keystrokes are now strictly isolated to the input field.

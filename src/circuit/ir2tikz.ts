@@ -55,6 +55,10 @@ const TIKZ_TYPE_MAP: Record<string, string> = {
   logic_and: "american and port",
   logic_or: "american or port",
   logic_not: "american not port",
+  meter_voltage: "voltmeter",
+  meter_current: "ammeter",
+  crystal: "crystal",
+  photodiode: "photodiode",
 };
 
 /** Reverse mapping from CircuitikZ bipole names to Kirchhoff component types */
@@ -82,6 +86,13 @@ const REVERSE_TIKZ_TYPE_MAP: Record<string, ComponentType> = {
   diode: "diode",
   zd: "zener_diode",
   led: "led",
+  photodiode: "photodiode",
+  pdo: "photodiode",
+  voltmeter: "meter_voltage",
+  vm: "meter_voltage",
+  ammeter: "meter_current",
+  am: "meter_current",
+  crystal: "crystal",
   ground: "ground",
   earth: "earth",
   lamp: "lamp",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { validateAndNormalizeCircuit, KIRCHHOFF_IR_VERSION, type KirchhoffCircuit } from "../../src/circuit/ir";
-import { renderCircuitToSvg, computeCircuitBounds } from "../../src/circuit/svg-render";
+import { validateAndNormalizeCircuit, KIRCHHOFF_IR_VERSION, COMPONENT_CATALOG, type KirchhoffCircuit } from "../../src/circuit/ir";
+import { renderCircuitToSvg, renderComponentPreviewSvg, computeCircuitBounds } from "../../src/circuit/svg-render";
 import { routeAllTerminalLeads } from "../../src/circuit/layout";
 
 describe("Circuit SVG rendering regressions", () => {
@@ -452,16 +452,44 @@ describe("Circuit SVG rendering regressions", () => {
 
     const svg = renderCircuitToSvg(circuit);
     expect(svg).toContain("<svg");
-    // Filled node has solid dot
-    expect(svg).toMatch(/<circle[^>]*cx="0"[^>]*cy="0"[^>]*r="0\.32"[^>]*fill="#1e293b"/);
-    // Open node has hollow circle
-    expect(svg).toMatch(/<circle[^>]*cx="0"[^>]*cy="0"[^>]*r="0\.34"[^>]*fill="#ffffff"/);
+    // Filled node has solid dot matching connection junction size (3.5px / gridSize = 0.175)
+    expect(svg).toMatch(/<circle[^>]*cx="0"[^>]*cy="0"[^>]*r="0\.175"[^>]*fill="#1e293b"/);
+    // Open node has hollow circle matching connection junction size
+    expect(svg).toMatch(/<circle[^>]*cx="0"[^>]*cy="0"[^>]*r="0\.175"[^>]*fill="#ffffff"/);
     // Labels are present
     expect(svg).toContain("V_in");
     expect(svg).toContain("V_out");
     expect(svg).toContain("VR1");
     // Free text label with math symbol renders
     expect(svg).toContain("data-latex-source=\"\\infty\"");
+  });
+
+  it("renders preview SVGs with valid viewBox and vector markup for all catalog components", () => {
+    const allTypes = Object.keys(COMPONENT_CATALOG) as (keyof typeof COMPONENT_CATALOG)[];
+    expect(allTypes.length).toBeGreaterThan(30);
+
+    for (const type of allTypes) {
+      const previewSvg = renderComponentPreviewSvg(type);
+      expect(previewSvg).toContain("<svg");
+      expect(previewSvg).toContain("viewBox=");
+      expect(previewSvg).toContain("</svg>");
+    }
+
+    // Check specific symbols have their characteristic SVG elements
+    const vmeter = renderComponentPreviewSvg("meter_voltage");
+    expect(vmeter).toContain(">V<");
+
+    const ameter = renderComponentPreviewSvg("meter_current");
+    expect(ameter).toContain(">A<");
+
+    const photodiode = renderComponentPreviewSvg("photodiode");
+    expect(photodiode).toContain("<polygon");
+
+    const crystal = renderComponentPreviewSvg("crystal");
+    expect(crystal).toContain("<rect");
+
+    const nodeFilled = renderComponentPreviewSvg("node_filled");
+    expect(nodeFilled).toContain("r=\"0.175\"");
   });
 });
 

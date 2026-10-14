@@ -10,6 +10,7 @@ import {
   type CircuitComponent,
   type CircuitNode,
   type CircuitWire,
+  type ComponentType,
   COMPONENT_CATALOG,
   type KirchhoffCircuit,
   getComponentPortPosition,
@@ -249,6 +250,7 @@ function renderComponentSymbol(
       break;
     }
 
+    case "photodiode":
     case "diode":
     case "zener_diode":
     case "led": {
@@ -267,6 +269,12 @@ function renderComponentSymbol(
         parts.push(`<polygon points="0.4,-1 0.25,-0.95 0.35,-0.85" fill="${mainStroke}" />`);
         parts.push(`<line x1="0.3" y1="-0.4" x2="0.7" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeFine}" />`);
         parts.push(`<polygon points="0.7,-0.8 0.55,-0.75 0.65,-0.65" fill="${mainStroke}" />`);
+      } else if (type === "photodiode") {
+        // Incoming light arrows towards diode
+        parts.push(`<line x1="0.35" y1="-1.0" x2="-0.05" y2="-0.6" stroke="${mainStroke}" stroke-width="${strokeFine}" />`);
+        parts.push(`<polygon points="-0.05,-0.6 0.08,-0.75 0.18,-0.65" fill="${mainStroke}" />`);
+        parts.push(`<line x1="0.65" y1="-0.8" x2="0.25" y2="-0.4" stroke="${mainStroke}" stroke-width="${strokeFine}" />`);
+        parts.push(`<polygon points="0.25,-0.4 0.38,-0.55 0.48,-0.45" fill="${mainStroke}" />`);
       }
       break;
     }
@@ -371,14 +379,42 @@ function renderComponentSymbol(
     }
 
     case "node_filled": {
-      // Crisp solid connection dot
-      parts.push(`<circle cx="0" cy="0" r="0.32" fill="${mainStroke}" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      // Solid connection dot identical to wire branch junctions (radius = 3.5px / gridSize = 0.175)
+      const r = Number((3.5 / gridSize).toFixed(4));
+      parts.push(`<circle cx="0" cy="0" r="${r}" fill="${mainStroke}" />`);
+      if (isHighlighted) {
+        parts.push(`<circle cx="0" cy="0" r="${Number((7.5 / gridSize).toFixed(4))}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-dasharray="0.1,0.08" />`);
+      }
       break;
     }
 
     case "node_open": {
-      // Crisp hollow terminal ring
-      parts.push(`<circle cx="0" cy="0" r="0.34" fill="#ffffff" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
+      // Hollow terminal ring (radius = 3.5px / gridSize = 0.175)
+      const r = Number((3.5 / gridSize).toFixed(4));
+      const ringW = Number(Math.max(1.5 / gridSize, 0.06).toFixed(4));
+      parts.push(`<circle cx="0" cy="0" r="${r}" fill="#ffffff" stroke="${mainStroke}" stroke-width="${ringW}" />`);
+      if (isHighlighted) {
+        parts.push(`<circle cx="0" cy="0" r="${Number((7.5 / gridSize).toFixed(4))}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-dasharray="0.1,0.08" />`);
+      }
+      break;
+    }
+
+    case "meter_voltage":
+    case "meter_current": {
+      parts.push(`<line x1="0" y1="-1.5" x2="0" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0" y1="0.8" x2="0" y2="1.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<circle cx="0" cy="0" r="0.8" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      const letter = type === "meter_voltage" ? "V" : "A";
+      parts.push(`<text x="0" y="0.28" font-size="0.75" font-family="sans-serif" font-weight="bold" fill="${mainStroke}" text-anchor="middle">${letter}</text>`);
+      break;
+    }
+
+    case "crystal": {
+      parts.push(`<line x1="-1.5" y1="0" x2="-0.4" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="0.4" y1="0" x2="1.5" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="-0.4" y1="-0.6" x2="-0.4" y2="0.6" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
+      parts.push(`<line x1="0.4" y1="-0.6" x2="0.4" y2="0.6" stroke="${mainStroke}" stroke-width="${strokeThick}" />`);
+      parts.push(`<rect x="-0.2" y="-0.5" width="0.4" height="1.0" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       break;
     }
 
@@ -719,4 +755,35 @@ function escapeXml(unsafe: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+/**
+ * Renders a crisp vector preview SVG for a component type, suitable for
+ * symbol picker thumbnails, catalogs, and tooltips.
+ */
+export function renderComponentPreviewSvg(
+  type: ComponentType,
+  strokeColor = "currentColor",
+): string {
+  const def = COMPONENT_CATALOG[type];
+  const w = Math.max(def?.width || 2, 1.4);
+  const h = Math.max(def?.height || 2, 1.4);
+  const pad = 0.45;
+  const vbMinX = -(w / 2 + pad);
+  const vbMinY = -(h / 2 + pad);
+  const vbW = w + pad * 2;
+  const vbH = h + pad * 2;
+
+  const dummyComp: CircuitComponent = {
+    id: "preview",
+    type,
+    label: "",
+    x: 0,
+    y: 0,
+    rotation: 0,
+    ports: {},
+  };
+
+  const body = renderComponentSymbol(dummyComp, strokeColor, false, 20);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbMinX.toFixed(2)} ${vbMinY.toFixed(2)} ${vbW.toFixed(2)} ${vbH.toFixed(2)}" width="100%" height="100%" style="overflow: visible;" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
 }

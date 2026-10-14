@@ -58,6 +58,10 @@ export type ComponentType =
   | "logic_xor"
   | "logic_xnor"
   | "logic_buffer"
+  | "meter_voltage"
+  | "meter_current"
+  | "crystal"
+  | "photodiode"
   | "generic_box";
 
 export interface CircuitPort {
@@ -362,20 +366,20 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
   node_filled: {
     type: "node_filled",
     labelPrefix: "N",
-    defaultLabel: "N1",
+    defaultLabel: "",
     ports: [{ id: "p1", name: "•", x: 0, y: 0 }],
-    width: 0.8,
-    height: 0.8,
-    description: "Filled Node / Dot",
+    width: 0.4,
+    height: 0.4,
+    description: "Connection Node / Dot (Filled)",
   },
   node_open: {
     type: "node_open",
     labelPrefix: "T",
-    defaultLabel: "T1",
+    defaultLabel: "",
     ports: [{ id: "p1", name: "○", x: 0, y: 0 }],
-    width: 0.8,
-    height: 0.8,
-    description: "Open Terminal / Test Point / Input / Output",
+    width: 0.4,
+    height: 0.4,
+    description: "Terminal / Test Point (Open)",
   },
   voltage_label: {
     type: "voltage_label", labelPrefix: "VL", defaultLabel: "V_o", ports: [],
@@ -514,6 +518,55 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
   logic_buffer: {type:"logic_buffer",labelPrefix:"U",defaultLabel:"BUFFER1",ports:[{id:"in",name:"A",x:-1.5,y:0},{id:"out",name:"Y",x:1.5,y:0}],width:3,height:2.5,description:"BUFFER Logic Gate"},
   transistor_njfet: {type:"transistor_njfet",labelPrefix:"Q",defaultLabel:"Q1",ports:[{id:"gate",name:"G",x:-1.5,y:0},{id:"drain",name:"D",x:1.5,y:-1.3},{id:"source",name:"S",x:1.5,y:1.3}],width:3,height:2.6,description:"N-Channel JFET"},
   transistor_pjfet: {type:"transistor_pjfet",labelPrefix:"Q",defaultLabel:"Q1",ports:[{id:"gate",name:"G",x:-1.5,y:0},{id:"drain",name:"D",x:1.5,y:-1.3},{id:"source",name:"S",x:1.5,y:1.3}],width:3,height:2.6,description:"P-Channel JFET"},
+  meter_voltage: {
+    type: "meter_voltage",
+    labelPrefix: "V",
+    defaultLabel: "V1",
+    ports: [
+      { id: "p1", name: "+", x: 0, y: -1.5 },
+      { id: "p2", name: "-", x: 0, y: 1.5 },
+    ],
+    width: 2,
+    height: 3,
+    description: "Voltmeter (Voltage Measurement)",
+  },
+  meter_current: {
+    type: "meter_current",
+    labelPrefix: "A",
+    defaultLabel: "A1",
+    ports: [
+      { id: "p1", name: "in", x: 0, y: -1.5 },
+      { id: "p2", name: "out", x: 0, y: 1.5 },
+    ],
+    width: 2,
+    height: 3,
+    description: "Ammeter (Current Measurement)",
+  },
+  crystal: {
+    type: "crystal",
+    labelPrefix: "Y",
+    defaultLabel: "Y1",
+    defaultValue: "16MHz",
+    ports: [
+      { id: "p1", name: "1", x: -1.5, y: 0 },
+      { id: "p2", name: "2", x: 1.5, y: 0 },
+    ],
+    width: 3,
+    height: 1.5,
+    description: "Quartz Crystal Resonator",
+  },
+  photodiode: {
+    type: "photodiode",
+    labelPrefix: "D",
+    defaultLabel: "PD1",
+    ports: [
+      { id: "anode", name: "A", x: -1.2, y: 0 },
+      { id: "cathode", name: "K", x: 1.2, y: 0 },
+    ],
+    width: 2.4,
+    height: 1.5,
+    description: "Photodiode (Light Sensor)",
+  },
   generic_box: {
     type: "generic_box",
     labelPrefix: "U",
@@ -527,6 +580,45 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     description: "Generic Component",
   },
 };
+
+export interface ComponentCategory {
+  name: string;
+  types: ComponentType[];
+}
+
+export const COMPONENT_CATEGORIES: ComponentCategory[] = [
+  {
+    name: "Nodes & Terminals",
+    types: ["node_filled", "node_open", "ground", "earth", "text_label", "voltage_label"],
+  },
+  {
+    name: "Passives",
+    types: ["resistor", "variable_resistor", "potentiometer", "capacitor", "polarized_capacitor", "variable_capacitor", "inductor", "crystal"],
+  },
+  {
+    name: "Sources & Instruments",
+    types: ["vsource_dc", "vsource", "ac_source", "battery", "isource", "dependent_vsource", "dependent_isource", "meter_voltage", "meter_current"],
+  },
+  {
+    name: "Semiconductors & Diodes",
+    types: ["diode", "zener_diode", "schottky_diode", "led", "photodiode", "transistor_npn", "transistor_pnp", "transistor_nmos", "transistor_pmos", "transistor_njfet", "transistor_pjfet", "opamp"],
+  },
+  {
+    name: "Digital Logic Gates",
+    types: ["logic_and", "logic_or", "logic_not", "logic_nand", "logic_nor", "logic_xor", "logic_xnor", "logic_buffer"],
+  },
+  {
+    name: "Switches & Protection",
+    types: ["switch_spst", "switch_spdt", "fuse", "lamp", "transformer", "generic_box"],
+  },
+];
+
+export function getComponentCategoryName(type: ComponentType): string {
+  for (const cat of COMPONENT_CATEGORIES) {
+    if (cat.types.includes(type)) return cat.name;
+  }
+  return "Other";
+}
 
 /** A connection node in the circuit netlist */
 export interface CircuitNode {

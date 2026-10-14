@@ -12,6 +12,7 @@ import {
   type CircuitComponent,
   type ComponentType,
   COMPONENT_CATALOG,
+  COMPONENT_CATEGORIES,
   type KirchhoffCircuit,
   cloneCircuit,
   getComponentPortPosition,
@@ -22,36 +23,12 @@ import type { CircuitRecognitionReview } from "../circuit/ai-converter";
 import { circuitToTikz, tikzToCircuit } from "../circuit/ir2tikz";
 import { materializeCircuitGeometry, moveCircuitSegment, snapCircuitComponent, stretchCircuitWires, junctionOnWire, wirePointOrder, type WireEndpoint } from "../circuit/editor-geometry";
 import { layoutCircuit, rerouteCircuitWires, routeAllTerminalLeads } from "../circuit/layout";
-import { buildWirePathD, renderCircuitToSvg } from "../circuit/svg-render";
+import { buildWirePathD, renderCircuitToSvg, renderComponentPreviewSvg } from "../circuit/svg-render";
 import {
   hitTestCircuitWireSegment,
   isMovableJunction,
   simplifyCircuitWire,
 } from "../circuit/wire-geometry";
-
-const COMMON_COMPONENT_ORDER: ComponentType[] = [
-  "voltage_label",
-  "text_label",
-  "node_filled",
-  "node_open",
-  "resistor",
-  "capacitor",
-  "inductor",
-  "diode",
-  "vsource_dc",
-  "vsource",
-  "isource",
-  "ground",
-  "potentiometer",
-  "ac_source",
-  "switch_spst",
-  "switch_spdt",
-  "transistor_nmos",
-  "transistor_pmos",
-  "transistor_npn",
-  "transistor_pnp",
-  "opamp",
-];
 
 export type CircuitEditorTab = "visual" | "blocks" | "code";
 export type InteractionMode = "select" | "wire";
@@ -611,13 +588,27 @@ export class CircuitModal extends Modal {
       }
     };
 
-    for (const [type, label, icon] of [["node_open", "Terminal", "circle"], ["voltage_label", "Voltage label", "type"]] as const) {
-      const button = this.visualToolbarEl.createEl("button", { cls: "goodobsidian-circuit-btn", title: type === "node_open" ? "Place an open terminal/test point" : "Place + above a voltage name and − below" });
-      const glyph = button.createSpan(); setIcon(glyph, icon); button.createSpan({text:label});
-      button.onclick = () => {
+    for (const [type, label, icon, tip] of [
+      ["node_filled", "Node", "circle-dot", "Place a connection node / dot (matches branch junctions)"],
+      ["node_open", "Terminal", "circle", "Place an open terminal / test point ring"],
+      ["voltage_label", "Voltage label", "type", "Place + above a voltage name and − below"],
+    ] as const) {
+      const isActive = this.pendingPlaceType === type;
+      const button = this.visualToolbarEl.createEl("button", {
+        cls: `goodobsidian-circuit-btn ${isActive ? "is-active" : ""}`,
+        title: tip,
+      });
+      const glyph = button.createSpan({ cls: "goodobsidian-btn-icon" });
+      setIcon(glyph, icon);
+      button.createSpan({ text: label });
+      button.onclick = (e) => {
+        e.stopPropagation();
         this.showComponentPicker = false;
         this.pendingPlaceType = this.pendingPlaceType === type ? null : type;
         this.renderVisualView();
+        if (this.pendingPlaceType) {
+          new Notice(`Tap on schematic or wire to place ${label}.`);
+        }
       };
     }
 
@@ -821,7 +812,7 @@ export class CircuitModal extends Modal {
     const searchContainer = popover.createDiv({ cls: "goodobsidian-comp-picker-search" });
     const searchInput = searchContainer.createEl("input", {
       type: "text",
-      placeholder: "Search symbols (R, C, Diode, NMOS...)",
+      placeholder: "Search symbols (Resistor, Diode, Op-amp, Node...)",
       value: this.componentPickerSearch,
     });
     if (!Platform.isMobile) setTimeout(() => searchInput.focus(), 25);
@@ -857,44 +848,47 @@ export class CircuitModal extends Modal {
         new Notice(`Tap on the schematic to place ${COMPONENT_CATALOG[type]?.description || type}.`);
       };
 
+      const renderItem = (type: ComponentType) => {
+        const def = COMPONENT_CATALOG[type];
+        if (!def) return;
+        const item = listContainer.createEl("button", {
+          cls: "goodobsidian-comp-picker-item",
+          title: `${def.description} (${def.labelPrefix})`,
+        });
+
+        const thumb = item.createDiv({ cls: "goodobsidian-comp-preview-thumb" });
+        thumb.innerHTML = renderComponentPreviewSvg(type);
+
+        const info = item.createDiv({ cls: "goodobsidian-comp-item-info" });
+        info.createDiv({ cls: "goodobsidian-comp-item-name", text: def.description });
+        const sub = def.defaultValue ? `${def.labelPrefix} · ${def.defaultValue}` : def.labelPrefix;
+        info.createDiv({ cls: "goodobsidian-comp-item-desc", text: sub });
+
+        item.createSpan({ cls: "comp-code", text: def.labelPrefix });
+        item.onclick = () => selectType(type);
+      };
+
       if (q) {
         const filtered = allTypes.filter(matches);
         if (filtered.length === 0) {
-          listContainer.createDiv({ cls: "goodobsidian-blocks-empty", text: "No components match search." });
+          listContainer.createDiv({ cls: "goodobsidian-blocks-empty", text: `No components match "${q}".` });
           return;
         }
         for (const type of filtered) {
-          const def = COMPONENT_CATALOG[type];
-          const item = listContainer.createEl("button", { cls: "goodobsidian-comp-picker-item" });
-          item.createSpan({ text: def.description });
-          item.createSpan({ cls: "comp-code", text: def.labelPrefix });
-          item.onclick = () => selectType(type);
+          renderItem(type);
         }
         return;
       }
 
-      listContainer.createDiv({ cls: "goodobsidian-comp-picker-section", text: `Common Symbols · ${allTypes.length} total` });
-      for (const type of COMMON_COMPONENT_ORDER) {
-        if (matches(type)) {
-          const def = COMPONENT_CATALOG[type];
-          const item = listContainer.createEl("button", { cls: "goodobsidian-comp-picker-item" });
-          item.createSpan({ text: def.description });
-          item.createSpan({ cls: "comp-code", text: def.labelPrefix });
-          item.onclick = () => selectType(type);
-        }
-      }
-
-      const otherTypes = allTypes.filter((t) => !COMMON_COMPONENT_ORDER.includes(t));
-      if (otherTypes.length > 0) {
-        listContainer.createDiv({ cls: "goodobsidian-comp-picker-section", text: "More Symbols" });
-        for (const type of otherTypes) {
-          if (matches(type)) {
-            const def = COMPONENT_CATALOG[type];
-            const item = listContainer.createEl("button", { cls: "goodobsidian-comp-picker-item" });
-            item.createSpan({ text: def.description });
-            item.createSpan({ cls: "comp-code", text: def.labelPrefix });
-            item.onclick = () => selectType(type);
-          }
+      for (const cat of COMPONENT_CATEGORIES) {
+        const catTypes = cat.types.filter((t) => COMPONENT_CATALOG[t]);
+        if (catTypes.length === 0) continue;
+        listContainer.createDiv({
+          cls: "goodobsidian-comp-picker-section",
+          text: `${cat.name} · ${catTypes.length}`,
+        });
+        for (const type of catTypes) {
+          renderItem(type);
         }
       }
     };
@@ -1698,7 +1692,7 @@ export class CircuitModal extends Modal {
       counter++;
     }
     const id = `${prefix.toLowerCase()}${counter}`;
-    const label = `${prefix}${counter}`;
+    const label = (type === "node_filled" || type === "node_open") ? "" : `${prefix}${counter}`;
 
     let cx = customX !== undefined ? customX : 0;
     let cy = customY !== undefined ? customY : 0;
