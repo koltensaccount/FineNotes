@@ -252,6 +252,32 @@ export class RecolorStrokes implements Command {
   }
 }
 
+/** Change selected pen/shape patterns in one undo step, retaining geometry and pressure. */
+export class SetStrokeLineStyle implements Command {
+  readonly label = "Change line style";
+  private previous: Array<{stroke: Stroke; style: import("./document").LineStyle | undefined}> = [];
+  constructor(readonly pageId: string, private readonly strokes: readonly Stroke[], private readonly style: import("./document").LineStyle) {}
+  apply(doc: InkDocument): void {
+    this.previous = [];
+    const page = pageById(doc,this.pageId);
+    if (!page) return;
+    for (const stroke of present(page.strokes,this.strokes)) {
+      if (stroke.tool !== "pen") continue;
+      this.previous.push({stroke,style:stroke.lineStyle});
+      if (this.style === "solid") delete stroke.lineStyle;
+      else stroke.lineStyle = this.style;
+    }
+  }
+  invert(doc: InkDocument): void {
+    if (!pageById(doc,this.pageId)) return;
+    for (const {stroke,style} of this.previous) {
+      if (style === undefined) delete stroke.lineStyle;
+      else stroke.lineStyle = style;
+    }
+    this.previous = [];
+  }
+}
+
 /** Fresh ids for copied elements. */
 export interface IdSource {
   stroke: () => string;

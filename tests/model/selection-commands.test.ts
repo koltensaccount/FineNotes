@@ -304,3 +304,18 @@ describe("cross-page moves", () => {
     expect(JSON.stringify(doc)).toBe(initial);
   });
 });
+
+it("changes pen and shape styles with exact undo, retaining geometry and highlighter ink", async () => {
+  const {SetStrokeLineStyle}=await import("../../src/model/selection-commands");
+  const {doc,s}=fixture(), before=snap(doc);
+  const points=s.map(stroke=>stroke.pts.slice());
+  const command=new SetStrokeLineStyle("p1",s,"dotted");
+  command.apply(doc);
+  expect(s[0].lineStyle).toBe("dotted"); expect(s[1].lineStyle).toBe("dotted");
+  expect(s[2].lineStyle).toBeUndefined();
+  expect(s.map(stroke=>stroke.pts)).toEqual(points);
+  command.invert(doc); expect(snap(doc)).toBe(before);
+  command.apply(doc); expect(s[0].lineStyle).toBe("dotted");
+  const solid=new SetStrokeLineStyle("p1",s,"solid"); solid.apply(doc);
+  expect(s[0].lineStyle).toBeUndefined(); solid.invert(doc); expect(s[0].lineStyle).toBe("dotted");
+});

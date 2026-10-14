@@ -215,6 +215,7 @@ import {
   type IdSource,
   type PageElements,
   RecolorStrokes,
+  SetStrokeLineStyle,
   RemoveElements,
   TranslateElements,
   MoveElementsToPage,
@@ -5680,6 +5681,14 @@ export class InkSurface {
     if (!shape && this.editableInk(sel)) {
       for (const mode of ["resize", "scale"] as const) actions.push({ id: `drawing-${mode}`, icon: mode === "resize" ? "move-horizontal" : "maximize-2", label: mode === "resize" ? "Resize" : "Scale proportionally", group: "shape", bar: true, run: () => { this.shapeMode = mode; this.syncSelectionOverlay(); } });
     }
+    const patterned = sel.strokes.filter(stroke => stroke.tool === "pen");
+    if (patterned.length) {
+      for (const style of ["solid", "dashed", "dotted"] as const) {
+        const chosen = patterned.every(stroke => lineStyleOf(stroke.lineStyle) === style);
+        const name = style[0].toUpperCase() + style.slice(1);
+        actions.push({id:`line-style-${style}`,icon: chosen ? "check" : "minus",label:`Line: ${name}`,group:"line-style",run:()=>this.setSelectionLineStyle(style)});
+      }
+    }
     if (sel.strokes.length > 0) {
       const first = sel.strokes[0].color;
       actions.push({
@@ -6543,6 +6552,16 @@ export class InkSurface {
   }
 
   /** Give every selected stroke one colour, as one undo step. */
+  private setSelectionLineStyle(style: import("../model/document").LineStyle): void {
+    const sel = this.liveSelection();
+    const strokes = sel?.strokes.filter(stroke => stroke.tool === "pen") ?? [];
+    if (!sel || !strokes.length || strokes.every(stroke => lineStyleOf(stroke.lineStyle) === style)) return;
+    this.history.push(this.doc, new SetStrokeLineStyle(sel.pageId, strokes, style));
+    const box = this.boxForPage(sel.pageId), bounds = selectionBounds(strokes, [], []);
+    if (box && bounds) this.renderer?.invalidateRegion(box.index, bounds);
+    this.renderDry(); this.syncActionBar(); this.changed();
+  }
+
   private recolorSelection(color: string): void {
     const sel = this.liveSelection();
     if (!sel || sel.strokes.length === 0 || this.callbacks.isLocked?.()) return;
