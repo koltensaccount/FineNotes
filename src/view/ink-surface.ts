@@ -6804,8 +6804,16 @@ export class InkSurface {
     let factor = 1;
     if (edit.mode === "scale") {
       const original = Math.hypot(drag.from.x-frame.cx,drag.from.y-frame.cy);
-      factor = Math.max(4 / Math.min(frame.w,frame.h),Math.hypot(p.x-frame.cx,p.y-frame.cy) / Math.max(2,original));
+      factor = Math.max(0.01,Math.hypot(p.x-frame.cx,p.y-frame.cy) / Math.max(2,original));
       edit.preview = { ...frame,w:frame.w*factor,h:frame.h*factor };
+    } else if (handle.length === 2) {
+      // Corners scale the drawing uniformly around the opposite corner.
+      // Project pointer movement onto the diagonal instead of stretching each axis.
+      const sx = handle.includes("e") ? 1 : -1, sy = handle.includes("s") ? 1 : -1;
+      const width = frame.w + sx * (p.x - drag.from.x), height = frame.h + sy * (p.y - drag.from.y);
+      factor = Math.max(0.01, (frame.w * width + frame.h * height) / (frame.w * frame.w + frame.h * frame.h));
+      const w = frame.w * factor, h = frame.h * factor;
+      edit.preview = { ...frame, w, h, cx: frame.cx + sx * (w - frame.w) / 2, cy: frame.cy + sy * (h - frame.h) / 2 };
     } else {
       let left=frame.cx-frame.w/2,right=frame.cx+frame.w/2,top=frame.cy-frame.h/2,bottom=frame.cy+frame.h/2;
       if(handle.includes("w")) left=Math.min(right-4,left+p.x-drag.from.x);
@@ -6818,7 +6826,7 @@ export class InkSurface {
     edit.draft=edit.base.map(stroke => {
       const pts=stroke.pts.slice();
       for(let i=0;i<pts.length;i+=3) { pts[i]=next.cx+(pts[i]-frame.cx)*next.w/frame.w; pts[i+1]=next.cy+(pts[i+1]-frame.cy)*next.h/frame.h; }
-      return { ...stroke,pts,size: edit.mode === "scale" ? scaledStrokeSize(stroke.size,factor) : stroke.size };
+      return { ...stroke,pts,size: edit.mode === "scale" || handle.length === 2 ? scaledStrokeSize(stroke.size,factor) : stroke.size };
     });
     if(!drag.lifted) this.liftSelection(drag,box);
     this.renderGroupDraft(); this.syncSelectionOverlay();

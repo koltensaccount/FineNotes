@@ -1366,11 +1366,22 @@ describe("individual shape editing", () => {
     const drag={ pointerId:1,selection,bounds:{ minX:94,minY:94,maxX:306,maxY:206 },from:{ x:300,y:200 },dx:0,dy:0,lifted:true,ink:{ base:original,draft:original,frame,preview:frame,handle:"se",mode } };
     surface.groupDrag=drag; run(surface,"moveInkHandle",drag,{ index:0,width:800,height:1000 },{ x:400,y:250 });
     expect(selection.strokes).toEqual(original); expect(drag.ink.draft[1].tool).toBe("highlighter"); expect(drag.ink.draft[1].color).toBe("#ffff00"); expect(drag.ink.draft[1].pts[2]).toBe(.3);
-    expect(drag.ink.draft[0].size).toBe(mode === "scale" ? 6 : 3); expect(drag.ink.draft[1].size).toBe(mode === "scale" ? 24 : 12);
+    expect(drag.ink.draft[0].size).toBe(mode === "scale" ? 6 : 4.5); expect(drag.ink.draft[1].size).toBe(mode === "scale" ? 24 : 18);
     expect(renderer.renderSelectionDraft.mock.calls.at(-1)![1]).toEqual(drag.ink.draft);
     run(surface,"endGroupDrag",false); expect(selection.strokes).toEqual(original); expect(history.undo(doc)).toBeNull();
     surface.groupDrag=drag; run(surface,"endGroupDrag",true); expect(selection.strokes[1].pts).toEqual(drag.ink.draft[1].pts);
-    history.undo(doc); expect(selection.strokes).toEqual(original); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(selection.strokes[1].size).toBe(mode === "scale" ? 24 : 12);
+    history.undo(doc); expect(selection.strokes).toEqual(original); expect(history.undo(doc)).toBeNull(); history.redo(doc); expect(selection.strokes[1].size).toBe(mode === "scale" ? 24 : 18);
+  });
+  it("shrinks handwriting below four pixels proportionally without stretching", () => {
+    const {surface,stroke,selection}=fixture(); delete stroke.shape;
+    const frame={cx:200,cy:150,w:200,h:100,angle:0};
+    const base=selection.strokes.map(s=>structuredClone(s));
+    const drag={selection,from:{x:300,y:200},lifted:true,ink:{base,draft:base,frame,preview:frame,handle:"se",mode:"resize"}};
+    run(surface,"moveInkHandle",drag,{index:0,width:800,height:1000},{x:102,y:101});
+    expect(drag.ink.preview.w).toBeCloseTo(2);
+    expect(drag.ink.preview.h).toBeCloseTo(1);
+    expect(drag.ink.preview.cx-drag.ink.preview.w/2).toBeCloseTo(100);
+    expect(drag.ink.preview.cy-drag.ink.preview.h/2).toBeCloseTo(100);
   });
   it("offers drawing controls only for ink selections, retaining mixed-object behavior",()=>{
     const {surface,stroke,selection}=fixture(); delete stroke.shape;
