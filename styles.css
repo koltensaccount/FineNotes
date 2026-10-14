@@ -7398,3 +7398,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   .goodobsidian-slide-import-notes { font-size: 10px; }
 }
 @media (max-height: 500px) { .goodobsidian-slide-import-preview { --slide-preview-height: min(24vh, 120px); } }
+
+/* Fit the pen-type well around its preview, without lifting it outside the pill. */
+.goodobsidian-options button.goodobsidian-pentype { box-sizing: border-box; width: 66px; min-width: 66px; height: 44px; min-height: 44px; padding: 6px; align-items: center; justify-content: center; border-radius: 12px; }
+.goodobsidian-options .goodobsidian-pentype.is-active { transform: none; }

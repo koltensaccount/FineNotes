@@ -1,3 +1,4 @@
+import { connectRecognizedLine } from "../ink/line-connection";
 import type { PdfRegion } from "./pdf-region-copy";
 import { renderSelectionToPng, copySelectionToSystemClipboard } from "./selection-clipboard";
 import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
@@ -3385,6 +3386,11 @@ export class InkSurface {
     else if (this.shapeDrag && this.activePage) this.showShapeDraft(this.activePage);
   }
 
+  private connectToExistingLine(kind: ShapeKind, pts: number[], box: PageBox | null = this.activePage): number[] {
+    const strokes = box ? this.pageAt(box.index)?.strokes ?? [] : [];
+    return connectRecognizedLine(kind, pts, strokes, 12 * (window.devicePixelRatio || 1) / Math.max(.1, this.deviceScale));
+  }
+
   private updateConstrainedSnap(): void {
     const snap = this.snap;
     if (!snap) return;
@@ -3394,6 +3400,7 @@ export class InkSurface {
       snap.pts = constrained.pts;
       this.constraintAngle = constrained.angle;
     } else snap.pts = raw;
+    snap.pts = this.connectToExistingLine(snap.kind, snap.pts);
     this.scheduleWet();
   }
 
@@ -4357,7 +4364,7 @@ export class InkSurface {
       // have trailed a tail as it left the glass.
       const held = heldLongEnough;
       shape = recognizeAtZoom(builder.points(), this.userZoom, { held });
-      if (shape) shape.pts = this.constraintGeometry(shape.kind, alignNewShape(shape.kind, shape.pts));
+      if (shape) shape.pts = this.connectToExistingLine(shape.kind, this.constraintGeometry(shape.kind, alignNewShape(shape.kind, shape.pts)), box);
       this.hudVerdict(cancelledWhileHeld ? "cx-hold" : "lift", builder.points(), shape, held);
     } else if (!shape && this.debug) {
       this.hud.mark(final ? "lift·nohold" : "cx·nohold");
@@ -4484,7 +4491,7 @@ export class InkSurface {
       origin = { x: cx - halfW, y: cy - halfH };
       to = { x: cx + halfW, y: cy + halfH };
     }
-    return this.constraintGeometry(preset, presetGeometry(preset, origin, to, FALLBACK_PRESSURE));
+    return this.connectToExistingLine(preset, this.constraintGeometry(preset, presetGeometry(preset, origin, to, FALLBACK_PRESSURE)), box);
   }
 
   /**
@@ -4514,7 +4521,7 @@ export class InkSurface {
     }
     // While dragging, preview the real size — even a tiny one; the tap
     // default only applies if the pen lifts without having moved.
-    const pts = this.constraintGeometry(drag.preset, presetGeometry(drag.preset, drag.origin, drag.to, FALLBACK_PRESSURE));
+    const pts = this.connectToExistingLine(drag.preset, this.constraintGeometry(drag.preset, presetGeometry(drag.preset, drag.origin, drag.to, FALLBACK_PRESSURE)), box);
     if (pts.length === 0) {
       this.renderer?.clearWet();
       return;
