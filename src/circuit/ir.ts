@@ -819,6 +819,16 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
           ports: {},
         };
 
+        for (const key of ["labelOffset", "valueOffset"] as const) {
+          const raw = compObj[key];
+          if (typeof raw === "object" && raw !== null) {
+            const offset = raw as Record<string, unknown>;
+            if (typeof offset.x === "number" && Number.isFinite(offset.x) && typeof offset.y === "number" && Number.isFinite(offset.y)) {
+              comp[key] = { x: offset.x, y: offset.y, ...(typeof offset.manual === "boolean" ? { manual: offset.manual } : {}) };
+            }
+          }
+        }
+
         if (typeof compObj.ports === "object" && compObj.ports !== null) {
           for (const [pId, nId] of Object.entries(compObj.ports as Record<string, unknown>)) {
             if (typeof nId === "string" && nId.trim()) {

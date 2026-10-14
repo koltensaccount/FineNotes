@@ -7,6 +7,7 @@
  * wire routing, and Obsidian/FineNotes design language.
  */
 
+import { DialogKeyboard } from "./dialog-keyboard";
 import { Platform, type App, Modal, Notice, setIcon } from "obsidian";
 import {
   type CircuitComponent,
@@ -118,6 +119,7 @@ export class CircuitModal extends Modal {
   private viewportBasis: string | null = null;
   private hitPixels = 8;
   private gridSnap = true;
+  private keyboard?: DialogKeyboard;
 
   private snapCoordinate(value: number): number {
     return this.gridSnap ? Math.round(value * 2) / 2 : value;
@@ -178,6 +180,7 @@ export class CircuitModal extends Modal {
   override onOpen(): void {
     const { contentEl, modalEl } = this;
     modalEl.addClass("goodobsidian-circuit-modal");
+    this.keyboard = new DialogKeyboard(modalEl);
     contentEl.empty();
     contentEl.addClass("goodobsidian-circuit-modal-content");
 
@@ -309,6 +312,7 @@ export class CircuitModal extends Modal {
   }
 
   override onClose(): void {
+    this.keyboard?.end();
     this.cancelActiveDrag();
     if (this.parseDebounceTimer !== null) {
       window.clearTimeout(this.parseDebounceTimer);
@@ -2048,6 +2052,7 @@ export class CircuitModal extends Modal {
     position.createDiv({ cls: "setting-item-name", text: "Position (X / Y)" });
     for (const axis of ["x", "y"] as const) {
       const input = position.createEl("input", { type: "number", value: String(selectedComp[axis]), attr: { step: "0.01", "aria-label": `Component ${axis.toUpperCase()} position` } });
+      this.keyboard?.watch(input, position);
       input.onchange = () => {
         const value = Number(input.value);
         if (!input.value.trim() || !Number.isFinite(value)) return;
@@ -2070,6 +2075,7 @@ export class CircuitModal extends Modal {
       labelGroup.createDiv({ cls: "setting-item-name", text: "Text / LaTeX (e.g. + , - , Vo , 15V , \\infty)" });
       const labelInput = labelGroup.createEl("input", { type: "text", value: selectedComp.label });
       labelInput.placeholder = "Enter label text";
+      this.keyboard?.watch(labelInput, labelGroup);
       labelInput.onchange = () => {
         this.mutateCircuit((c) => {
           const comp = c.components[selectedComp.id];
@@ -2110,6 +2116,7 @@ export class CircuitModal extends Modal {
     const labelGroup = inspector.createDiv({ cls: "setting-item" });
     labelGroup.createDiv({ cls: "setting-item-name", text: "Label (e.g. R1, C1)" });
     const labelInput = labelGroup.createEl("input", { type: "text", value: selectedComp.label });
+    this.keyboard?.watch(labelInput, labelGroup);
     labelInput.onchange = () => {
       this.mutateCircuit((c) => {
         const comp = c.components[selectedComp.id];
@@ -2122,6 +2129,7 @@ export class CircuitModal extends Modal {
     const valueGroup = inspector.createDiv({ cls: "setting-item" });
     valueGroup.createDiv({ cls: "setting-item-name", text: "Value (e.g. 10kΩ, 100nF, 5V)" });
     const valueInput = valueGroup.createEl("input", { type: "text", value: selectedComp.value || "" });
+    this.keyboard?.watch(valueInput, valueGroup);
     valueInput.onchange = () => {
       this.mutateCircuit((c) => {
         const comp = c.components[selectedComp.id];

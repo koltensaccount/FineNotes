@@ -784,6 +784,9 @@ export function renderComponentPreviewSvg(
     ports: {},
   };
 
-  const body = renderComponentSymbol(dummyComp, strokeColor, false, 20);
+  let body = renderComponentSymbol(dummyComp, strokeColor, false, 20);
+  if (type === "text_label" || type === "voltage_label") {
+    body += renderLatexLabelToSvg(type === "voltage_label" ? "V_o" : "A", 0, 0.22, { fontSize: 0.65, color: strokeColor, anchor: "middle" });
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbMinX.toFixed(2)} ${vbMinY.toFixed(2)} ${vbW.toFixed(2)} ${vbH.toFixed(2)}" width="100%" height="100%" style="overflow: visible;" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
 }

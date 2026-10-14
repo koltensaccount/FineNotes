@@ -493,3 +493,16 @@ describe("Circuit SVG rendering regressions", () => {
   });
 });
 
+
+it("renders every catalog preview without invalid geometry or blank annotations", async () => {
+  const {COMPONENT_CATALOG}=await import("../../src/circuit/ir");
+  const {renderComponentPreviewSvg}=await import("../../src/circuit/svg-render");
+  for (const type of Object.keys(COMPONENT_CATALOG)) {
+    const svg=renderComponentPreviewSvg(type as keyof typeof COMPONENT_CATALOG);
+    expect(svg).not.toMatch(/NaN|undefined|Infinity/);
+    expect(svg).toMatch(/<(?:path|line|circle|rect|polygon|text)\b/);
+  }
+  expect(renderComponentPreviewSvg("meter_voltage")).toContain(">V</text>");
+  expect(renderComponentPreviewSvg("meter_current")).toContain(">A</text>");
+  expect(renderComponentPreviewSvg("voltage_label")).toContain('data-latex-source="V_o"');
+});

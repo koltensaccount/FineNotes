@@ -113,6 +113,15 @@ for (const viewport of [
   await page.getByRole("button", { name: "Snap: On", exact: true }).click();
   assert(await page.getByRole("button", { name: "Snap: Off", exact: true }).isVisible());
   const label = inspector.locator('input[type="text"]').first();
+  await label.focus();
+  const aboveKeyboard = await page.evaluate(() => {
+    document.body.style.setProperty("--keyboard-height", "550px");
+    editor.modalEl.style.transition = "none";
+    editor.keyboard.update();
+    return document.activeElement.getBoundingClientRect().bottom <= innerHeight - 550 - 10;
+  });
+  assert(aboveKeyboard, "focused label should remain above Obsidian's keyboard inset");
+  await page.evaluate(() => { document.body.style.removeProperty("--keyboard-height"); editor.keyboard.update(); });
   await label.fill("R_test");
   await label.press("Tab");
   assert.equal(await page.evaluate(() => editor.circuit.components.r.label), "R_test");

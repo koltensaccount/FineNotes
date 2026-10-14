@@ -239,3 +239,14 @@ it("places an open terminal on an existing wire and keeps a voltage label non-el
   const annotation=Object.values(m.circuit.components).find((c:any)=>c.type==="voltage_label") as any;
   expect(annotation.ports).toEqual({});
 });
+
+it("preserves manual label and value positions through notebook normalization and reopening", async () => {
+  const {validateAndNormalizeCircuit}=await import("../../src/circuit/ir");
+  const c=editorFixture();
+  c.components.r.labelOffset={x:2.25,y:-3.5,manual:true};
+  c.components.r.valueOffset={x:-1.25,y:2.5,manual:true};
+  const loaded=validateAndNormalizeCircuit(JSON.parse(JSON.stringify(c)));
+  const reopened=new CircuitModal({} as never,{circuit:loaded,onSave:vi.fn()}) as unknown as Record<string,any>;
+  expect(reopened.circuit.components.r.labelOffset).toEqual(c.components.r.labelOffset);
+  expect(reopened.circuit.components.r.valueOffset).toEqual(c.components.r.valueOffset);
+});
