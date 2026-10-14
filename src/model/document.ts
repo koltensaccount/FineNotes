@@ -300,6 +300,25 @@ export interface CircuitElement {
   svg?: string;
 }
 
+/** A persistent clip reference capturing a cropped region of a notebook page. */
+export interface NotebookClip {
+  id: string;
+  pageId: string;
+  bounds: Bounds;
+  /** Element IDs captured inside the clip to dynamically track handwriting shifts */
+  elements?: {
+    strokeIds?: string[];
+    imageIds?: string[];
+    textBoxIds?: string[];
+    circuitIds?: string[];
+  };
+  /** Bounding box of the tracked elements at creation time */
+  elementBounds?: Bounds;
+  label?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type PageKind = "ink";
 
 export interface Page {
@@ -311,6 +330,7 @@ export interface Page {
   images: ImageElement[];
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
+  clips?: NotebookClip[];
   /**
    * Wall-clock time (ms since the Unix epoch) that this page's stroke `t0`
    * values count from: the pen-down of the first timestamped stroke. Absent
@@ -511,3 +531,109 @@ function widen(box: Bounds, low: "minX" | "minY", high: "maxX" | "maxY", value: 
   if (value < box[low]) box[low] = value;
   if (value > box[high]) box[high] = value;
 }
+
+/**
+ * Smallest axis-aligned box around an element list or set of strokes/images/textboxes/circuits.
+ */
+export function elementsBounds(
+  page: Page,
+  elements?: { strokeIds?: string[]; imageIds?: string[]; textBoxIds?: string[]; circuitIds?: string[] },
+): Bounds | null {
+  if (!elements) return null;
+  const box: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  let count = 0;
+  if (elements.strokeIds && elements.strokeIds.length > 0) {
+    const strokeSet = new Set(elements.strokeIds);
+    for (const stroke of page.strokes) {
+      if (strokeSet.has(stroke.id)) {
+        const b = strokeBounds(stroke);
+        if (b) {
+          widen(box, "minX", "maxX", b.minX);
+          widen(box, "minY", "maxY", b.minY);
+          widen(box, "minX", "maxX", b.maxX);
+          widen(box, "minY", "maxY", b.maxY);
+          count++;
+        }
+      }
+    }
+  }
+  if (elements.imageIds && elements.imageIds.length > 0) {
+    const imgSet = new Set(elements.imageIds);
+    for (const img of page.images) {
+      if (imgSet.has(img.id)) {
+        widen(box, "minX", "maxX", img.x);
+        widen(box, "minY", "maxY", img.y);
+        widen(box, "minX", "maxX", img.x + img.w);
+        widen(box, "minY", "maxY", img.y + img.h);
+        count++;
+      }
+    }
+  }
+  if (elements.textBoxIds && elements.textBoxIds.length > 0) {
+    const tbSet = new Set(elements.textBoxIds);
+    for (const tb of page.textBoxes) {
+      if (tbSet.has(tb.id)) {
+        widen(box, "minX", "maxX", tb.x);
+        widen(box, "minY", "maxY", tb.y);
+        widen(box, "minX", "maxX", tb.x + tb.w);
+        widen(box, "minY", "maxY", tb.y + (tb.h ?? 30));
+        count++;
+      }
+    }
+  }
+  if (elements.circuitIds && elements.circuitIds.length > 0 && page.circuits) {
+    const cSet = new Set(elements.circuitIds);
+    for (const c of page.circuits) {
+      if (cSet.has(c.id)) {
+        widen(box, "minX", "maxX", c.x);
+        widen(box, "minY", "maxY", c.y);
+        widen(box, "minX", "maxX", c.x + c.w);
+        widen(box, "minY", "maxY", c.y + c.h);
+        count++;
+      }
+    }
+  }
+  return count > 0 ? box : null;
+}
+
+/**
+ * Resolves the dynamic bounding box for a clip. If tracked elements exist and moved
+ * (e.g. from space insertion or dragging), the bounds dynamically follow the elements.
+ */
+export function clipCurrentBounds(page: Page, clip: NotebookClip): Bounds {
+  if (clip.elements && clip.elementBounds) {
+    const currentElemBounds = elementsBounds(page, clip.elements);
+    if (currentElemBounds) {
+      const orig = clip.elementBounds;
+      const dx = (currentElemBounds.minX + currentElemBounds.maxX) / 2 - (orig.minX + orig.maxX) / 2;
+      const dy = (currentElemBounds.minY + currentElemBounds.maxY) / 2 - (orig.minY + orig.maxY) / 2;
+      return {
+        minX: clip.bounds.minX + dx,
+        minY: clip.bounds.minY + dy,
+        maxX: clip.bounds.maxX + dx,
+        maxY: clip.bounds.maxY + dy,
+      };
+    }
+  }
+  return { ...clip.bounds };
+}
+
+/**
+ * Find a clip across the document by its ID (with or without leading `^` or `clip-`).
+ */
+export function findClip(
+  doc: InkDocument,
+  clipId: string,
+): { clip: NotebookClip; page: Page; pageIndex: number } | null {
+  const cleanId = clipId.replace(/^[\^#]/, "").trim();
+  for (let i = 0; i < doc.pages.length; i++) {
+    const page = doc.pages[i];
+    if (!page.clips) continue;
+    const clip = page.clips.find(
+      (c) => c.id === cleanId || c.id === `clip-${cleanId}` || `^${c.id}` === cleanId,
+    );
+    if (clip) return { clip, page, pageIndex: i };
+  }
+  return null;
+}
+

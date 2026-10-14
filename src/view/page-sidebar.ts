@@ -60,6 +60,7 @@ export type PageAction =
   | "convert-to-notebook"
   | "bookmark"
   | "copy-link"
+  | "copy-page-embed"
   /** Add the page to the contents, or rename its entry: the host asks for the title. */
   | "contents"
   | "contents-remove";
@@ -811,6 +812,9 @@ export class PageSidebar {
     }
     menu.addItem((item) =>
       item.setTitle("Copy link to page").setIcon("link").onClick(act("copy-link")),
+    );
+    menu.addItem((item) =>
+      item.setTitle("Copy page embed").setIcon("file-code-2").onClick(act("copy-page-embed")),
     );
     menu.addItem((item) => item.setTitle("Copy page").setIcon("copy").onClick(act("copy-pages")));
     if (!this.single)

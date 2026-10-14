@@ -1,4 +1,5 @@
 import { PdfImportModal } from "./view/pdf-import-modal";
+import { FineNotesEmbedManager } from "./view/embed-renderer";
 import { renderPdfSlides } from "./view/pdf-slides";
 import { saveImageAttachment } from "./view/image-import";
 import { type SavedScan } from "./model/scan-commands";
@@ -118,6 +119,7 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   override settings!: GoodObsidianSettings;
+  embedManager!: FineNotesEmbedManager;
   readonly companionPdfs = new CompanionPdfManager(this.app, async (store) => {
     this.settings.companionPdfs = store;
     await this.saveSettings();
@@ -176,6 +178,8 @@ export default class GoodObsidianPlugin extends Plugin {
     await this.setUpKeyStore();
     this.companionPdfs.load(this.settings.companionPdfs);
     await this.companionPdfs.recoverAll();
+
+    this.embedManager = new FineNotesEmbedManager(this, this.app);
 
     this.registerView(VIEW_TYPE_INK, (leaf) => new InkView(leaf, this));
     // The image menu's "Generate with AI" row: the same modal as the AI menu,

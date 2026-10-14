@@ -37,9 +37,11 @@ import { validateAndNormalizeCircuit } from "../circuit/ir";
 import {
   type AttachmentFolders,
   type Backdrop,
+  type Bounds,
   type CircuitElement,
   type ImageElement,
   type InkDocument,
+  type NotebookClip,
   type Page,
   type PageGeometry,
   type Recording,
@@ -150,6 +152,7 @@ interface StoredPage {
   images: ImageElement[];
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
+  clips?: NotebookClip[];
   strokes: StoredStroke[];
 }
 
@@ -204,8 +207,8 @@ function storeStroke(stroke: Stroke): StoredStroke {
 }
 
 /**
- * The view, backdrop, geometry, images, text boxes and recordings are written
- * as they are held, every key in the order it was set.
+ * The view, backdrop, geometry, images, text boxes, circuits, clips and recordings
+ * are written as they are held, every key in the order it was set.
  */
 function storePage(page: Page): StoredPage {
   return {
@@ -219,6 +222,7 @@ function storePage(page: Page): StoredPage {
     images: page.images,
     textBoxes: page.textBoxes,
     circuits: page.circuits && page.circuits.length > 0 ? page.circuits : undefined,
+    clips: page.clips && page.clips.length > 0 ? page.clips : undefined,
     strokes: page.strokes.map(storeStroke),
   };
 }
@@ -553,6 +557,67 @@ function normalizeCircuit(raw: unknown, mintId: () => string): CircuitElement | 
   };
 }
 
+function normalizeClip(raw: unknown, pageId: string): NotebookClip | null {
+  if (!isRecord(raw) || typeof raw.id !== "string") return null;
+  if (!isRecord(raw.bounds)) return null;
+  const b = raw.bounds;
+  if (
+    ![b.minX, b.minY, b.maxX, b.maxY].every((v) => typeof v === "number" && Number.isFinite(v))
+  ) {
+    return null;
+  }
+  let elements: NotebookClip["elements"];
+  if (isRecord(raw.elements)) {
+    const strokeIds = Array.isArray(raw.elements.strokeIds)
+      ? raw.elements.strokeIds.filter((id): id is string => typeof id === "string")
+      : undefined;
+    const imageIds = Array.isArray(raw.elements.imageIds)
+      ? raw.elements.imageIds.filter((id): id is string => typeof id === "string")
+      : undefined;
+    const textBoxIds = Array.isArray(raw.elements.textBoxIds)
+      ? raw.elements.textBoxIds.filter((id): id is string => typeof id === "string")
+      : undefined;
+    const circuitIds = Array.isArray(raw.elements.circuitIds)
+      ? raw.elements.circuitIds.filter((id): id is string => typeof id === "string")
+      : undefined;
+    if (strokeIds || imageIds || textBoxIds || circuitIds) {
+      elements = { strokeIds, imageIds, textBoxIds, circuitIds };
+    }
+  }
+  let elementBounds: Bounds | undefined;
+  if (
+    isRecord(raw.elementBounds) &&
+    [
+      raw.elementBounds.minX,
+      raw.elementBounds.minY,
+      raw.elementBounds.maxX,
+      raw.elementBounds.maxY,
+    ].every((v) => typeof v === "number" && Number.isFinite(v))
+  ) {
+    elementBounds = {
+      minX: raw.elementBounds.minX as number,
+      minY: raw.elementBounds.minY as number,
+      maxX: raw.elementBounds.maxX as number,
+      maxY: raw.elementBounds.maxY as number,
+    };
+  }
+  return {
+    id: raw.id,
+    pageId: typeof raw.pageId === "string" ? raw.pageId : pageId,
+    bounds: {
+      minX: b.minX as number,
+      minY: b.minY as number,
+      maxX: b.maxX as number,
+      maxY: b.maxY as number,
+    },
+    ...(elements ? { elements } : {}),
+    ...(elementBounds ? { elementBounds } : {}),
+    ...(typeof raw.label === "string" ? { label: raw.label } : {}),
+    createdAt: typeof raw.createdAt === "number" ? Math.round(raw.createdAt) : Date.now(),
+    updatedAt: typeof raw.updatedAt === "number" ? Math.round(raw.updatedAt) : Date.now(),
+  };
+}
+
 function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page {
   const page = isRecord(raw) ? raw : {};
   const images: ImageElement[] = [];
@@ -576,6 +641,12 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     const norm = normalizeCircuit(c, () => `c${++lastCircuitId}`);
     if (norm) circuits.push(norm);
   });
+  const clips: NotebookClip[] = [];
+  const clipsRaw = Array.isArray(page.clips) ? page.clips : [];
+  clipsRaw.forEach((c) => {
+    const norm = normalizeClip(c, typeof page.id === "string" ? page.id : `p${index + 1}`);
+    if (norm) clips.push(norm);
+  });
   return {
     id: typeof page.id === "string" ? page.id : `p${index + 1}`,
     kind: "ink",
@@ -585,6 +656,7 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     images,
     textBoxes,
     circuits: circuits.length > 0 ? circuits : undefined,
+    clips: clips.length > 0 ? clips : undefined,
     ...(isEpoch(page.epoch) ? { epoch: Math.round(page.epoch) } : {}),
     // Only a literal `true`: anything else in the file is "not bookmarked".
     ...(page.bookmarked === true ? { bookmarked: true as const } : {}),

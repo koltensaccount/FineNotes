@@ -53,6 +53,7 @@ export interface MorePanelActions {
   /** Add the page to the contents, or rename its entry. */
   editTitle: (index: number) => void;
   copyLink: (index: number) => void;
+  copyPageEmbed?: (index: number) => void;
   duplicate: (index: number) => void;
   move?: (index: number) => void;
   changeTemplate: (index: number, anchor: HTMLElement) => void;
@@ -147,6 +148,13 @@ export class MorePanel {
       text: "Copy link to page",
       run: () => actions.copyLink(page.index),
     });
+    if (actions.copyPageEmbed) {
+      this.row(card, {
+        icon: "file-code-2",
+        text: "Copy page embed",
+        run: () => actions.copyPageEmbed?.(page.index),
+      });
+    }
     if (!page.single) {
       this.row(card, {
         icon: "copy",

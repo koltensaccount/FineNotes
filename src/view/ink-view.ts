@@ -57,10 +57,14 @@ import {
 import { AUTO_RECOGNIZE_IDLE_MS, ICON_INK_VIEW, PALETTE, SIZES, VIEW_TYPE_INK } from "../constants";
 import {
   type AttachmentKind,
+  type Bounds,
   type InkDocument,
+  type NotebookClip,
   type Page,
   type TextBoxElement,
+  clipCurrentBounds,
   emptyDocument,
+  findClip,
 } from "../model/document";
 import { DocumentEncoder, buildInkFile, decodeDocument, parseInkFile } from "../model/serialize";
 import type { RecognitionProvider } from "../recognition/provider";
@@ -1155,6 +1159,8 @@ export class InkView extends TextFileView {
       },
       {
         onRecentColors: (colors) => this.plugin.saveRecentColors(colors),
+        onCopyEmbed: (pageId, bounds, elements, elementBounds) =>
+          this.copyEmbed(pageId, bounds, elements, elementBounds),
         onOpenLink: (target) => {
           if (/^https?:\/\//i.test(target)) {
             window.open(target, "_blank");
@@ -1505,8 +1511,20 @@ export class InkView extends TextFileView {
     this.pendingPageIndex = null;
     const pages = surface.document.pages;
     let index: number | null = null;
-    if (subpath !== null) index = pageFromSubpath(subpath, pages.length);
-    else if (back !== null) index = back < pages.length ? back : null;
+    let targetRegion: Bounds | null = null;
+    if (subpath !== null) {
+      const clipMatch = /^#?\^?(?:clip=)?([a-zA-Z0-9_-]+)/i.exec(subpath.trim());
+      if (clipMatch) {
+        const found = findClip(surface.document, clipMatch[1]);
+        if (found) {
+          index = found.pageIndex;
+          targetRegion = clipCurrentBounds(found.page, found.clip);
+        }
+      }
+      if (index === null) {
+        index = pageFromSubpath(subpath, pages.length);
+      }
+    } else if (back !== null) index = back < pages.length ? back : null;
     if (fresh) {
       // From now on the page being read is worth remembering for this file.
       this.restoredPath = path;
@@ -1514,7 +1532,10 @@ export class InkView extends TextFileView {
       surface.resetView();
       index ??= lastPageIndex(this.loadLastPages(), path, pages);
     }
-    if (index !== null) surface.goToPage(index);
+    if (index !== null) {
+      if (targetRegion) surface.goToRegion(index, targetRegion, true);
+      else surface.goToPage(index);
+    }
   }
 
   // --- Where each notebook was left ---------------------------------------------
@@ -1923,6 +1944,10 @@ export class InkView extends TextFileView {
       this.copyPageLink(index);
       return;
     }
+    if (action === "copy-page-embed") {
+      this.copyPageEmbed(index);
+      return;
+    }
     if (this.isProtected()) return;
     const surface = this.surface;
     if (!surface) return;
@@ -2017,6 +2042,61 @@ export class InkView extends TextFileView {
     );
   }
 
+  /**
+   * Copy an embed reference that embeds this notebook on page `index` (0-based)
+   * in ordinary Markdown: `![[Physics.notebook#page=3]]`.
+   */
+  copyPageEmbed(index = this.surface?.currentPage ?? 0): void {
+    const file = this.file;
+    if (!file) return;
+    const page = index + 1;
+    const link = "!" + this.app.fileManager.generateMarkdownLink(file, "", `#page=${page}`);
+    void navigator.clipboard.writeText(link).then(
+      () => new Notice(`Page embed for page ${page} copied.`),
+      () => new Notice("FineNotes could not use the clipboard here."),
+    );
+  }
+
+  /**
+   * Persist a clip reference on the page and copy its Markdown embed reference to clipboard.
+   */
+  copyEmbed(
+    pageId: string,
+    bounds: Bounds,
+    elements?: NotebookClip["elements"],
+    elementBounds?: Bounds,
+  ): void {
+    const file = this.file;
+    const surface = this.surface;
+    if (!file || !surface) return;
+    const page = surface.document.pages.find((p) => p.id === pageId);
+    if (!page) return;
+
+    // Mint a unique clip ID: clip-<8 hex chars>
+    const clipId = `clip-${Math.random().toString(36).slice(2, 10)}`;
+    const now = Date.now();
+    const clip: NotebookClip = {
+      id: clipId,
+      pageId,
+      bounds: { ...bounds },
+      ...(elements ? { elements } : {}),
+      ...(elementBounds ? { elementBounds } : {}),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    page.clips = page.clips ?? [];
+    page.clips.push(clip);
+
+    this.requestSave();
+
+    const link = "!" + this.app.fileManager.generateMarkdownLink(file, "", `#^${clipId}`);
+    void navigator.clipboard.writeText(link).then(
+      () => new Notice("Notebook embed copied to clipboard."),
+      () => new Notice("FineNotes could not access clipboard."),
+    );
+  }
+
   // --- The ⋯ panel -----------------------------------------------------------
 
   /**
@@ -2084,6 +2164,7 @@ export class InkView extends TextFileView {
         toggleBookmark: (at) => act("bookmark", at),
         editTitle: (at) => act("contents", at),
         copyLink: (at) => act("copy-link", at),
+        copyPageEmbed: (at) => act("copy-page-embed", at),
         duplicate: (at) => act("duplicate", at),
         move: (at) => act("move", at),
         // A cover opens its picker on ⋯ itself: the row it was chosen from is gone.

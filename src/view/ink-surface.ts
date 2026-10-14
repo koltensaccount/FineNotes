@@ -61,6 +61,8 @@ import { type App, Notice, Platform, setIcon } from "obsidian";
 import { errorMessage } from "../util/errors";
 import {
   DEFAULT_HIGHLIGHTER_ALPHA,
+  DEFAULT_PAGE_HEIGHT,
+  DEFAULT_PAPER_WIDTH,
   FALLBACK_PRESSURE,
   HOLD_MS,
   HOLD_RADIUS,
@@ -194,6 +196,7 @@ import {
   type ImageCrop,
   type ImageElement,
   type InkDocument,
+  type NotebookClip,
   type Page,
   type ShapeKind,
   type Stroke,
@@ -446,6 +449,12 @@ export interface InkSurfaceCallbacks {
   onCopyPdfRegion?: (page: Page, region: PdfRegion) => Promise<File>;
   onCopyPdfClipboard?: (png: Promise<File>, marker: string) => void;
   onCopySelection?: (png: Promise<Blob>, marker: string) => void;
+  onCopyEmbed?: (
+    pageId: string,
+    bounds: Bounds,
+    elements?: import("../model/document").NotebookClip["elements"],
+    elementBounds?: Bounds,
+  ) => void;
   /** Something the host may display changed (stroke count, zoom, current page). */
   onStatus?: () => void;
   /**
@@ -934,6 +943,7 @@ export class InkSurface {
   private selection: GroupSelection | null = null;
   private pdfRegion: PdfRegion | null = null;
   private pdfRegionCandidate: PdfRegion | null = null;
+  private lastLassoRect: { pageId: string; bounds: Bounds } | null = null;
   /** A lasso has selected content; return only when its outside click dismisses it. */
   private selectionToolUsed = false;
   private lasso: LassoDraft | null = null;
@@ -1825,6 +1835,69 @@ export class InkSurface {
     this.syncViewport();
     this.flashChrome();
     this.requestFrame();
+  }
+
+  /**
+   * Scroll to page `index` and center `bounds` in the viewport.
+   * Also flashes a subtle highlight ring around `bounds`.
+   */
+  goToRegion(index: number, bounds?: Bounds, animate = false): void {
+    if (!bounds) {
+      this.goToPage(index, animate);
+      return;
+    }
+    this.cancelShapeDraft();
+    this.cancelGroupDrag();
+    const clamped = Math.max(0, Math.min(this.doc.pages.length - 1, index));
+    const row = this.direction === "horizontal";
+    this.pageIndex = clamped;
+    this.ensurePaperSize();
+
+    const scale = this.scale;
+    const pageTop = scrollTopForPage(this.pageLayout, clamped);
+    const regionCenterY = pageTop + (bounds.minY + bounds.maxY) / 2;
+    const targetY = Math.max(0, regionCenterY * scale - this.cssH / 2);
+    const targetX = row
+      ? this.rowX(clamped)
+      : Math.max(0, ((bounds.minX + bounds.maxX) / 2) * scale - this.cssW / 2);
+
+    if (animate) this.scroller.glideTo(targetX, targetY, now());
+    else this.scroller.setPosition(targetX, targetY);
+
+    this.syncViewport();
+    this.callbacks.onPageChange?.(clamped, this.doc.pages.length);
+    this.reportStatus();
+    this.flashChrome();
+    this.flashRegion(clamped, bounds);
+    this.requestFrame();
+  }
+
+  /** Briefly pulses a dashed highlight box around the target region. */
+  private flashRegion(pageIndex: number, bounds: Bounds): void {
+    const page = this.doc.pages[pageIndex];
+    if (!page) return;
+    const box = this.boxForPage(page.id);
+    if (!box) return;
+
+    const scale = this.unitScale;
+    const el = this.selectionUiEl.createDiv({
+      cls: "finenotes-clip-highlight",
+    });
+    const left = (box.x + bounds.minX) * scale;
+    const top = (box.y + bounds.minY) * scale;
+    const width = Math.max(12, (bounds.maxX - bounds.minX) * scale);
+    const height = Math.max(12, (bounds.maxY - bounds.minY) * scale);
+
+    el.setCssStyles({
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+    });
+
+    window.setTimeout(() => {
+      el.remove();
+    }, 1800);
   }
 
   /** The scroll x that centres page `index` of a row in the pane. */
@@ -5098,7 +5171,12 @@ export class InkSurface {
       return;
     }
     this.selectInside(lasso.box, poly);
-    if (lasso.mode !== "rect") this.keepOutline(smoothLoop(this.lassoLoop(lasso)));
+    if (lasso.mode === "rect" && b) {
+      this.lastLassoRect = { pageId: lasso.box.id, bounds: { ...b } };
+    } else {
+      this.lastLassoRect = null;
+      this.keepOutline(smoothLoop(this.lassoLoop(lasso)));
+    }
   }
 
   /** Draw the new selection by the loop that made it (page px), not by a box. */
@@ -5296,6 +5374,7 @@ export class InkSurface {
   /** Let go of the lasso selection, if any, and of the tap-and-hold bar. */
   private clearSelection(): void {
     this.cancelGroupDrag();
+    this.lastLassoRect = null;
     const hadRegion = !!this.pdfRegion;
     this.pdfRegion = null; this.pdfRegionCandidate = null;
     const pressed = this.pressMenu !== null;
@@ -5603,6 +5682,15 @@ export class InkSurface {
       },
       { id: "copy", icon: "copy", label: "Copy", group: "edit", run: () => this.copySelection() },
       {
+        id: "copy-embed",
+        icon: "file-code-2",
+        label: "Copy Embed",
+        group: "edit",
+        bar: true,
+        showLabel: true,
+        run: () => this.copyImageEmbed(sel),
+      },
+      {
         id: "duplicate",
         icon: "copy-plus",
         label: "Duplicate",
@@ -5655,6 +5743,15 @@ export class InkSurface {
         run: () => this.cutSelection(),
       },
       { id: "copy", icon: "copy", label: "Copy", group: "edit", run: () => this.copySelection() },
+      {
+        id: "copy-embed",
+        icon: "file-code-2",
+        label: "Copy Embed",
+        group: "edit",
+        bar: true,
+        showLabel: true,
+        run: () => this.copyEmbedSelection(sel),
+      },
       {
         id: "duplicate",
         icon: "copy-plus",
@@ -6087,6 +6184,50 @@ export class InkSurface {
     );
     this.callbacks.onCopyImage?.(sel.image, clipboardMarker(clipboard.version));
     this.syncActionBar();
+    return true;
+  }
+
+  /** Copy the selection as a persistent notebook embed reference. */
+  private copyEmbedSelection(sel?: GroupSelection | null): boolean {
+    const group = sel ?? this.liveSelection();
+    if (!group) return false;
+    const b = this.groupBounds(group);
+    if (!b) return false;
+    const page = pageById(this.doc, group.pageId);
+    const pW = page?.geometry.width ?? DEFAULT_PAPER_WIDTH;
+    const pH = page?.geometry.height ?? DEFAULT_PAGE_HEIGHT;
+
+    let bounds: Bounds;
+    if (this.lastLassoRect && this.lastLassoRect.pageId === group.pageId) {
+      bounds = { ...this.lastLassoRect.bounds };
+    } else {
+      const PAD = 10;
+      bounds = {
+        minX: Math.max(0, b.minX - PAD),
+        minY: Math.max(0, b.minY - PAD),
+        maxX: Math.min(pW, b.maxX + PAD),
+        maxY: Math.min(pH, b.maxY + PAD),
+      };
+    }
+
+    const elements: NotebookClip["elements"] = {
+      strokeIds: group.strokes.map((s) => s.id),
+      imageIds: group.images.map((i) => i.id),
+      textBoxIds: group.textBoxes.map((t) => t.id),
+      circuitIds: group.circuits?.map((c) => c.id),
+    };
+    const elementBounds: Bounds = { ...b };
+    this.callbacks.onCopyEmbed?.(group.pageId, bounds, elements, elementBounds);
+    return true;
+  }
+
+  private copyImageEmbed(sel: { pageId: string; image: ImageElement }): boolean {
+    const b = imageBounds(transformOf(sel.image));
+    const elements: NotebookClip["elements"] = {
+      imageIds: [sel.image.id],
+    };
+    const elementBounds: Bounds = { ...b };
+    this.callbacks.onCopyEmbed?.(sel.pageId, b, elements, elementBounds);
     return true;
   }
 

@@ -140,6 +140,14 @@ export class Plugin extends Component {
     this.protocolHandlers.set(action, handler);
   }
 
+  registerMarkdownPostProcessor(_processor: unknown): void {
+    // mock no-op for tests
+  }
+
+  registerMarkdownCodeBlockProcessor(_language: string, _handler: unknown): void {
+    // mock no-op for tests
+  }
+
   loadData(): Promise<unknown> {
     return Promise.resolve(this.stored === null ? null : structuredClone(this.stored));
   }
