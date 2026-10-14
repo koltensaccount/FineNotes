@@ -8,6 +8,18 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 69 — Live notebook region and page embeds for Obsidian
+
+- **Selection & Region Embeds**:
+  - Rectangular and freehand lasso selections include a "Copy Embed" action that generates a persistent clip reference (`![[Notebook#^clip-xyz]]`) ready to paste into any Obsidian Markdown note.
+  - Dynamically calculates element centroids so embeds stay properly framed and positioned when handwriting moves or space is inserted.
+  - Native offscreen hardware rendering produces crisp, high-DPI canvas views without creating intermediate image or note files.
+- **Page Embeds**:
+  - "Copy page embed" action in the page thumbnail context menu and More Panel (`⋯`) generates `![[Notebook#page=N]]`.
+- **Live Reactivity & Navigation**:
+  - Embeds automatically re-render when notebooks are edited or renamed.
+  - Clicking an embed jumps directly to the notebook page and smoothly centers the clipped region with a visual pulse highlight.
+
 ### Beta 59 — Prevent automatic junction dots on wire bends
 
 - **Clean Wire Bends & Corners**:
