@@ -1,3 +1,4 @@
+import type { PdfBackdropCache } from "./pdf-backdrop";
 /**
  * Render FineNotes notebook clips and pages to high-DPI PNGs with full page background.
  */
@@ -5,7 +6,6 @@
 import type { Backdrop, Bounds, Page, PageGeometry, SyntheticBackdrop } from "../model/document";
 import {
   drawSynthetic,
-  fillPaper,
   paperTheme,
 } from "../canvas/backdrop";
 import {
@@ -19,6 +19,7 @@ import { drawPlacedCircuit } from "../circuit/circuit-render";
 import { DEFAULT_HIGHLIGHTER_ALPHA } from "../constants";
 
 export interface RenderClipPngOptions {
+  pdf?: PdfBackdropCache | null;
   padding?: number;
   scale?: number;
   images?: ImagePainter | null;
@@ -56,7 +57,7 @@ export async function renderClipPng(
   const h = Math.max(1, maxY - minY);
 
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 2 : 2;
-  const scale = options.scale ?? Math.max(2, Math.min(3, dpr));
+  const scale = Math.min(options.scale ?? Math.max(2, Math.min(3, dpr)),4096/Math.max(w,h),Math.sqrt(8_000_000/(w*h)));
 
   const canvas =
     typeof createEl === "function"
@@ -68,6 +69,7 @@ export async function renderClipPng(
 
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
+  try {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D context unavailable");
 
@@ -79,10 +81,15 @@ export async function renderClipPng(
   ctx.translate(-minX, -minY);
 
   // 1. Draw page background
-  if (options.backdropPainter && page.backdrop) {
+  if (page.backdrop.kind === "pdf") {
+    if (!options.pdf) throw new Error("PDF background unavailable");
+    const entry = await options.pdf.captureRegion(page.backdrop.path,page.backdrop.page,{geometry:geom,region:{minX,minY,maxX,maxY},sourceDpi:144});
+    if (!entry.ok || !entry.box) throw new Error(entry.ok ? "Missing PDF region" : entry.reason);
+    try { ctx.drawImage(entry.canvas,entry.box.x,entry.box.y,entry.box.w,entry.box.h); }
+    finally { if("close" in entry.canvas) entry.canvas.close(); else {entry.canvas.width=0;entry.canvas.height=0;} }
+  } else if (options.backdropPainter && page.backdrop) {
     options.backdropPainter.paint(ctx, page.backdrop, geom, 1);
-  } else if (page.backdrop?.kind === "pdf") {
-    fillPaper(ctx, geom, theme);
+
   } else {
     const backdrop: SyntheticBackdrop = (page.backdrop as SyntheticBackdrop) ?? {
       kind: "ruled-wide",
@@ -169,4 +176,5 @@ export async function renderClipPng(
       reject(new Error("Canvas toBlob unavailable"));
     }
   });
+  } finally {canvas.width=0;canvas.height=0;}
 }

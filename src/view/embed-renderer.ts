@@ -1,8 +1,9 @@
+import { PdfBackdropCache } from "./pdf-backdrop";
 /**
  * Live FineNotes embeds for Obsidian markdown notes.
  *
  * Renders live, cropped notebook regions or full pages directly inside ordinary
- * Obsidian markdown notes without creating separate image files or intermediate notes.
+ * Obsidian markdown notes, alongside standard live PNG image links.
  *
  * Automatically keeps embed canvases updated when the source notebook changes,
  * dynamically follows handwriting when moved or space is inserted, and opens
@@ -14,6 +15,7 @@ import {
   type MarkdownPostProcessorContext,
   TFile,
   setIcon,
+  MarkdownRenderChild,
 } from "obsidian";
 import {
   type Bounds,
@@ -52,14 +54,17 @@ export class FineNotesEmbedManager {
   private readonly docCache = new Map<string, CachedDoc>();
   private readonly imageCache: VaultImageCache;
   private readonly backdropPainter: VaultBackdropRenderer;
+  readonly pdfCache: PdfBackdropCache;
   private readonly activeEmbedViews = new Set<FineNotesEmbedView>();
 
   constructor(
     private readonly plugin: GoodObsidianPlugin,
     private readonly app: App,
   ) {
+    this.pdfCache = new PdfBackdropCache(app);
     this.imageCache = new VaultImageCache(app);
-    this.backdropPainter = new VaultBackdropRenderer(null);
+    this.plugin.register(()=>{ for(const view of [...this.activeEmbedViews]) view.destroy(); this.imageCache.destroy(); this.pdfCache.destroy(); this.docCache.clear(); });
+    this.backdropPainter = new VaultBackdropRenderer(this.pdfCache);
 
     this.imageCache.onReady = () => {
       for (const view of this.activeEmbedViews) {
@@ -114,56 +119,65 @@ export class FineNotesEmbedManager {
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes", codeBlockHandler);
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes-embed", codeBlockHandler);
 
-    // Global click listener to navigate to notebook clip/page when clicking an embed image or link
-    this.plugin.registerDomEvent(document, "click", (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-
-      // 1. Direct link to a notebook file (e.g. [![]()](<note.notebook#^clip-...>))
-      const link = target.closest("a");
-      const href = link?.getAttribute("href") || link?.dataset.href;
-      if (href && (href.endsWith(".notebook") || href.includes(".notebook#"))) {
-        event.preventDefault();
-        event.stopPropagation();
-        const activeFile = this.app.workspace.getActiveFile();
-        void this.app.workspace.openLinkText(href, activeFile?.path ?? "", false);
-        return;
+    const markImages=(root:Element)=>{
+      const images=root instanceof HTMLImageElement ? [root] : [...root.querySelectorAll<HTMLImageElement>("img")];
+      for(const image of images) {
+        void this.imageSource(image).then(source=>{
+          if(image.isConnected) image.classList.toggle("finenotes-live-embed-image",Boolean(source));
+        });
       }
-
-      // 2. Clicked image whose src or alt matches a notebook clip or page
-      const img = target.closest("img");
-      if (img) {
-        const src = img.getAttribute("src") || img.getAttribute("data-src") || "";
-        const alt = img.getAttribute("alt") || "";
-        const combined = `${src} ${alt}`;
-
-        const clipMatch = /-clip-([a-zA-Z0-9_-]+)\.png/i.exec(combined);
-        if (clipMatch) {
-          const clipId = `clip-${clipMatch[1]}`;
-          const notebook = this.findNotebookForClip(clipId);
-          if (notebook) {
-            event.preventDefault();
-            event.stopPropagation();
-            void this.app.workspace.openLinkText(`${notebook.path}#^${clipId}`, "", false);
-            return;
-          }
-        }
-
-        const pageMatch = /(.+)-page-(\d+)\.png/i.exec(combined);
-        if (pageMatch) {
-          const pageNum = parseInt(pageMatch[2], 10);
-          const rawBase = pageMatch[1].split("/").pop() ?? "";
-          const baseName = decodeURIComponent(rawBase);
-          const notebook = this.findNotebookByBaseName(baseName);
-          if (notebook) {
-            event.preventDefault();
-            event.stopPropagation();
-            void this.app.workspace.openLinkText(`${notebook.path}#page=${pageNum}`, "", false);
-            return;
-          }
-        }
+    };
+    this.plugin.registerMarkdownPostProcessor(el=>markImages(el));
+    const observer=new MutationObserver(records=>{
+      for(const record of records) {
+        if(record.type === "attributes" && record.target instanceof Element) markImages(record.target);
+        else for(const node of record.addedNodes) if(node instanceof Element) markImages(node);
       }
     });
+    observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["src"]});
+    this.plugin.register(()=>observer.disconnect());
+    this.plugin.registerDomEvent(document,"click",(event:MouseEvent)=>{
+      const target=event.target instanceof Element ? event.target : null;
+      if(!target || event.button!==0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const anchor=target.closest("a");
+      const href=anchor?.getAttribute("href") || (anchor as HTMLElement | null)?.dataset.href;
+      if(href && /\.notebook(?:\.md)?#(?:\^clip-|page=)/i.test(href)) {
+        event.preventDefault(); event.stopPropagation();
+        let destination=href;
+        try {destination=decodeURIComponent(href);} catch { /* Retain a literal percent in an unencoded name. */ }
+        void this.app.workspace.openLinkText(destination,this.app.workspace.getActiveFile()?.path ?? "",false);
+        return;
+      }
+      const image=target.closest("img");
+      if(image?.classList.contains("finenotes-live-embed-image")) { event.preventDefault(); event.stopPropagation(); }
+      if(image) void this.imageSource(image).then(source=>{
+        if(source) {
+          image.classList.add("finenotes-live-embed-image");
+          void this.app.workspace.openLinkText(source,"",false);
+        }
+      });
+    });
+  }
+
+  /** Resolve by persisted image path, not basename or a warm notebook cache. */
+  private async imageSource(image: HTMLImageElement): Promise<string | null> {
+    const src=(image.getAttribute("src") || "").split("?")[0], alt=image.getAttribute("alt") || "";
+    if(!/-clip-|-page-/i.test(src+alt)) return null;
+    const asset=this.app.vault.getFiles().find(file=>file.extension==="png" &&
+      (this.app.vault.getResourcePath(file).split("?")[0]===src || file.path===alt));
+    if(!asset) return null;
+    for(const file of this.app.vault.getFiles()) {
+      if(!this.plugin.isInkFile(file)) continue;
+      const doc=await this.loadDocument(file);
+      if(!doc) continue;
+      for(let index=0;index<doc.pages.length;index++) {
+        const page=doc.pages[index];
+        const clip=page.clips?.find(clip=>clip.imagePath===asset.path);
+        if(clip) return `${file.path}#^${clip.id}`;
+        if(page.pageEmbedPath===asset.path) return `${file.path}#page=${index+1}`;
+      }
+    }
+    return null;
   }
 
   findNotebookByBaseName(baseName: string): TFile | null {
@@ -184,7 +198,7 @@ export class FineNotesEmbedManager {
         if (f instanceof TFile) return f;
       }
     }
-    const openViews = this.app.workspace.getLeavesOfType("finenotes-view");
+    const openViews = this.app.workspace.getLeavesOfType("goodobsidian-view");
     for (const leaf of openViews) {
       const v = leaf.view as any;
       if (v?.file && v?.doc && findClip(v.doc, clipId)) {
@@ -262,7 +276,9 @@ export class FineNotesEmbedManager {
         this.plugin.settings.pressureWidth !== false,
         this.plugin.settings.highlighterAlpha,
       );
-      view.render();
+      const child=new MarkdownRenderChild(embedEl);
+      child.onunload=()=>view.destroy(); ctx.addChild(child);
+      void view.render();
     }
   }
 
@@ -326,12 +342,14 @@ export class FineNotesEmbedManager {
       this.plugin.settings.pressureWidth !== false,
       this.plugin.settings.highlighterAlpha,
     );
-    view.render();
+    const child=new MarkdownRenderChild(el);
+    child.onunload=()=>view.destroy(); ctx.addChild(child);
+    void view.render();
   }
 }
 
 export class FineNotesEmbedView {
-  readonly filePath: string;
+  get filePath(): string { return this.file.path; }
   private canvas: HTMLCanvasElement | null = null;
   private containerEl: HTMLElement | null = null;
   private isDestroyed = false;
@@ -348,7 +366,7 @@ export class FineNotesEmbedView {
     private readonly usePressure: boolean,
     private readonly highlighterAlpha: number,
   ) {
-    this.filePath = file.path;
+
   }
 
   async render(): Promise<void> {
@@ -393,11 +411,14 @@ export class FineNotesEmbedView {
   destroy(): void {
     this.isDestroyed = true;
     this.manager.unregisterActiveView(this);
+    if(this.canvas) {this.canvas.width=0;this.canvas.height=0;}
+    this.canvas=null;
   }
 
   private async paintContent(): Promise<void> {
     if (!this.containerEl) return;
     const doc = await this.manager.loadDocument(this.file);
+    if(this.isDestroyed || !this.containerEl?.isConnected) return;
     if (!doc || doc.pages.length === 0) {
       this.containerEl.empty();
       this.containerEl.createDiv({
@@ -437,6 +458,11 @@ export class FineNotesEmbedView {
       }
     }
 
+    if (!page && sub) {
+      this.containerEl.empty(); this.canvas=null;
+      this.containerEl.createDiv({cls:"finenotes-embed-error",text:"This notebook page or clip is unavailable."});
+      return;
+    }
     if (!page) {
       pageIndex = 0;
       page = doc.pages[0];
@@ -509,6 +535,11 @@ export class FineNotesEmbedView {
     ctx.rect(cropBounds.minX, cropBounds.minY, cropW, cropH);
     ctx.clip();
 
+    // Await PDF pixels rather than painting a temporary missing/blank background.
+    if(page.backdrop.kind === "pdf") {
+      await this.manager.pdfCache.resolve(page.backdrop.path,page.backdrop.page,scaleX,{geometry:page.geometry});
+      if(this.isDestroyed || !this.containerEl?.isConnected) return;
+    }
     // 1. Backdrop ruling
     this.backdropPainter.paint(
       ctx,

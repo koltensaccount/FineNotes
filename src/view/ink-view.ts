@@ -451,6 +451,7 @@ export class InkView extends TextFileView {
       await this.updateCompanionPdf(false);
       this.companionUnloadedFile = file;
     }
+    await this.updateClipsPng();
     await super.onUnloadFile(file);
   }
 
@@ -470,7 +471,8 @@ export class InkView extends TextFileView {
   private async saveNow(clear?: boolean): Promise<void> {
     this.writeHold.saved();
     await super.save(clear);
-    void this.updateClipsPng();
+    if(clear) await this.updateClipsPng();
+    else void this.updateClipsPng();
   }
 
   /** The pen touched the page or left it: hold, or let go of, what would stall it. */
@@ -2051,7 +2053,7 @@ export class InkView extends TextFileView {
   async copyPageEmbed(index = this.surface?.currentPage ?? 0): Promise<void> {
     const file = this.file;
     const surface = this.surface;
-    if (!file || !surface) return;
+    if (!file || !surface || this.isProtected()) return;
     const page = surface.document.pages[index];
     if (!page) return;
     const pageNum = index + 1;
@@ -2070,6 +2072,7 @@ export class InkView extends TextFileView {
       pngBuffer = await renderClipPng(page, fullBounds, {
         images: this.images,
         backdropPainter: this.backdrops,
+        pdf: this.pdfCache,
         padding: 0,
       });
     } catch {
@@ -2077,6 +2080,7 @@ export class InkView extends TextFileView {
       return;
     }
 
+    if(this.file!==file || this.surface!==surface || this.isProtected()) return;
     let imageFile = this.app.vault.getAbstractFileByPath(targetPath);
     if (imageFile instanceof TFile) {
       await this.app.vault.modifyBinary(imageFile, pngBuffer);
@@ -2107,7 +2111,7 @@ export class InkView extends TextFileView {
   ): Promise<void> {
     const file = this.file;
     const surface = this.surface;
-    if (!file || !surface) return;
+    if (!file || !surface || this.isProtected()) return;
     const page = surface.document.pages.find((p) => p.id === pageId);
     if (!page) return;
 
@@ -2126,12 +2130,14 @@ export class InkView extends TextFileView {
       pngBuffer = await renderClipPng(page, bounds, {
         images: this.images,
         backdropPainter: this.backdrops,
+        pdf: this.pdfCache,
       });
     } catch {
       new Notice("FineNotes failed to render clip PNG.");
       return;
     }
 
+    if(this.file!==file || this.surface!==surface || this.isProtected()) return;
     let imageFile = this.app.vault.getAbstractFileByPath(targetPath);
     if (imageFile instanceof TFile) {
       await this.app.vault.modifyBinary(imageFile, pngBuffer);
@@ -2167,24 +2173,50 @@ export class InkView extends TextFileView {
   /**
    * Re-render all persistent clip and page embed PNGs so open markdown notes live-update.
    */
+  private embedRefreshPending=false;
+  private embedRefreshRunning: Promise<void> | null=null;
+  private readonly embedHashes=new Map<string,string>();
+
   async updateClipsPng(): Promise<void> {
+    if(!this.doc?.pages.some(page=>page.pageEmbedPath || page.clips?.some(clip=>clip.imagePath))) return;
+    this.embedRefreshPending=true;
+    if(this.embedRefreshRunning) return this.embedRefreshRunning;
+    this.embedRefreshRunning=(async()=>{
+      while(this.embedRefreshPending) {
+        this.embedRefreshPending=false;
+        await new Promise(resolve=>window.setTimeout(resolve,250));
+        if(this.embedRefreshPending) continue;
+        await this.refreshEmbedImages();
+      }
+    })().finally(()=>{this.embedRefreshRunning=null;});
+    return this.embedRefreshRunning;
+  }
+
+  private async refreshEmbedImages(): Promise<void> {
     if (!this.file || this.guard.locked) return;
-    const doc = this.doc;
+    const sourceFile=this.file;
+    const doc = structuredClone(this.doc);
     if (!doc || !doc.pages) return;
 
     for (const page of doc.pages) {
+      if(performance.now()-this.latestDrawingAt < 300) {this.embedRefreshPending=true;return;}
       if (page.clips && page.clips.length > 0) {
         for (const clip of page.clips) {
           if (!clip.imagePath) continue;
           const abstract = this.app.vault.getAbstractFileByPath(clip.imagePath);
           if (abstract instanceof TFile) {
             const currentBounds = clipCurrentBounds(page, clip);
+            const hash=JSON.stringify([page,currentBounds]);
+            if(this.embedHashes.get(clip.imagePath)===hash) continue;
             try {
               const buffer = await renderClipPng(page, currentBounds, {
                 images: this.images,
                 backdropPainter: this.backdrops,
+                pdf: this.pdfCache,
               });
+              if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
               await this.app.vault.modifyBinary(abstract, buffer);
+              this.embedHashes.set(clip.imagePath,hash);
             } catch (err) {
               console.warn("[FineNotes] Failed to update clip PNG", clip.id, err);
             }
@@ -2197,13 +2229,18 @@ export class InkView extends TextFileView {
         if (abstract instanceof TFile) {
           const geom = page.geometry ?? { width: 1024, height: 1366 };
           const fullBounds: Bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
+          const hash=JSON.stringify([page,fullBounds]);
+          if(this.embedHashes.get(page.pageEmbedPath)===hash) continue;
           try {
             const buffer = await renderClipPng(page, fullBounds, {
               images: this.images,
               backdropPainter: this.backdrops,
+              pdf: this.pdfCache,
               padding: 0,
             });
+            if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
             await this.app.vault.modifyBinary(abstract, buffer);
+            this.embedHashes.set(page.pageEmbedPath,hash);
           } catch (err) {
             console.warn("[FineNotes] Failed to update page embed PNG", page.id, err);
           }
