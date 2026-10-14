@@ -30,6 +30,7 @@ import {
 } from "../circuit/wire-geometry";
 
 const COMMON_COMPONENT_ORDER: ComponentType[] = [
+  "voltage_label",
   "text_label",
   "node_filled",
   "node_open",
@@ -609,6 +610,16 @@ export class CircuitModal extends Modal {
         new Notice("Tap on schematic to place label.");
       }
     };
+
+    for (const [type, label, icon] of [["node_open", "Terminal", "circle"], ["voltage_label", "Voltage label", "type"]] as const) {
+      const button = this.visualToolbarEl.createEl("button", { cls: "goodobsidian-circuit-btn", title: type === "node_open" ? "Place an open terminal/test point" : "Place + above a voltage name and − below" });
+      const glyph = button.createSpan(); setIcon(glyph, icon); button.createSpan({text:label});
+      button.onclick = () => {
+        this.showComponentPicker = false;
+        this.pendingPlaceType = this.pendingPlaceType === type ? null : type;
+        this.renderVisualView();
+      };
+    }
 
     // 3. Undo / Redo controls
     const historyGroup = this.visualToolbarEl.createDiv({ cls: "goodobsidian-circuit-btn-group" });
@@ -1728,7 +1739,7 @@ export class CircuitModal extends Modal {
       }
 
       c.components[id] = comp;
-      if ((type === "ground" || type === "earth") && customX !== undefined && customY !== undefined) {
+      if ((type === "ground" || type === "earth" || type === "node_open" || type === "node_filled") && customX !== undefined && customY !== undefined) {
         const hit = hitTestCircuitWireSegment(c, customX, customY, .6);
         const nodeId = hit ? junctionOnWire(c, hit.wireId, { x: customX, y: customY }) : null;
         const port = def?.ports[0];
@@ -2060,7 +2071,7 @@ export class CircuitModal extends Modal {
       };
     }
 
-    if (selectedComp.type === "text_label") {
+    if (selectedComp.type === "text_label" || selectedComp.type === "voltage_label") {
       inspector.createEl("h3", { text: `Properties: ${selectedComp.label}` });
       const labelGroup = inspector.createDiv({ cls: "setting-item" });
       labelGroup.createDiv({ cls: "setting-item-name", text: "Text / LaTeX (e.g. + , - , Vo , 15V , \\infty)" });

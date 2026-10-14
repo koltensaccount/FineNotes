@@ -240,7 +240,7 @@ export function layoutComponentLabels(
       continue;
     }
 
-    if (comp.type === "text_label") {
+    if (comp.type === "text_label" || comp.type === "voltage_label") {
       const labelX = comp.labelOffset ? cx + comp.labelOffset.x * gridSize : cx;
       const labelY = comp.labelOffset ? cy + comp.labelOffset.y * gridSize : cy + 4;
       const rect: Rect = {

@@ -41,6 +41,7 @@ export type ComponentType =
   | "node_filled"
   | "node_open"
   | "text_label"
+  | "voltage_label"
   | "switch_spst"
   | "switch_spdt"
   | "fuse"
@@ -374,7 +375,11 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     ports: [{ id: "p1", name: "○", x: 0, y: 0 }],
     width: 0.8,
     height: 0.8,
-    description: "Open Node / Terminal",
+    description: "Open Terminal / Test Point / Input / Output",
+  },
+  voltage_label: {
+    type: "voltage_label", labelPrefix: "VL", defaultLabel: "V_o", ports: [],
+    width: 1.6, height: 3, description: "Voltage Label (+ / V / −)",
   },
   text_label: {
     type: "text_label",

@@ -754,3 +754,14 @@ it.each(["dependent_vsource", "dependent_isource", "logic_nand", "logic_nor", "l
   expect(symbol?.label).toBe("X1");
   expect(Object.keys(symbol!.ports).sort()).toEqual(COMPONENT_CATALOG[type].ports.map(p=>p.id).sort());
 });
+
+it("round-trips voltage polarity annotations without electrical terminals", async () => {
+  const {createEmptyCircuit}=await import("../../src/circuit/ir");
+  const c=createEmptyCircuit("Voltage");
+  c.components.vlabel={id:"vlabel",type:"voltage_label",label:"V_{out}",x:5,y:5,rotation:0,ports:{}};
+  const parsed=tikzToCircuit(circuitToTikz(c));
+  const label=Object.values(parsed.circuit.components).find(c=>c.type==="voltage_label");
+  expect(label?.label).toBe("V_{out}");
+  expect(label?.ports).toEqual({});
+  expect(parsed.circuit.wires).toEqual([]);
+});

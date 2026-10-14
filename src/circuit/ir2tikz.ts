@@ -213,6 +213,12 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       continue;
     }
 
+    if (comp.type === "voltage_label") {
+      lines.push(`  \\draw (${toTikzCoord(comp.x)}, ${toTikzCoord(-comp.y)}) node (${comp.id}) {$\\begin{gathered}+\\\\${tikzMath(comp.label)}\\\\-\\end{gathered}$};`);
+      compVisited.add(comp.id);
+      continue;
+    }
+
     if (comp.type === "text_label") {
       const x = comp.x;
       const y = -comp.y;
@@ -610,8 +616,8 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
         const compId = getNextCompId(explicitId || (isFilled ? "N" : "T"));
         let label = "";
         for (const opt of optTokens.slice(1)) {
-          const lMatch = opt.match(/^label\s*=\s*(?:\{?\$?([^$}]+)\$?\}?|\$?([^$]+)\$?)$/i);
-          if (lMatch) label = (lMatch[1] || lMatch[2] || "").trim();
+          const lMatch = opt.match(/^label\s*=\s*(.+)$/i);
+          if (lMatch) label = stripMathDelimiters(lMatch[1].replace(/^\{|\}$/g, ""));
         }
         circuit.components[compId] = {
           id: compId,
@@ -712,12 +718,13 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
       const x = parseCoord(xStr);
       const y = parseCoord(yStr, true);
       const labelText = rawContent.replace(/^\$|\$$/g, "").trim();
+      const voltage = labelText.match(/^\\begin\{gathered\}\+\\\\(.*)\\\\-\\end\{gathered\}$/);
       if (labelText) {
         const compId = getNextCompId(explicitId || "L");
         circuit.components[compId] = {
           id: compId,
-          type: "text_label",
-          label: labelText,
+          type: voltage ? "voltage_label" : "text_label",
+          label: voltage ? voltage[1] : labelText,
           x,
           y,
           rotation: 0,

@@ -225,3 +225,17 @@ it("allows off-grid component placement with snapping disabled, preserving conne
   expect(m.circuit.components.r.y).toBeCloseTo(2.27);
   expect(terminalPartition(m.circuit)).toEqual(nets);
 });
+
+it("places an open terminal on an existing wire and keeps a voltage label non-electrical", () => {
+  const m=editor();
+  m.addComponent("node_open",4,0);
+  const terminal=Object.values(m.circuit.components).find((c:any)=>c.type==="node_open") as any;
+  const node=m.circuit.nodes[terminal.ports.p1];
+  expect(node.x).toBe(4); expect(node.y).toBe(0);
+  expect(m.circuit.wires.some((w:any)=>w.fromNode===node.id || w.toNode===node.id)).toBe(true);
+  const wires=JSON.stringify(m.circuit.wires);
+  m.addComponent("voltage_label",6,5);
+  expect(JSON.stringify(m.circuit.wires)).toBe(wires);
+  const annotation=Object.values(m.circuit.components).find((c:any)=>c.type==="voltage_label") as any;
+  expect(annotation.ports).toEqual({});
+});

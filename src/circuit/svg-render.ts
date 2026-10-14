@@ -382,6 +382,12 @@ function renderComponentSymbol(
       break;
     }
 
+    case "voltage_label": {
+      parts.push(`<text x="0" y="-0.9" font-size="0.7" text-anchor="middle" fill="${mainStroke}">+</text>`);
+      parts.push(`<text x="0" y="1.3" font-size="0.7" text-anchor="middle" fill="${mainStroke}">−</text>`);
+      break;
+    }
+
     case "text_label": {
       if (isHighlighted) {
         parts.push(`<rect x="-0.8" y="-0.4" width="1.6" height="0.8" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-dasharray="0.15,0.1" rx="0.1" />`);

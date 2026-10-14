@@ -163,6 +163,7 @@ export function isSegmentObstructed(
 
   // 1. Component obstacles tested against exact oriented component body
   for (const comp of Object.values(circuit.components)) {
+    if (comp.type === "text_label" || comp.type === "voltage_label") continue;
     if (isEndpointComp(comp.id)) {
       // Endpoint component: allowed to attach to exterior port,
       // but must never penetrate through the component's inner body
