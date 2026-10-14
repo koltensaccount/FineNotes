@@ -1,3 +1,4 @@
+import { cleanRecognizedLabelValues } from "../../src/circuit/recognition-contract";
 import { circuitToTikz } from "../../src/circuit/ir2tikz";
 import { editorFixture } from "./editor-fixture";
 import { describe, expect, it } from "vitest";
@@ -72,4 +73,14 @@ it("renders infinity and common electrical notation without partial command matc
   expect(formatSvgTextFallback("\\pm 5\\% \\approx \\infty")).toContain("±");
   expect(formatSvgTextFallback("\\thetasomething")).toContain("\\thetasomething");
   expect(renderLatexLabelToSvg("\\infty", 0, 0)).toContain("∞");
+});
+
+it("removes duplicated AI identifiers while retaining actual component values", () => {
+  const c = editorFixture();
+  c.components.r.label = "R_d"; c.components.r.value = "$R_{d}$";
+  c.components.vs.value = "5V";
+  cleanRecognizedLabelValues(c);
+  expect(c.components.r.label).toBe("R_d");
+  expect(c.components.r.value).toBeUndefined();
+  expect(c.components.vs.value).toBe("5V");
 });

@@ -102,6 +102,16 @@ for (const viewport of [
   await page.mouse.click(resistor.x, resistor.y);
   const inspector = page.locator(".goodobsidian-circuit-context-inspector");
   assert(await inspector.isVisible());
+  const reference = page.locator(".goodobsidian-circuit-original img");
+  const referenceBefore = await reference.boundingBox();
+  await inspector.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  assert.deepEqual(await reference.boundingBox(), referenceBefore);
+  await inspector.evaluate(el => { el.scrollTop = 0; });
+  const xPosition = inspector.getByRole("spinbutton", { name: "Component X position" });
+  await xPosition.fill("8.13"); await xPosition.press("Tab");
+  assert.equal(await page.evaluate(() => editor.circuit.components.r.x), 8.13);
+  await page.getByRole("button", { name: "Snap: On", exact: true }).click();
+  assert(await page.getByRole("button", { name: "Snap: Off", exact: true }).isVisible());
   const label = inspector.locator('input[type="text"]').first();
   await label.fill("R_test");
   await label.press("Tab");

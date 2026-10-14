@@ -13,7 +13,7 @@ import { type Bounds } from "../model/document";
 import { type PageElements } from "../model/selection-commands";
 import { renderSelectionToPng } from "../view/selection-clipboard";
 import { cloneCircuit, type KirchhoffCircuit, validateAndNormalizeCircuit } from "./ir";
-import { CIRCUIT_SYSTEM_PROMPT, CIRCUIT_RESPONSE_SCHEMA, circuitTopologySignature } from "./recognition-contract";
+import { CIRCUIT_SYSTEM_PROMPT, CIRCUIT_RESPONSE_SCHEMA, circuitTopologySignature, cleanRecognizedLabelValues } from "./recognition-contract";
 import { autoLayoutCircuit } from "./layout";
 
 export interface ConvertCircuitInput {
@@ -182,6 +182,7 @@ export async function convertSelectionToCircuit(
   }
 
   const normalized = validateAndNormalizeCircuit(parsed);
+  cleanRecognizedLabelValues(normalized);
   if (Object.keys(normalized.components).length === 0) {
     throw new Error("No electrical components were recognized in the selection.");
   }

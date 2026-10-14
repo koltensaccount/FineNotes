@@ -7,7 +7,7 @@
  * wire routing, and Obsidian/FineNotes design language.
  */
 
-import { type App, Modal, Notice, setIcon } from "obsidian";
+import { Platform, type App, Modal, Notice, setIcon } from "obsidian";
 import {
   type CircuitComponent,
   type ComponentType,
@@ -139,6 +139,11 @@ export class CircuitModal extends Modal {
   private zoomScale: number = 1.0;
   private viewportBasis: string | null = null;
   private hitPixels = 8;
+  private gridSnap = true;
+
+  private snapCoordinate(value: number): number {
+    return this.gridSnap ? Math.round(value * 2) / 2 : value;
+  }
   private panOffset: { x: number; y: number } = { x: 0, y: 0 };
   private isPanning: boolean = false;
   private panStart: { x: number; y: number } = { x: 0, y: 0 };
@@ -297,8 +302,9 @@ export class CircuitModal extends Modal {
       original.open = true;
       original.createEl("summary", { text: "Original drawing" });
       original.createEl("img", { attr: { src: this.recognitionReview.originalImage, alt: "Selected handwritten circuit before conversion" } });
-      original.createEl("p", { text: "Your ink stays unchanged until you choose Use circuit." });
-      const copyReport = original.createEl("button", { text: "Copy debug report", cls: "goodobsidian-circuit-btn" });
+      const debug = original.createEl("details");
+      debug.createEl("summary", { text: "Diagnostics" });
+      const copyReport = debug.createEl("button", { text: "Copy debug report", cls: "goodobsidian-circuit-btn" });
       copyReport.title = "Copy the selected image and recognition stages locally; nothing is uploaded";
       copyReport.onclick = () => {
         void navigator.clipboard.writeText(JSON.stringify({ ...this.recognitionReview, edited: this.circuit }, null, 2))
@@ -635,6 +641,10 @@ export class CircuitModal extends Modal {
     fitBtn.createSpan({ text: "Fit" });
     fitBtn.onclick = () => this.zoomToFit();
 
+    const snap = layoutGroup.createEl("button", { text: this.gridSnap ? "Snap: On" : "Snap: Off", cls: "goodobsidian-circuit-btn", attr: { "aria-pressed": String(this.gridSnap) } });
+    snap.title = "Toggle grid snapping for placement and dragging";
+    snap.onclick = () => { this.gridSnap = !this.gridSnap; this.renderVisualToolbar(); };
+
     const details = layoutGroup.createEl("details", { cls: "goodobsidian-circuit-layout-menu" });
     details.createEl("summary", { text: "Layout", attr: { "aria-label": "Circuit layout actions" } });
     const layoutActions = details.createDiv({ cls: "goodobsidian-circuit-layout-actions" });
@@ -803,7 +813,7 @@ export class CircuitModal extends Modal {
       placeholder: "Search symbols (R, C, Diode, NMOS...)",
       value: this.componentPickerSearch,
     });
-    setTimeout(() => searchInput.focus(), 25);
+    if (!Platform.isMobile) setTimeout(() => searchInput.focus(), 25);
 
     const listContainer = popover.createDiv({ cls: "goodobsidian-comp-picker-list" });
 
@@ -847,7 +857,7 @@ export class CircuitModal extends Modal {
         return;
       }
 
-      listContainer.createDiv({ cls: "goodobsidian-comp-picker-section", text: "Common Symbols" });
+      listContainer.createDiv({ cls: "goodobsidian-comp-picker-section", text: `Common Symbols · ${allTypes.length} total` });
       for (const type of COMMON_COMPONENT_ORDER) {
         if (matches(type)) {
           const def = COMPONENT_CATALOG[type];
@@ -908,8 +918,8 @@ export class CircuitModal extends Modal {
 
     // 0. Tap to place pending component
     if (this.pendingPlaceType) {
-      const snapX = Math.round(gridX * 2) / 2;
-      const snapY = Math.round(gridY * 2) / 2;
+      const snapX = this.snapCoordinate(gridX);
+      const snapY = this.snapCoordinate(gridY);
       this.addComponent(this.pendingPlaceType, snapX, snapY);
       this.pendingPlaceType = null;
       this.renderVisualView();
@@ -1043,8 +1053,8 @@ export class CircuitModal extends Modal {
 
       // If clicked blank space while drawing wire, create a new junction node
       if (this.wireDrawStart) {
-        const snapX = Math.round(gridX * 2) / 2;
-        const snapY = Math.round(gridY * 2) / 2;
+        const snapX = this.snapCoordinate(gridX);
+        const snapY = this.snapCoordinate(gridY);
         const juncNodeId = `n_junc_${Date.now().toString(36)}`;
         const newWireId = `w_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
         const startEndpoint = this.wireDrawStart;
@@ -1206,8 +1216,8 @@ export class CircuitModal extends Modal {
       const { wireId, index } = this.draggingWaypoint;
       const wire = this.circuit.wires.find((w) => w.id === wireId);
       if (wire && wire.waypoints && wire.waypoints[index]) {
-        const nextX = Math.round(gridX * 2) / 2;
-        const nextY = Math.round(gridY * 2) / 2;
+        const nextX = this.snapCoordinate(gridX);
+        const nextY = this.snapCoordinate(gridY);
         if (wire.waypoints[index].x !== nextX || wire.waypoints[index].y !== nextY) {
           this.didDragMove = true;
           wire.waypoints[index].x = nextX;
@@ -1224,8 +1234,8 @@ export class CircuitModal extends Modal {
       const wire = this.circuit.wires.find((w) => w.id === wireId);
       if (wire) {
         const targetCoord = isHorizontal
-          ? Math.round(gridY * 2) / 2
-          : Math.round(gridX * 2) / 2;
+          ? this.snapCoordinate(gridY)
+          : this.snapCoordinate(gridX);
         if (this.dragInitialSnapshot) moveCircuitSegment(this.circuit, this.dragInitialSnapshot, wireId, segmentIndex, targetCoord);
         this.didDragMove = true;
         for (const id of Object.keys(this.circuit.nodes)) {
@@ -1244,8 +1254,8 @@ export class CircuitModal extends Modal {
       if (node) {
         const rawX = gridX - this.dragOffset.x;
         const rawY = gridY - this.dragOffset.y;
-        const snappedX = Math.round(rawX * 2) / 2;
-        const snappedY = Math.round(rawY * 2) / 2;
+        const snappedX = this.snapCoordinate(rawX);
+        const snappedY = this.snapCoordinate(rawY);
         if (node.x !== snappedX || node.y !== snappedY) {
           this.didDragMove = true;
           node.x = snappedX;
@@ -1264,8 +1274,8 @@ export class CircuitModal extends Modal {
       if (comp) {
         const rawOffX = gridX - this.dragOffset.x - comp.x;
         const rawOffY = gridY - this.dragOffset.y - comp.y;
-        const snapOffX = Math.round(rawOffX * 5) / 5;
-        const snapOffY = Math.round(rawOffY * 5) / 5;
+        const snapOffX = this.gridSnap ? Math.round(rawOffX * 5) / 5 : rawOffX;
+        const snapOffY = this.gridSnap ? Math.round(rawOffY * 5) / 5 : rawOffY;
         if (kind === "label") {
           comp.labelOffset = { x: snapOffX, y: snapOffY, manual: true };
         } else {
@@ -1282,7 +1292,9 @@ export class CircuitModal extends Modal {
       const rawGridX = gridX - this.dragOffset.x;
       const rawGridY = gridY - this.dragOffset.y;
 
-      const snapped = snapCircuitComponent(this.circuit, this.draggingCompId, rawGridX, rawGridY);
+      const snapped = this.gridSnap
+        ? snapCircuitComponent(this.circuit, this.draggingCompId, rawGridX, rawGridY)
+        : { x: rawGridX, y: rawGridY };
       const snappedX = snapped.x;
       const snappedY = snapped.y;
 
@@ -2022,6 +2034,26 @@ export class CircuitModal extends Modal {
     }
 
     const def = COMPONENT_CATALOG[selectedComp.type];
+
+    const position = inspector.createDiv({ cls: "setting-item" });
+    position.createDiv({ cls: "setting-item-name", text: "Position (X / Y)" });
+    for (const axis of ["x", "y"] as const) {
+      const input = position.createEl("input", { type: "number", value: String(selectedComp[axis]), attr: { step: "0.01", "aria-label": `Component ${axis.toUpperCase()} position` } });
+      input.onchange = () => {
+        const value = Number(input.value);
+        if (!input.value.trim() || !Number.isFinite(value)) return;
+        this.mutateCircuit(c => {
+          const before = cloneCircuit(c), comp = c.components[selectedComp.id];
+          if (!comp) return;
+          const delta = value - comp[axis];
+          comp[axis] = value;
+          for (const id of new Set(Object.values(comp.ports))) {
+            if (c.nodes[id] && !Object.values(c.components).some(other => other.id !== comp.id && Object.values(other.ports).includes(id))) c.nodes[id][axis] += delta;
+          }
+          stretchCircuitWires(c, before);
+        });
+      };
+    }
 
     if (selectedComp.type === "text_label") {
       inspector.createEl("h3", { text: `Properties: ${selectedComp.label}` });

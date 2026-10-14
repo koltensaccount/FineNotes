@@ -216,3 +216,12 @@ it("allows saving the displayed circuit despite validation errors", () => {
   expect(m.onSave.mock.calls[0][0]).toBe(m.circuit);
   expect(m.close).toHaveBeenCalledOnce();
 });
+
+it("allows off-grid component placement with snapping disabled, preserving connections", () => {
+  const m = editor(); m.gridSnap = false;
+  const nets = terminalPartition(m.circuit);
+  drag(m, 8, 2, 8.13, 2.27);
+  expect(m.circuit.components.r.x).toBeCloseTo(8.13);
+  expect(m.circuit.components.r.y).toBeCloseTo(2.27);
+  expect(terminalPartition(m.circuit)).toEqual(nets);
+});
