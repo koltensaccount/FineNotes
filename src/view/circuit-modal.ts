@@ -1834,25 +1834,6 @@ export class CircuitModal extends Modal {
     new Notice("Wire deleted");
   }
 
-  private deleteNode(nodeId: string): void {
-    this.selectedNodeId = null;
-    if (this.wireDrawStart?.nodeId === nodeId) {
-      this.wireDrawStart = null;
-    }
-
-    this.mutateCircuit((c) => {
-      delete c.nodes[nodeId];
-      c.wires = c.wires.filter((w) => w.fromNode !== nodeId && w.toNode !== nodeId);
-      for (const comp of Object.values(c.components)) {
-        for (const [pId, nId] of Object.entries(comp.ports)) {
-          if (nId === nodeId) delete comp.ports[pId];
-        }
-      }
-    });
-
-    new Notice("Node deleted");
-  }
-
   private addBendToWire(wireId: string): void {
     this.mutateCircuit((c) => {
       const wire = c.wires.find((w) => w.id === wireId);
@@ -1904,13 +1885,17 @@ export class CircuitModal extends Modal {
     new Notice("Circuit auto-arranged cleanly");
   }
 
+  private setNodeDotVisibility(id: string, visible: boolean): void {
+    this.mutateCircuit(c => { if (c.nodes[id]) c.nodes[id].hideDot = !visible; });
+  }
+
   private handleDeleteSelected(): void {
     if (this.selectedWireId) {
       this.deleteWire(this.selectedWireId);
     } else if (this.selectedComponentId) {
       this.deleteComponent(this.selectedComponentId);
     } else if (this.selectedNodeId) {
-      this.deleteNode(this.selectedNodeId);
+      this.setNodeDotVisibility(this.selectedNodeId, false);
     }
   }
 
@@ -1980,11 +1965,23 @@ export class CircuitModal extends Modal {
         title: "Delete selected item (Delete / Backspace)",
       });
       setIcon(delBtn, "trash-2");
-      delBtn.createSpan({ text: "Delete" });
+      delBtn.createSpan({ text: this.selectedNodeId ? "Hide dot" : "Delete" });
       delBtn.onclick = () => this.handleDeleteSelected();
     }
 
 
+
+    if (this.selectedNodeId && this.circuit.nodes[this.selectedNodeId]) {
+      const id = this.selectedNodeId;
+      inspector.createEl("h3", { text: "Connection point" });
+      const row = inspector.createEl("label", { cls: "setting-item" });
+      row.createSpan({ text: "Show junction dot" });
+      const checkbox = row.createEl("input", { type: "checkbox" });
+      checkbox.checked = !this.circuit.nodes[id].hideDot;
+      checkbox.onchange = () => this.setNodeDotVisibility(id, checkbox.checked);
+      inspector.createEl("p", { text: "Hiding the dot keeps every wire connected." });
+      return;
+    }
 
     // Scenario 1: Selected Wire Inspector
     if (this.selectedWireId) {

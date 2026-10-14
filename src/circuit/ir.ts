@@ -628,6 +628,8 @@ export interface CircuitNode {
   label?: string;
   /** True when manually designated as an electrical junction point */
   junction?: boolean;
+  /** Hide only the marker, preserving the electrical branch. */
+  hideDot?: boolean;
 }
 
 /** Component instance in the circuit */
@@ -785,6 +787,7 @@ export function validateAndNormalizeCircuit(raw: unknown): KirchhoffCircuit {
           y: typeof nodeObj.y === "number" && Number.isFinite(nodeObj.y) ? nodeObj.y : 0,
           label: typeof nodeObj.label === "string" ? nodeObj.label : undefined,
           junction: false,
+          ...(nodeObj.hideDot === true ? { hideDot: true } : {}),
         };
       }
     }

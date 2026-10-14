@@ -250,3 +250,22 @@ it("preserves manual label and value positions through notebook normalization an
   expect(reopened.circuit.components.r.labelOffset).toEqual(c.components.r.labelOffset);
   expect(reopened.circuit.components.r.valueOffset).toEqual(c.components.r.valueOffset);
 });
+
+it("hides a branch dot without deleting wires and preserves the choice on reload", async () => {
+  const {validateAndNormalizeCircuit}=await import("../../src/circuit/ir");
+  const {renderCircuitToSvg}=await import("../../src/circuit/svg-render");
+  const m=editor();
+  m.addComponent("node_open",4,0);
+  const branch=Object.values(m.circuit.nodes).find((n:any)=>n.x===4 && n.y===0) as any;
+  const wires=JSON.stringify(m.circuit.wires), nets=terminalPartition(m.circuit);
+  m.selectedNodeId=branch.id; m.selectedComponentId=null; m.selectedWireId=null;
+  m.handleDeleteSelected();
+  expect(JSON.stringify(m.circuit.wires)).toBe(wires);
+  expect(terminalPartition(m.circuit)).toEqual(nets);
+  expect(m.circuit.nodes[branch.id].hideDot).toBe(true);
+  const loaded=validateAndNormalizeCircuit(JSON.parse(JSON.stringify(m.circuit)));
+  materializeCircuitGeometry(loaded);
+  expect(loaded.nodes[branch.id].hideDot).toBe(true);
+  expect(renderCircuitToSvg(loaded,{interactiveOverlay:true})).not.toContain(`data-node-id="${branch.id}" data-junction="true"`);
+  m.undo(); expect(m.circuit.nodes[branch.id].hideDot).not.toBe(true);
+});

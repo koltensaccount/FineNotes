@@ -438,7 +438,7 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
 
   // Emit junction nodes
   for (const node of Object.values(circuit.nodes)) {
-    if (node.junction) {
+    if (node.junction && !node.hideDot) {
       lines.push(`  \\node[circ] at (${toTikzCoord(node.x)}, ${toTikzCoord(-node.y)}) {};`);
     }
   }

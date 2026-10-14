@@ -719,7 +719,7 @@ export function renderCircuitToSvg(
   for (const node of Object.values(circuit.nodes)) {
     const nx = node.x * gridSize;
     const ny = node.y * gridSize;
-    const isJunction = node.junction === true;
+    const isJunction = node.junction === true && !node.hideDot;
     const isHighlighted = node.id === options.highlightNodeId;
 
     if (isJunction) {
