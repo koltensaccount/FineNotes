@@ -31,10 +31,12 @@ describe("NotebookClip and Live Embeds model", () => {
         strokeIds: ["s1"],
       },
       elementBounds: { minX: 100, minY: 100, maxX: 200, maxY: 200 },
+      imagePath: "attachments/Notebook-clip-test123.png",
       createdAt: 1700000000000,
       updatedAt: 1700000000000,
     };
     p1.clips = [clip];
+    p1.pageEmbedPath = "attachments/Notebook-page-1.png";
 
     const markdown = buildInkFile("", doc);
     expect(markdown).toContain("%%goodobsidian");
@@ -46,12 +48,14 @@ describe("NotebookClip and Live Embeds model", () => {
 
     expect(readPage.clips).toBeDefined();
     expect(readPage.clips!.length).toBe(1);
+    expect(readPage.pageEmbedPath).toBe("attachments/Notebook-page-1.png");
     const readClip = readPage.clips![0];
     expect(readClip.id).toBe("clip-test123");
     expect(readClip.pageId).toBe(p1.id);
     expect(readClip.bounds).toEqual({ minX: 90, minY: 90, maxX: 210, maxY: 210 });
     expect(readClip.elements?.strokeIds).toEqual(["s1"]);
     expect(readClip.elementBounds).toEqual({ minX: 100, minY: 100, maxX: 200, maxY: 200 });
+    expect(readClip.imagePath).toBe("attachments/Notebook-clip-test123.png");
   });
 
   it("findClip resolves clips across pages with various subpath formats", () => {

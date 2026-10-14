@@ -153,6 +153,7 @@ interface StoredPage {
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
   clips?: NotebookClip[];
+  pageEmbedPath?: string;
   strokes: StoredStroke[];
 }
 
@@ -223,6 +224,7 @@ function storePage(page: Page): StoredPage {
     textBoxes: page.textBoxes,
     circuits: page.circuits && page.circuits.length > 0 ? page.circuits : undefined,
     clips: page.clips && page.clips.length > 0 ? page.clips : undefined,
+    pageEmbedPath: page.pageEmbedPath || undefined,
     strokes: page.strokes.map(storeStroke),
   };
 }
@@ -613,6 +615,7 @@ function normalizeClip(raw: unknown, pageId: string): NotebookClip | null {
     ...(elements ? { elements } : {}),
     ...(elementBounds ? { elementBounds } : {}),
     ...(typeof raw.label === "string" ? { label: raw.label } : {}),
+    ...(typeof raw.imagePath === "string" ? { imagePath: raw.imagePath } : {}),
     createdAt: typeof raw.createdAt === "number" ? Math.round(raw.createdAt) : Date.now(),
     updatedAt: typeof raw.updatedAt === "number" ? Math.round(raw.updatedAt) : Date.now(),
   };
@@ -657,6 +660,7 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     textBoxes,
     circuits: circuits.length > 0 ? circuits : undefined,
     clips: clips.length > 0 ? clips : undefined,
+    ...(typeof page.pageEmbedPath === "string" ? { pageEmbedPath: page.pageEmbedPath } : {}),
     ...(isEpoch(page.epoch) ? { epoch: Math.round(page.epoch) } : {}),
     // Only a literal `true`: anything else in the file is "not bookmarked".
     ...(page.bookmarked === true ? { bookmarked: true as const } : {}),

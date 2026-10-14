@@ -113,6 +113,91 @@ export class FineNotesEmbedManager {
 
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes", codeBlockHandler);
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes-embed", codeBlockHandler);
+
+    // Global click listener to navigate to notebook clip/page when clicking an embed image or link
+    this.plugin.registerDomEvent(document, "click", (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      // 1. Direct link to a notebook file (e.g. [![]()](<note.notebook#^clip-...>))
+      const link = target.closest("a");
+      const href = link?.getAttribute("href") || link?.dataset.href;
+      if (href && (href.endsWith(".notebook") || href.includes(".notebook#"))) {
+        event.preventDefault();
+        event.stopPropagation();
+        const activeFile = this.app.workspace.getActiveFile();
+        void this.app.workspace.openLinkText(href, activeFile?.path ?? "", false);
+        return;
+      }
+
+      // 2. Clicked image whose src or alt matches a notebook clip or page
+      const img = target.closest("img");
+      if (img) {
+        const src = img.getAttribute("src") || img.getAttribute("data-src") || "";
+        const alt = img.getAttribute("alt") || "";
+        const combined = `${src} ${alt}`;
+
+        const clipMatch = /-clip-([a-zA-Z0-9_-]+)\.png/i.exec(combined);
+        if (clipMatch) {
+          const clipId = `clip-${clipMatch[1]}`;
+          const notebook = this.findNotebookForClip(clipId);
+          if (notebook) {
+            event.preventDefault();
+            event.stopPropagation();
+            void this.app.workspace.openLinkText(`${notebook.path}#^${clipId}`, "", false);
+            return;
+          }
+        }
+
+        const pageMatch = /(.+)-page-(\d+)\.png/i.exec(combined);
+        if (pageMatch) {
+          const pageNum = parseInt(pageMatch[2], 10);
+          const rawBase = pageMatch[1].split("/").pop() ?? "";
+          const baseName = decodeURIComponent(rawBase);
+          const notebook = this.findNotebookByBaseName(baseName);
+          if (notebook) {
+            event.preventDefault();
+            event.stopPropagation();
+            void this.app.workspace.openLinkText(`${notebook.path}#page=${pageNum}`, "", false);
+            return;
+          }
+        }
+      }
+    });
+  }
+
+  findNotebookByBaseName(baseName: string): TFile | null {
+    const files = this.app.vault.getFiles();
+    return (
+      files.find(
+        (f) =>
+          this.plugin.isInkFile(f) &&
+          (f.basename === baseName || stripInkSuffix(f.basename) === baseName),
+      ) ?? null
+    );
+  }
+
+  findNotebookForClip(clipId: string): TFile | null {
+    for (const [path, cached] of this.docCache) {
+      if (findClip(cached.doc, clipId)) {
+        const f = this.app.vault.getAbstractFileByPath(path);
+        if (f instanceof TFile) return f;
+      }
+    }
+    const openViews = this.app.workspace.getLeavesOfType("finenotes-view");
+    for (const leaf of openViews) {
+      const v = leaf.view as any;
+      if (v?.file && v?.doc && findClip(v.doc, clipId)) {
+        return v.file;
+      }
+    }
+    for (const f of this.app.vault.getFiles()) {
+      if (this.plugin.isInkFile(f)) {
+        const cached = this.docCache.get(f.path);
+        if (cached && findClip(cached.doc, clipId)) return f;
+      }
+    }
+    return null;
   }
 
   /** Notify all active embed views for `filePath` to re-render. */

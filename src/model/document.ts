@@ -315,6 +315,8 @@ export interface NotebookClip {
   /** Bounding box of the tracked elements at creation time */
   elementBounds?: Bounds;
   label?: string;
+  /** Vault-relative path to the rendered clip PNG image */
+  imagePath?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -331,6 +333,8 @@ export interface Page {
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
   clips?: NotebookClip[];
+  /** Vault-relative path to the rendered full-page embed PNG */
+  pageEmbedPath?: string;
   /**
    * Wall-clock time (ms since the Unix epoch) that this page's stroke `t0`
    * values count from: the pen-down of the first timestamped stroke. Absent

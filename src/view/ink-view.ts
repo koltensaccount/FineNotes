@@ -50,10 +50,11 @@ import {
   Menu,
   Platform,
   TextFileView,
-  type TFile,
+  TFile,
   type WorkspaceLeaf,
   normalizePath,
 } from "obsidian";
+import { renderClipPng } from "./clip-png";
 import { AUTO_RECOGNIZE_IDLE_MS, ICON_INK_VIEW, PALETTE, SIZES, VIEW_TYPE_INK } from "../constants";
 import {
   type AttachmentKind,
@@ -469,6 +470,7 @@ export class InkView extends TextFileView {
   private async saveNow(clear?: boolean): Promise<void> {
     this.writeHold.saved();
     await super.save(clear);
+    void this.updateClipsPng();
   }
 
   /** The pen touched the page or left it: hold, or let go of, what would stall it. */
@@ -2044,28 +2046,65 @@ export class InkView extends TextFileView {
 
   /**
    * Copy an embed reference that embeds this notebook on page `index` (0-based)
-   * in ordinary Markdown: `![[Physics.notebook#page=3]]`.
+   * in ordinary Markdown: `[![[Physics-page-3.png]]](<Physics.notebook#page=3>)`.
    */
-  copyPageEmbed(index = this.surface?.currentPage ?? 0): void {
+  async copyPageEmbed(index = this.surface?.currentPage ?? 0): Promise<void> {
     const file = this.file;
-    if (!file) return;
-    const page = index + 1;
-    const link = "!" + this.app.fileManager.generateMarkdownLink(file, "", `#page=${page}`);
+    const surface = this.surface;
+    if (!file || !surface) return;
+    const page = surface.document.pages[index];
+    if (!page) return;
+    const pageNum = index + 1;
+
+    const filename = `${file.basename}-page-${pageNum}.png`;
+    const targetPath = await this.app.fileManager.getAvailablePathForAttachment(
+      filename,
+      file.path,
+    );
+
+    const geom = page.geometry ?? { width: 1024, height: 1366 };
+    const fullBounds: Bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
+
+    let pngBuffer: ArrayBuffer;
+    try {
+      pngBuffer = await renderClipPng(page, fullBounds, {
+        images: this.images,
+        backdropPainter: this.backdrops,
+        padding: 0,
+      });
+    } catch {
+      new Notice("FineNotes failed to render page embed PNG.");
+      return;
+    }
+
+    let imageFile = this.app.vault.getAbstractFileByPath(targetPath);
+    if (imageFile instanceof TFile) {
+      await this.app.vault.modifyBinary(imageFile, pngBuffer);
+    } else {
+      imageFile = await this.app.vault.createBinary(targetPath, pngBuffer);
+    }
+
+    page.pageEmbedPath = targetPath;
+    this.requestSave();
+
+    const imgEmbed = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
+    const link = `[${imgEmbed}](<${file.path}#page=${pageNum}>)`;
+
     void navigator.clipboard.writeText(link).then(
-      () => new Notice(`Page embed for page ${page} copied.`),
+      () => new Notice(`Page ${pageNum} embed copied to clipboard.`),
       () => new Notice("FineNotes could not use the clipboard here."),
     );
   }
 
   /**
-   * Persist a clip reference on the page and copy its Markdown embed reference to clipboard.
+   * Persist a clip reference on the page, render its PNG with background, and copy its Markdown embed reference to clipboard.
    */
-  copyEmbed(
+  async copyEmbed(
     pageId: string,
     bounds: Bounds,
     elements?: NotebookClip["elements"],
     elementBounds?: Bounds,
-  ): void {
+  ): Promise<void> {
     const file = this.file;
     const surface = this.surface;
     if (!file || !surface) return;
@@ -2075,12 +2114,38 @@ export class InkView extends TextFileView {
     // Mint a unique clip ID: clip-<8 hex chars>
     const clipId = `clip-${Math.random().toString(36).slice(2, 10)}`;
     const now = Date.now();
+
+    const filename = `${file.basename}-clip-${clipId.replace(/^clip-/, "")}.png`;
+    const targetPath = await this.app.fileManager.getAvailablePathForAttachment(
+      filename,
+      file.path,
+    );
+
+    let pngBuffer: ArrayBuffer;
+    try {
+      pngBuffer = await renderClipPng(page, bounds, {
+        images: this.images,
+        backdropPainter: this.backdrops,
+      });
+    } catch {
+      new Notice("FineNotes failed to render clip PNG.");
+      return;
+    }
+
+    let imageFile = this.app.vault.getAbstractFileByPath(targetPath);
+    if (imageFile instanceof TFile) {
+      await this.app.vault.modifyBinary(imageFile, pngBuffer);
+    } else {
+      imageFile = await this.app.vault.createBinary(targetPath, pngBuffer);
+    }
+
     const clip: NotebookClip = {
       id: clipId,
       pageId,
       bounds: { ...bounds },
       ...(elements ? { elements } : {}),
       ...(elementBounds ? { elementBounds } : {}),
+      imagePath: targetPath,
       createdAt: now,
       updatedAt: now,
     };
@@ -2090,11 +2155,61 @@ export class InkView extends TextFileView {
 
     this.requestSave();
 
-    const link = "!" + this.app.fileManager.generateMarkdownLink(file, "", `#^${clipId}`);
+    const imgEmbed = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
+    const link = `[${imgEmbed}](<${file.path}#^${clipId}>)`;
+
     void navigator.clipboard.writeText(link).then(
-      () => new Notice("Notebook embed copied to clipboard."),
+      () => new Notice("Notebook clip image embed copied to clipboard."),
       () => new Notice("FineNotes could not access clipboard."),
     );
+  }
+
+  /**
+   * Re-render all persistent clip and page embed PNGs so open markdown notes live-update.
+   */
+  async updateClipsPng(): Promise<void> {
+    if (!this.file || this.guard.locked) return;
+    const doc = this.doc;
+    if (!doc || !doc.pages) return;
+
+    for (const page of doc.pages) {
+      if (page.clips && page.clips.length > 0) {
+        for (const clip of page.clips) {
+          if (!clip.imagePath) continue;
+          const abstract = this.app.vault.getAbstractFileByPath(clip.imagePath);
+          if (abstract instanceof TFile) {
+            const currentBounds = clipCurrentBounds(page, clip);
+            try {
+              const buffer = await renderClipPng(page, currentBounds, {
+                images: this.images,
+                backdropPainter: this.backdrops,
+              });
+              await this.app.vault.modifyBinary(abstract, buffer);
+            } catch (err) {
+              console.warn("[FineNotes] Failed to update clip PNG", clip.id, err);
+            }
+          }
+        }
+      }
+
+      if (page.pageEmbedPath) {
+        const abstract = this.app.vault.getAbstractFileByPath(page.pageEmbedPath);
+        if (abstract instanceof TFile) {
+          const geom = page.geometry ?? { width: 1024, height: 1366 };
+          const fullBounds: Bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
+          try {
+            const buffer = await renderClipPng(page, fullBounds, {
+              images: this.images,
+              backdropPainter: this.backdrops,
+              padding: 0,
+            });
+            await this.app.vault.modifyBinary(abstract, buffer);
+          } catch (err) {
+            console.warn("[FineNotes] Failed to update page embed PNG", page.id, err);
+          }
+        }
+      }
+    }
   }
 
   // --- The ⋯ panel -----------------------------------------------------------

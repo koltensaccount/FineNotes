@@ -7512,3 +7512,24 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   }
 }
 
+/* --- Clickable Clip & Page Embed Images ----------------------------------- */
+
+img[src*="-clip-"],
+img[src*="-page-"],
+.internal-embed img[src*="-clip-"],
+.internal-embed img[src*="-page-"] {
+  cursor: pointer;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+img[src*="-clip-"]:hover,
+img[src*="-page-"]:hover,
+.internal-embed img[src*="-clip-"]:hover,
+.internal-embed img[src*="-page-"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18), 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+

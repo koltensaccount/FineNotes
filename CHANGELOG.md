@@ -8,6 +8,17 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 70 — Live updating PNG notebook region and page embeds
+
+- **PNG Embeds with Authentic Background**:
+  - Selection and page embeds are now rendered as high-DPI PNG images with the complete notebook paper background included (paper color, lined, grid, dot, or custom ruling, plus dark/light theme).
+  - Pasting an embed generates `[![[Notebook-clip-xyz.png]]](<Notebook.notebook#^clip-xyz>)` (and `[![[Notebook-page-N.png]]](<Notebook.notebook#page=N>)` for page embeds), fully compatible with Obsidian's native image rendering in Live Preview, Reading View, and PDF export.
+- **Live Reactivity on Save**:
+  - Whenever the source notebook changes and saves, all attached clip and page embed PNG files in the vault automatically re-render and update on disk.
+  - Open Markdown notes displaying the embeds immediately refresh with the latest handwriting and changes.
+- **Interactive Click Navigation**:
+  - Clicking any clip or page embed image (in Reading View or Live Preview) navigates directly to the source notebook, jumps to the exact page and region, centers the view, and pulses an accent outline around the clip.
+
 ### Beta 69 — Live notebook region and page embeds for Obsidian
 
 - **Selection & Region Embeds**:
