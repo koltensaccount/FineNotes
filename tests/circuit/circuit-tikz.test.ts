@@ -736,3 +736,21 @@ it("round-trips standalone labels with nested math braces", () => {
   const label = Object.values(result.circuit.components).find(c => c.type === "text_label");
   expect(label?.label).toBe(String.raw`V_{out}=\frac{V_{in}}{2}`);
 });
+
+it.each(["dependent_vsource", "dependent_isource", "logic_nand", "logic_nor", "logic_xor", "logic_xnor", "logic_buffer", "transistor_njfet", "transistor_pjfet"] as const)("round-trips new EE symbol %s", async type => {
+  const {COMPONENT_CATALOG,getComponentPortPosition,createEmptyCircuit}=await import("../../src/circuit/ir");
+  const c=createEmptyCircuit("EE");
+  const comp={id:"x1",type,label:"X1",x:5,y:5,rotation:0,ports:{} as Record<string,string>};
+  c.components.x1=comp;
+  for (const port of COMPONENT_CATALOG[type].ports) {
+    const at=getComponentPortPosition(comp,port.id)!;
+    c.nodes[port.id]={id:port.id,...at}; comp.ports[port.id]=port.id;
+    const far=port.id+"_far"; c.nodes[far]={id:far,x:at.x+3,y:at.y+3};
+    c.wires.push({id:port.id+"_w",fromNode:port.id,toNode:far});
+  }
+  const parsed=tikzToCircuit(circuitToTikz(c));
+  expect(parsed.diagnostics.filter(d=>d.severity==="error")).toEqual([]);
+  const symbol=Object.values(parsed.circuit.components).find(comp=>comp.type===type);
+  expect(symbol?.label).toBe("X1");
+  expect(Object.keys(symbol!.ports).sort()).toEqual(COMPONENT_CATALOG[type].ports.map(p=>p.id).sort());
+});

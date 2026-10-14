@@ -123,6 +123,13 @@ for (const viewport of [
   await page.getByRole("button", { name: "Visual", exact: true }).click();
   assert(await inspector.isVisible());
   assert(await page.locator(".goodobsidian-circuit-original img").isVisible());
+  await inspector.locator('button[title="Replace component using searchable symbol catalog"]').click();
+  const picker = page.locator(".goodobsidian-comp-picker-popover");
+  await picker.locator("input").fill("dependent");
+  await picker.getByRole("button", { name: /Dependent Voltage Source/ }).click();
+  assert.equal(await page.evaluate(() => editor.circuit.components.r.type), "dependent_vsource");
+  assert.equal(await page.evaluate(() => editor.circuit.components.r.label), "R_test");
+  await page.evaluate(() => editor.undo());
   await page.getByRole("button", { name: "Use circuit", exact: true }).click();
   assert(await page.evaluate(() => saved?.wires.length > 3));
   assert.deepEqual(errors, []);

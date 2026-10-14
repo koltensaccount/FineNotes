@@ -20,6 +20,8 @@ export type ComponentType =
   | "vsource"
   | "vsource_dc"
   | "isource"
+  | "dependent_vsource"
+  | "dependent_isource"
   | "battery"
   // Semiconductors
   | "diode"
@@ -29,6 +31,8 @@ export type ComponentType =
   | "transistor_pnp"
   | "transistor_nmos"
   | "transistor_pmos"
+  | "transistor_njfet"
+  | "transistor_pjfet"
   // Multi-terminal / active
   | "opamp"
   // Connections / references / nodes
@@ -48,6 +52,11 @@ export type ComponentType =
   | "logic_and"
   | "logic_or"
   | "logic_not"
+  | "logic_nand"
+  | "logic_nor"
+  | "logic_xor"
+  | "logic_xnor"
+  | "logic_buffer"
   | "generic_box";
 
 export interface CircuitPort {
@@ -175,6 +184,8 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     height: 3,
     description: "DC Voltage Source",
   },
+  dependent_vsource: { type: "dependent_vsource", labelPrefix: "V", defaultLabel: "V_dep", ports: [{id:"pos",name:"+",x:0,y:-1.5},{id:"neg",name:"−",x:0,y:1.5}], width:2,height:3,description:"Dependent Voltage Source (VCVS / CCVS)" },
+  dependent_isource: { type: "dependent_isource", labelPrefix: "I", defaultLabel: "I_dep", ports: [{id:"out",name:"out",x:0,y:-1.5},{id:"in",name:"in",x:0,y:1.5}], width:2,height:3,description:"Dependent Current Source (VCCS / CCCS)" },
   battery: {
     type: "battery",
     labelPrefix: "V",
@@ -491,6 +502,13 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     height: 2,
     description: "NOT Gate / Inverter",
   },
+  logic_nand: {type:"logic_nand",labelPrefix:"U",defaultLabel:"NAND1",ports:[{id:"in1",name:"A",x:-2,y:-0.7},{id:"in2",name:"B",x:-2,y:0.7},{id:"out",name:"Y",x:2,y:0}],width:4,height:2.5,description:"NAND Logic Gate"},
+  logic_nor: {type:"logic_nor",labelPrefix:"U",defaultLabel:"NOR1",ports:[{id:"in1",name:"A",x:-2,y:-0.7},{id:"in2",name:"B",x:-2,y:0.7},{id:"out",name:"Y",x:2,y:0}],width:4,height:2.5,description:"NOR Logic Gate"},
+  logic_xor: {type:"logic_xor",labelPrefix:"U",defaultLabel:"XOR1",ports:[{id:"in1",name:"A",x:-2,y:-0.7},{id:"in2",name:"B",x:-2,y:0.7},{id:"out",name:"Y",x:2,y:0}],width:4,height:2.5,description:"XOR Logic Gate"},
+  logic_xnor: {type:"logic_xnor",labelPrefix:"U",defaultLabel:"XNOR1",ports:[{id:"in1",name:"A",x:-2,y:-0.7},{id:"in2",name:"B",x:-2,y:0.7},{id:"out",name:"Y",x:2,y:0}],width:4,height:2.5,description:"XNOR Logic Gate"},
+  logic_buffer: {type:"logic_buffer",labelPrefix:"U",defaultLabel:"BUFFER1",ports:[{id:"in",name:"A",x:-1.5,y:0},{id:"out",name:"Y",x:1.5,y:0}],width:3,height:2.5,description:"BUFFER Logic Gate"},
+  transistor_njfet: {type:"transistor_njfet",labelPrefix:"Q",defaultLabel:"Q1",ports:[{id:"gate",name:"G",x:-1.5,y:0},{id:"drain",name:"D",x:1.5,y:-1.3},{id:"source",name:"S",x:1.5,y:1.3}],width:3,height:2.6,description:"N-Channel JFET"},
+  transistor_pjfet: {type:"transistor_pjfet",labelPrefix:"Q",defaultLabel:"Q1",ports:[{id:"gate",name:"G",x:-1.5,y:0},{id:"drain",name:"D",x:1.5,y:-1.3},{id:"source",name:"S",x:1.5,y:1.3}],width:3,height:2.6,description:"P-Channel JFET"},
   generic_box: {
     type: "generic_box",
     labelPrefix: "U",

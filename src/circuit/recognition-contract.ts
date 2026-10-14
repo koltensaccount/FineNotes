@@ -55,6 +55,7 @@ Return kirchhoff-ir/1.0 JSON. Image 2, when present, is surrounding notes: use i
 
 Work in this order: identify each symbol and its terminals; trace each drawn wire and junction; assign terminal connections; then assign approximate positions.
 Do not complete a familiar circuit from memory. Do not invent components or connections.
+A diamond with +/− is a dependent voltage source; a diamond with an arrow is a dependent current source. Preserve the controlling expression (VCVS, VCCS, CCVS, or CCCS) as written in value, without inventing control terminals or wires.
 Use the cathode bar to identify diode polarity, and the marked + terminal for polarized parts.
 A crossing is not a connection unless the drawing shows a dot or an unambiguous joined endpoint/T junction. Record ambiguous crossings and illegible symbols/labels in uncertainties; leave uncertain terminal connections absent instead of guessing.
 Every referenced node must be defined. Use only the catalog terminal IDs below.

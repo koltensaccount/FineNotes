@@ -206,14 +206,17 @@ function renderComponentSymbol(
       break;
     }
 
+    case "dependent_vsource":
+    case "dependent_isource":
     case "vsource":
     case "vsource_dc":
     case "isource": {
       // Circle with diameter 1.6: leads at y = -1.5 to -0.8 and 0.8 to 1.5
       parts.push(`<line x1="0" y1="-1.5" x2="0" y2="-0.8" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<line x1="0" y1="0.8" x2="0" y2="1.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      parts.push(`<circle cx="0" cy="0" r="0.8" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      if (type === "vsource_dc") {
+      if (type.startsWith("dependent_")) parts.push(`<polygon points="0,-0.8 0.8,0 0,0.8 -0.8,0" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      else parts.push(`<circle cx="0" cy="0" r="0.8" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      if (type === "vsource_dc" || type === "dependent_vsource") {
         // + on top, - on bottom
         parts.push(`<text x="0" y="-0.2" font-size="0.6" font-family="sans-serif" font-weight="bold" fill="${mainStroke}" text-anchor="middle">+</text>`);
         parts.push(`<text x="0" y="0.5" font-size="0.7" font-family="sans-serif" font-weight="bold" fill="${mainStroke}" text-anchor="middle">-</text>`);
@@ -221,11 +224,18 @@ function renderComponentSymbol(
         // Sine wave
         const sine = "M -0.4 0 C -0.2 -0.4, 0 -0.4, 0 0 C 0 0.4, 0.2 0.4, 0.4 0";
         parts.push(`<path d="${sine}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      } else if (type === "isource") {
+      } else if (type === "isource" || type === "dependent_isource") {
         // Arrow pointing from in to out (bottom to top)
         parts.push(`<line x1="0" y1="0.5" x2="0" y2="-0.5" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
         parts.push(`<polygon points="0,-0.55 -0.2,-0.2 0.2,-0.2" fill="${mainStroke}" />`);
       }
+      break;
+    }
+
+    case "transistor_njfet":
+    case "transistor_pjfet": {
+      parts.push(`<path d="M 0.2 -1 L 0.2 1 M 0.2 -0.8 L 1.5 -0.8 L 1.5 -1.3 M 0.2 0.8 L 1.5 0.8 L 1.5 1.3 M -1.5 0 L 0.2 0" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<polygon points="${type === "transistor_njfet" ? '0.1,0 -0.35,-0.2 -0.35,0.2' : '-1,0 -0.55,-0.2 -0.55,0.2'}" fill="${mainStroke}" />`);
       break;
     }
 
@@ -436,27 +446,36 @@ function renderComponentSymbol(
       break;
     }
 
+    case "logic_nand":
     case "logic_and": {
       parts.push(`<line x1="-2" y1="-0.7" x2="-1" y2="-0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<line x1="-2" y1="0.7" x2="-1" y2="0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<path d="M -1 -1.1 L 0.2 -1.1 A 1.1 1.1 0 0 1 0.2 1.1 L -1 1.1 Z" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
-      parts.push(`<line x1="1.3" y1="0" x2="2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      if (["logic_nand", "logic_nor", "logic_xnor"].includes(type)) parts.push(`<circle cx="1.48" cy="0" r="0.18" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      if (["logic_xor", "logic_xnor"].includes(type)) parts.push(`<path d="M -1.45 -1.1 Q -0.95 0 -1.45 1.1" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="${["logic_nand", "logic_nor", "logic_xnor"].includes(type) ? 1.66 : 1.3}" y1="0" x2="2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       break;
     }
 
+    case "logic_nor":
+    case "logic_xor":
+    case "logic_xnor":
     case "logic_or": {
       parts.push(`<line x1="-2" y1="-0.7" x2="-0.8" y2="-0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<line x1="-2" y1="0.7" x2="-0.8" y2="0.7" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<path d="M -1.2 -1.1 Q -0.4 -1.1 1.3 0 Q -0.4 1.1 -1.2 1.1 Q -0.7 0 -1.2 -1.1 Z" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
-      parts.push(`<line x1="1.3" y1="0" x2="2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      if (["logic_nand", "logic_nor", "logic_xnor"].includes(type)) parts.push(`<circle cx="1.48" cy="0" r="0.18" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      if (["logic_xor", "logic_xnor"].includes(type)) parts.push(`<path d="M -1.45 -1.1 Q -0.95 0 -1.45 1.1" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="${["logic_nand", "logic_nor", "logic_xnor"].includes(type) ? 1.66 : 1.3}" y1="0" x2="2" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       break;
     }
 
+    case "logic_buffer":
     case "logic_not": {
       parts.push(`<line x1="-1.5" y1="0" x2="-0.8" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       parts.push(`<polygon points="-0.8,-0.7 -0.8,0.7 0.6,0" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
-      parts.push(`<circle cx="0.8" cy="0" r="0.18" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
-      parts.push(`<line x1="1" y1="0" x2="1.5" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      if (type === "logic_not") parts.push(`<circle cx="0.8" cy="0" r="0.18" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<line x1="${type === "logic_buffer" ? 0.6 : 1}" y1="0" x2="1.5" y2="0" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
       break;
     }
 

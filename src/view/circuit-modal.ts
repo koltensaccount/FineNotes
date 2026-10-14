@@ -803,7 +803,7 @@ export class CircuitModal extends Modal {
     };
   }
 
-  private renderComponentPickerPopover(): void {
+  private renderComponentPickerPopover(replaceId?: string): void {
     const popover = this.visualStageEl.createDiv({ cls: "goodobsidian-comp-picker-popover" });
     popover.onclick = (e) => e.stopPropagation();
 
@@ -834,6 +834,11 @@ export class CircuitModal extends Modal {
       };
 
       const selectType = (type: ComponentType) => {
+        if (replaceId) {
+          this.componentPickerSearch = "";
+          this.mutateCircuit(c => changeComponentType(c, replaceId, type));
+          return;
+        }
         this.showComponentPicker = false;
         this.componentPickerSearch = "";
         this.pendingPlaceType = type;
@@ -2089,18 +2094,12 @@ export class CircuitModal extends Modal {
     // Component Type
     const typeGroup = inspector.createDiv({ cls: "setting-item" });
     typeGroup.createDiv({ cls: "setting-item-name", text: "Component Type" });
-    const typeSelect = typeGroup.createEl("select", { cls: "goodobsidian-circuit-select" });
-    for (const [t, d] of Object.entries(COMPONENT_CATALOG)) {
-      const opt = typeSelect.createEl("option", { text: d.description, value: t });
-      if (t === selectedComp.type) opt.selected = true;
-    }
-    typeSelect.onchange = () => {
-      const nextType = typeSelect.value as ComponentType;
-      this.mutateCircuit((c) => {
-        const comp = c.components[selectedComp.id];
-        if (!comp) return;
-        changeComponentType(c, comp.id, nextType);
-      });
+    const typeButton = typeGroup.createEl("button", { text: `${def.description} ▾`, cls: "goodobsidian-circuit-btn", title: "Replace component using searchable symbol catalog" });
+    typeButton.onclick = () => {
+      this.componentPickerSearch = "";
+      this.showComponentPicker = false;
+      this.visualStageEl.querySelector(".goodobsidian-comp-picker-popover")?.remove();
+      this.renderComponentPickerPopover(selectedComp.id);
     };
 
     // Label

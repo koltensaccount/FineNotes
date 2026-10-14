@@ -29,6 +29,8 @@ const TIKZ_TYPE_MAP: Record<string, string> = {
   vsource_dc: "V",
   battery: "battery1",
   isource: "I",
+  dependent_vsource: "american controlled voltage source",
+  dependent_isource: "american controlled current source",
   diode: "D",
   zener_diode: "zD",
   led: "leD",
@@ -45,9 +47,14 @@ const TIKZ_TYPE_MAP: Record<string, string> = {
   fuse: "fuse",
   transformer: "transformer",
   schottky_diode: "sD",
-  logic_and: "and gate US",
-  logic_or: "or gate US",
-  logic_not: "not gate US",
+  logic_nand: "american nand port",
+  logic_nor: "american nor port",
+  logic_xor: "american xor port",
+  logic_xnor: "american xnor port",
+  logic_buffer: "american buffer port",
+  logic_and: "american and port",
+  logic_or: "american or port",
+  logic_not: "american not port",
 };
 
 /** Reverse mapping from CircuitikZ bipole names to Kirchhoff component types */
@@ -67,6 +74,10 @@ const REVERSE_TIKZ_TYPE_MAP: Record<string, ComponentType> = {
   battery1: "battery",
   battery2: "battery",
   i: "isource",
+  "american controlled voltage source": "dependent_vsource",
+  "american controlled current source": "dependent_isource",
+  cv: "dependent_vsource",
+  ci: "dependent_isource",
   d: "diode",
   diode: "diode",
   zd: "zener_diode",
@@ -160,6 +171,16 @@ const REVERSE_MULTI_TERMINAL_ANCHORS: Record<string, Record<string, string>> = {
 };
 
 /** Serialize a Kirchhoff circuit to standard CircuitikZ LaTeX */
+for (const type of ["logic_and", "logic_or", "logic_nand", "logic_nor", "logic_xor", "logic_xnor", "logic_not", "logic_buffer"]) {
+  const anchors: Record<string, string> = type === "logic_not" || type === "logic_buffer" ? { in: "in", out: "out" } : { in1: "in 1", in2: "in 2", out: "out" };
+  MULTI_TERMINAL_ANCHORS[type] = anchors;
+  REVERSE_MULTI_TERMINAL_ANCHORS[type] = Object.fromEntries(Object.entries(anchors).map(([port, anchor]) => [anchor, port]));
+}
+for (const type of ["transistor_njfet", "transistor_pjfet"]) {
+  MULTI_TERMINAL_ANCHORS[type] = {gate:"G",drain:"D",source:"S"};
+  REVERSE_MULTI_TERMINAL_ANCHORS[type] = {G:"gate",D:"drain",S:"source"};
+}
+
 export function circuitToTikz(circuit: KirchhoffCircuit): string {
   const lines: string[] = [];
   lines.push("\\begin{circuitikz}[american]");
@@ -243,6 +264,8 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       if (comp.type === "transistor_pnp") qType = "pnp";
       else if (comp.type === "transistor_nmos") qType = "nmos";
       else if (comp.type === "transistor_pmos") qType = "pmos";
+      else if (comp.type === "transistor_njfet") qType = "njfet";
+      else if (comp.type === "transistor_pjfet") qType = "pjfet";
 
       const opts: string[] = [qType];
       if (comp.label) opts.push(`l=$${tikzMath(comp.label)}$`);
@@ -252,6 +275,16 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       }
       if (comp.mirror) opts.push("xscale=-1");
       lines.push(`  \\draw (${toTikzCoord(x)}, ${toTikzCoord(y)}) node[${opts.join(", ")}] (${comp.id}) {};`);
+      compVisited.add(comp.id);
+      continue;
+    }
+
+    if (comp.type.startsWith("logic_")) {
+      const opts = [TIKZ_TYPE_MAP[comp.type]];
+      if (comp.label) opts.push(`l=$${tikzMath(comp.label)}$`);
+      if (comp.rotation) opts.push(`rotate=${((-comp.rotation % 360) + 360) % 360}`);
+      if (comp.mirror) opts.push("xscale=-1");
+      lines.push(`  \\draw (${toTikzCoord(comp.x)}, ${toTikzCoord(-comp.y)}) node[${opts.join(", ")}] (${comp.id}) {};`);
       compVisited.add(comp.id);
       continue;
     }
@@ -612,7 +645,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
         }
         handledLines.add(lineNum);
       } else {
-        let multiType: ComponentType | undefined;
+        let multiType: ComponentType | undefined = Object.keys(TIKZ_TYPE_MAP).find(type => type.startsWith("logic_") && TIKZ_TYPE_MAP[type].toLowerCase() === rawType) as ComponentType | undefined;
         if (rawType === "op amp" || rawType === "opamp") {
           multiType = "opamp";
         } else if (rawType === "npn") {
@@ -625,6 +658,8 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
           multiType = "transistor_pmos";
         }
 
+        if (rawType === "njfet") multiType = "transistor_njfet";
+        if (rawType === "pjfet") multiType = "transistor_pjfet";
         if (multiType) {
           let label = "";
           let rotation = 0;
@@ -719,7 +754,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
     ) {
       const pathBody = rawLine.replace(/^\\draw(?:\s*\[[^\]]*\])?\s*/i, "");
       const tokenRegex =
-        /\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)|\(\s*([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_+-]+)\s*\)|(--|-\||\|-)|(cycle)|(;)/gi;
+        /\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)|\(\s*([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_+ -]+)\s*\)|(--|-\||\|-)|(cycle)|(;)/gi;
       const subpaths: Array<Array<{ x: number; y: number; nodeId?: string }>> = [];
       let currentSubpath: Array<{ x: number; y: number; nodeId?: string }> = [];
       let hasConnector = false;
@@ -756,7 +791,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
         } else if (match[3] !== undefined && match[4] !== undefined) {
           // Named anchor (compId.anchor)
           const rawCompName = match[3];
-          const anchor = match[4];
+          const anchor = match[4].trim();
           const resolvedCompId = tikzNameToCompId.get(rawCompName) || rawCompName;
           const comp = circuit.components[resolvedCompId];
           let pt: { x: number; y: number; nodeId?: string } | null = null;
