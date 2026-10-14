@@ -401,7 +401,8 @@ export function buildSlideNotebook(choices: NotebookChoices, title: string, atta
   const doc = buildNewDocument({ ...choices, type: "notebook" }, title, attachments);
   const geometry = sizeGeometry(choices.size, choices.landscape);
   doc.pages = [{ id: "p0", kind: "ink", geometry, backdrop: { kind: "blank" }, strokes: [], images: [], textBoxes: [] }];
-  const insertion = buildScanInsert(doc, 0, slides, "Import slides", 0);
+  const configured = slides.map(slide => ({...slide, slideLayout: {...slide.slideLayout!, paperGeometry: geometry, backdrop: templateBackdrop(choices.ruling, choices.paper)}}));
+  const insertion = buildScanInsert(doc, 0, configured, "Import slides", 0);
   if (insertion) {
     insertion.command.apply(doc);
     doc.pages = doc.pages.filter(page => page.id !== "p0");

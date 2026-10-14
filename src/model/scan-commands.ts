@@ -206,7 +206,7 @@ export function buildScanInsert(
     const pageIndex = single ? currentIndex : at;
     const page = single
       ? current
-      : addPage(slide?.geometry ?? scanPageGeometry(current.geometry, item), slide ? { kind: "blank" } : scanBackdrop(doc, currentIndex));
+      : addPage(slide?.geometry ?? scanPageGeometry(current.geometry, item), slide ? item.slideLayout?.backdrop ?? { kind: "blank" } : scanBackdrop(doc, currentIndex));
     const image = newImageElement(preview(), item.path, slide?.image ?? scanImageBox(item, page.geometry));
     parts.push(new InsertImage(page.id, image));
     // Account for the image in the id preview without touching the real page.

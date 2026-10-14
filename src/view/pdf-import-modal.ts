@@ -1,3 +1,7 @@
+import { PaperControls, TemplateGrid } from "./template-picker";
+import { sizeGeometry, templateBackdrop } from "../model/templates";
+import { LIGHT_PAPER, drawSynthetic } from "../canvas/backdrop";
+import type { NotebookChoices } from "../model/new-notebook";
 import { type App, FuzzySuggestModal, Modal, Notice, Setting, type TFile } from "obsidian";
 import { allPages, parsePageRange } from "../export/page-range";
 import { DialogKeyboard } from "./dialog-keyboard";
@@ -41,6 +45,7 @@ export class PdfImportModal extends Modal {
     private readonly firstPage?: {width:number;height:number},
     private readonly previewBytes?: () => Promise<ArrayBuffer>,
     private readonly purpose: "import" | "notebook" = "import",
+    private readonly notebookChoices?: NotebookChoices,
   ) {
     super(app);
   }
@@ -64,10 +69,19 @@ export class PdfImportModal extends Modal {
       slideControls.before(layoutSetting.settingEl);
     }
     const preview = slideControls.createDiv({cls:"goodobsidian-slide-import-preview"});
+    const paperCanvas = preview.createEl("canvas", {cls:"goodobsidian-slide-import-paper"});
     const slideImage = preview.createEl("img",{attr:{alt:"First PDF slide preview"}});
     const notes = preview.createDiv({text:"Blank space for notes",cls:"goodobsidian-slide-import-notes"});
     const updatePreview = () => {
-      const placed = slidePlacement(this.firstPage ?? {width:16,height:9},800,this.layout);
+      const paper = this.notebookChoices;
+      const geometry = paper ? sizeGeometry(paper.size,paper.landscape) : undefined;
+      const placed = slidePlacement(this.firstPage ?? {width:16,height:9},800,{...this.layout,paperGeometry:geometry});
+      if (paper) {
+        const scale = 350 / placed.geometry.width;
+        paperCanvas.width=350; paperCanvas.height=Math.ceil(placed.geometry.height*scale);
+        const context=paperCanvas.getContext("2d");
+        if(context) { context.scale(scale,scale); drawSynthetic(context,templateBackdrop(paper.ruling,paper.paper),placed.geometry,LIGHT_PAPER); }
+      }
       preview.style.width = `min(100%, ${Math.min(350,400*placed.geometry.width/placed.geometry.height)}px)`;
       preview.style.aspectRatio = `${placed.geometry.width} / ${placed.geometry.height}`;
       slideImage.style.left=`${placed.image.x/placed.geometry.width*100}%`;
@@ -88,6 +102,27 @@ export class PdfImportModal extends Modal {
       } catch { notes.setText("Preview unavailable; import can still be attempted."); }
       finally { previewLoading=false; }
     };
+    if (this.notebookChoices) {
+      const choices=this.notebookChoices;
+      const section=slideControls.createDiv();
+      section.createEl("h3",{text:"Paper"});
+      let grid: TemplateGrid;
+      new PaperControls(section.createDiv({cls:"goodobsidian-templates-controls"}),{
+        keepSize:false,sizeId:choices.size,color:choices.paper,landscape:choices.landscape,
+        onChange:state=>{
+          choices.size=state.sizeId; choices.paper=state.color; choices.landscape=state.landscape;
+          grid?.repaint(choices.paper,sizeGeometry(choices.size,choices.landscape)); updatePreview();
+        },
+      });
+      grid=new TemplateGrid(section,{
+        selected:choices.ruling,open:"selected",previewWidth:120,
+        onSelect:ruling=>{choices.ruling=ruling; updatePreview();},
+        onActivate:ruling=>{choices.ruling=ruling; updatePreview();},
+      });
+      grid.el.addClass("is-inline");
+      grid.repaint(choices.paper,sizeGeometry(choices.size,choices.landscape));
+    }
+
     for (const [key,name,min,max] of [["widthPercent","Slide width",50,100],["notesPercent","Notes space (relative to slide height)",25,300]] as const) {
       const setting=new Setting(slideControls).setName(name);
       const value=setting.nameEl.createSpan({text:` · ${this.layout[key]}%`});
@@ -95,7 +130,7 @@ export class PdfImportModal extends Modal {
         this.layout[key]=v; value.setText(` · ${v}%`); updatePreview();
       }));
     }
-    slideControls.createEl("p",{text:"Preview uses the first PDF page. Slides retain their aspect ratio; pages grow to leave notes space below. You can write on the slide image too."});
+    slideControls.createEl("p",{text:this.notebookChoices ? "Paper size is fixed. Slides fit without distortion, leaving your chosen notes space below; choose less notes space for a larger slide." : "Preview uses the first PDF page. Slides retain their aspect ratio; pages grow to leave notes space below. You can write on the slide image too."});
     updatePreview();
 
     new Setting(this.contentEl).setName("Pages").addDropdown((dropdown) =>

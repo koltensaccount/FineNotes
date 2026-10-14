@@ -1133,6 +1133,6 @@ export default class GoodObsidianPlugin extends Plugin {
     }, sizes[0], async () => {
       for await (const slide of renderPdfSlides(bytes,[0],800)) return slide.bytes;
       throw new Error("No preview page");
-    }, "notebook").open();
+    }, "notebook", choices).open();
   }
 }
