@@ -30,6 +30,8 @@ export interface StrokeBuilderOptions {
   minDistance: number;
   /** Off: every point stores `fallbackPressure`, whatever the pen reads. */
   pressureEnabled: boolean;
+  pressureSensitivity?: number;
+  stabilization?: number;
   /** The pressure stored when there is no reading to go by. */
   fallbackPressure: number;
   /**
@@ -87,7 +89,7 @@ const CENTRED_WEIGHTS: readonly (readonly number[])[] = [
  */
 export function mapPressure(reading: number, settings: StrokeBuilderOptions): number {
   const use = settings.pressureEnabled && reading > 0;
-  return use ? Math.min(reading, 1) : settings.fallbackPressure;
+  return use ? .5+(Math.min(reading,1)-.5)*Math.max(0,Math.min(1,settings.pressureSensitivity ?? 1)) : settings.fallbackPressure;
 }
 
 /**
@@ -215,7 +217,16 @@ export class StrokeBuilder {
     return readings.length % 2 === 1 ? readings[mid] : (readings[mid - 1] + readings[mid]) / 2;
   }
 
+  private stabilized: {x:number;y:number} | null = null;
   private offer(sample: InputSample, final: boolean): boolean {
+    const amount=Math.max(0,Math.min(1,this.options.stabilization ?? 0));
+    if(amount>0) {
+      if(this.stabilized && !final) {
+        const alpha=1-.85*amount;
+        sample={...sample,x:this.stabilized.x+(sample.x-this.stabilized.x)*alpha,y:this.stabilized.y+(sample.y-this.stabilized.y)*alpha};
+      }
+      this.stabilized={x:sample.x,y:sample.y};
+    }
     // Read the pressure first, even for a sample about to be dropped: the
     // pen's first real reading still fills in the points before it.
     const pressure = this.pressureFor(sample.pressure);
@@ -342,7 +353,7 @@ export class StrokeBuilder {
     const { pressureEnabled, fallbackPressure } = this.options;
     if (!pressureEnabled) return fallbackPressure;
     if (!(raw > 0)) return Number.isNaN(this.lastReading) ? fallbackPressure : this.lastReading;
-    const reading = Math.min(raw, 1);
+    const reading = .5 + (Math.min(raw, 1)-.5)*Math.max(0,Math.min(1,this.options.pressureSensitivity ?? 1));
     if (Number.isNaN(this.lastReading) && (this.flat.length > 0 || this.held.length > 0)) {
       for (let p = 2; p < this.flat.length; p += POINT_STRIDE) this.flat[p] = reading;
       for (const kept of [this.before, this.last, this.waiting]) if (kept) kept[2] = reading;

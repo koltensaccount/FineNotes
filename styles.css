@@ -7402,3 +7402,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 /* Fit the pen-type well around its preview, without lifting it outside the pill. */
 .goodobsidian-options button.goodobsidian-pentype { box-sizing: border-box; width: 66px; min-width: 66px; height: 44px; min-height: 44px; padding: 6px; align-items: center; justify-content: center; border-radius: 12px; }
 .goodobsidian-options .goodobsidian-pentype.is-active { transform: none; }
+
+.goodobsidian-pen-dynamics-control { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; width: 100%; }
+.goodobsidian-pen-dynamics-control input[type="range"] { width: 100%; min-height: 44px; margin: 0; touch-action: pan-y; }

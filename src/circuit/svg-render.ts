@@ -418,6 +418,12 @@ function renderComponentSymbol(
       break;
     }
 
+    case "current_arrow": {
+      parts.push(`<line x1="0" y1="0.9" x2="0" y2="-0.75" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
+      parts.push(`<polygon points="0,-1 -0.2,-0.55 0.2,-0.55" fill="${mainStroke}" />`);
+      break;
+    }
+
     case "voltage_label": {
       parts.push(`<text x="0" y="-0.9" font-size="0.7" text-anchor="middle" fill="${mainStroke}">+</text>`);
       parts.push(`<text x="0" y="1.3" font-size="0.7" text-anchor="middle" fill="${mainStroke}">−</text>`);

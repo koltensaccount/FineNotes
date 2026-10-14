@@ -42,6 +42,7 @@ export type ComponentType =
   | "node_open"
   | "text_label"
   | "voltage_label"
+  | "current_arrow"
   | "switch_spst"
   | "switch_spdt"
   | "fuse"
@@ -380,6 +381,10 @@ export const COMPONENT_CATALOG: Record<ComponentType, ComponentDefinition> = {
     width: 0.4,
     height: 0.4,
     description: "Terminal / Test Point (Open)",
+  },
+  current_arrow: {
+    type:"current_arrow",labelPrefix:"IA",defaultLabel:"I_D",ports:[],width:1.6,height:2.4,
+    description:"Current Arrow / Direction Label",
   },
   voltage_label: {
     type: "voltage_label", labelPrefix: "VL", defaultLabel: "V_o", ports: [],

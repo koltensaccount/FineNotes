@@ -1,3 +1,4 @@
+import { penDynamicsProfile, type PenDynamics } from "../model/pen-dynamics";
 import { claimTransient, presetActivation } from "./transient-popover";
 import { bindColorStripInput } from "./color-strip-input";
 import {
@@ -315,6 +316,7 @@ export interface ToolbarState {
   color: string;
   size: number;
   pressureEnabled: boolean;
+  penDynamics?: PenDynamics;
   /** Draw-and-hold with the pens. `undefined` counts as enabled. */
   shapeSnapEnabled?: boolean;
   /**
@@ -372,6 +374,7 @@ export interface ToolbarCallbacks {
   onPressureToggle: (enabled: boolean) => void;
   /** Whether pressure pens may widen with pressure (the advanced setting); off when absent. */
   pressureAllowed?: () => boolean;
+  onPenDynamicsChange?: (value: PenDynamics) => void;
   onPressurePreferenceChange?: (enabled: boolean) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -2642,6 +2645,7 @@ export class Toolbar {
   private renderPenTypes(body: HTMLElement, openGestures: () => void): void {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
     for (const spec of PEN_MENU_TYPES) {
+      if (spec.pressure && this.callbacks.pressureAllowed?.() !== true) continue;
       const button = body.createEl("button", {
         cls: "goodobsidian-wide goodobsidian-pen-choice clickable-icon",
         attr: { "aria-label": spec.label, title: spec.label },
@@ -2657,6 +2661,25 @@ export class Toolbar {
         this.choosePenType(spec);
       });
     }
+    const dynamics = body.createDiv({cls:"goodobsidian-pen-dynamics"});
+    this.switchRow(dynamics,"Pressure-sensitive pens",this.callbacks.pressureAllowed?.() === true,on=>this.callbacks.onPressurePreferenceChange?.(on));
+    const active=this.activePenType(), profile=penDynamicsProfile(this.state.penDynamics,active.id);
+    for (const [key,label] of [["pressureSensitivity","Pressure sensitivity"],["stabilization","Stroke stabilization"]] as const) {
+      if(key === "pressureSensitivity" && !active.pressure) continue;
+      const row=dynamics.createEl("label",{cls:"goodobsidian-pen-dynamics-control"});
+      const caption=row.createSpan({text:`${label} · ${Math.round(profile[key]*100)}%`});
+      const range=row.createEl("input",{type:"range",attr:{min:"0",max:"100",step:"1","aria-label":label}});
+      range.value=String(Math.round(profile[key]*100));
+      range.oninput=()=>{
+        profile[key]=Number(range.value)/100;
+        caption.setText(`${label} · ${range.value}%`);
+        this.state.penDynamics={...this.state.penDynamics,[active.id]:{...profile}};
+        this.state.pressureEnabled=active.pressure && this.callbacks.pressureAllowed?.() === true;
+        this.callbacks.onPressureToggle(this.state.pressureEnabled);
+      };
+      range.onchange=()=>this.callbacks.onPenDynamicsChange?.(this.state.penDynamics ?? {});
+    }
+    dynamics.createDiv({cls:"goodobsidian-popover-hint",text:"Stabilization steadies new strokes; higher values follow the pen more slowly. Ballpoint has a constant width."});
     const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(constraints, "Constrain shapes", this.state.constrainShapes === true, on => {
       this.state.constrainShapes = on;
@@ -2677,7 +2700,10 @@ export class Toolbar {
    * shapes and highlighter too), and Circle to lasso. The second switch is
    * greyed while the first is off, as GoodNotes has it.
    */
-  refreshPressurePreference(): void { if (this.popoverKind === "pens") this.popoverRender?.(); }
+  refreshPressurePreference(): void {
+    if (this.callbacks.pressureAllowed?.() !== true && this.activePenType().pressure) this.choosePenType(PEN_MENU_TYPES.find(spec=>spec.id === "ball")!);
+    if (this.popoverKind === "pens") this.popoverRender?.();
+  }
 
   private renderPenGestures(body: HTMLElement, back: () => void): void {
     const head = body.createDiv({ cls: "goodobsidian-popover-head" });

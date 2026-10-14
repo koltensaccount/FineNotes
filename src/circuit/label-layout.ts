@@ -240,6 +240,15 @@ export function layoutComponentLabels(
       continue;
     }
 
+    if (comp.type === "current_arrow") {
+      const vertical=comp.rotation % 180 === 0;
+      const labelX=vertical ? cx + gridSize*.7 : cx, labelY=vertical ? cy+4 : cy-12;
+      const anchor=vertical ? "start" : "middle";
+      const rect={minX:labelX-(vertical ? 0 : textW/2),maxX:labelX+(vertical ? textW : textW/2),minY:labelY-12,maxY:labelY+4};
+      placed.set(comp.id,{componentId:comp.id,position:"right",labelText,valueText,labelX,labelY,anchor,bounds:rect});
+      placedRects.push(rect); continue;
+    }
+
     if (comp.type === "text_label" || comp.type === "voltage_label") {
       const labelX = comp.labelOffset ? cx + comp.labelOffset.x * gridSize : cx;
       const labelY = comp.labelOffset ? cy + comp.labelOffset.y * gridSize : cy + 4;

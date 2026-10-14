@@ -210,6 +210,8 @@ function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
       : s.defaultSize,
     // A notebook opens with the Fountain pen, a pressure pen.
     pressureEnabled: s.pressureWidth,
+    penType: s.pressureWidth ? "fountain" : "ball",
+    penDynamics: s.penDynamics,
     shapeSnapEnabled: s.drawAndHold,
     eraserMode: s.eraserMode,
     eraserSize: s.eraserSize,
@@ -1030,7 +1032,8 @@ export class InkView extends TextFileView {
           void this.plugin.saveSettings();
         },
         onSizeChange: ignore,
-        onPressureToggle: () => this.updateSidebarRendering(),
+        onPressureToggle: enabled => { this.surface?.setPressure(enabled); this.updateSidebarRendering(); },
+        onPenDynamicsChange: value => { this.settings.penDynamics=value; void this.plugin.saveSettings(); },
         pressureAllowed: () => this.settings.pressureWidth,
         onPressurePreferenceChange: (enabled) => { void this.plugin.setPressureWidth(enabled); },
         onUndo: () => this.surface?.undo(),

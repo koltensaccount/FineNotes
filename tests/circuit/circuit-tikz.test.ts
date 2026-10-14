@@ -765,3 +765,13 @@ it("round-trips voltage polarity annotations without electrical terminals", asyn
   expect(label?.ports).toEqual({});
   expect(parsed.circuit.wires).toEqual([]);
 });
+
+it.each([0,90,180,270])("round-trips current arrow labels and direction %s without connections",async rotation=>{
+  const {createEmptyCircuit}=await import("../../src/circuit/ir");
+  const c=createEmptyCircuit("Current");
+  c.components.i={id:"i",type:"current_arrow",label:"I_{ph}",x:5,y:5,rotation,ports:{}};
+  const parsed=tikzToCircuit(circuitToTikz(c));
+  const annotation=Object.values(parsed.circuit.components).find(c=>c.type==="current_arrow");
+  expect(annotation?.label).toBe("I_{ph}"); expect(annotation?.rotation).toBe(rotation);
+  expect(annotation?.ports).toEqual({}); expect(parsed.circuit.wires).toEqual([]);
+});

@@ -1,3 +1,4 @@
+import { penDynamicsProfile } from "../model/pen-dynamics";
 import { connectRecognizedLine } from "../ink/line-connection";
 import type { PdfRegion } from "./pdf-region-copy";
 import { renderSelectionToPng, copySelectionToSystemClipboard } from "./selection-clipboard";
@@ -3349,10 +3350,11 @@ export class InkSurface {
       // and small handwriting lost most of its samples.
       minDistance: this.atFitZoom(MIN_SAMPLE_DISTANCE),
       pressureEnabled: this.toolState.pressureEnabled,
+      ...penDynamicsProfile(this.toolState.penDynamics, this.toolState.penType ?? "fountain"),
       // Until a stroke's first reading arrives it is drawn at the pen's
       // pressure on the last stroke, not at 0.5: a light hand (~0.25) saw
       // every stroke start as a blob for a frame.
-      fallbackPressure: this.toolState.pressureEnabled
+      fallbackPressure: this.toolState.pressureEnabled && penDynamicsProfile(this.toolState.penDynamics,this.toolState.penType ?? "fountain").pressureSensitivity > 0
         ? (this.penPressure ?? FALLBACK_PRESSURE)
         : FALLBACK_PRESSURE,
       // One sample a frame (iPadOS before 18.2): fill the stroke in between

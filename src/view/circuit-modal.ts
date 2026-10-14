@@ -2066,11 +2066,19 @@ export class CircuitModal extends Modal {
       };
     }
 
-    if (selectedComp.type === "text_label" || selectedComp.type === "voltage_label") {
+    if (selectedComp.type === "text_label" || selectedComp.type === "voltage_label" || selectedComp.type === "current_arrow") {
       inspector.createEl("h3", { text: `Properties: ${selectedComp.label}` });
       const labelGroup = inspector.createDiv({ cls: "setting-item" });
       labelGroup.createDiv({ cls: "setting-item-name", text: "Text / LaTeX (e.g. + , - , Vo , 15V , \\infty)" });
       const labelInput = labelGroup.createEl("input", { type: "text", value: selectedComp.label });
+      if (selectedComp.type === "current_arrow") {
+        const direction=inspector.createDiv({cls:"setting-item"});
+        direction.createDiv({cls:"setting-item-name",text:"Arrow direction"});
+        const select=direction.createEl("select",{cls:"goodobsidian-circuit-select",attr:{"aria-label":"Arrow direction"}});
+        for(const [value,text] of [[0,"Up"],[90,"Right"],[180,"Down"],[270,"Left"]] as const) select.createEl("option",{value:String(value),text});
+        select.value=String(selectedComp.rotation);
+        select.onchange=()=>this.mutateCircuit(c=>{c.components[selectedComp.id].rotation=Number(select.value);});
+      }
       labelInput.placeholder = "Enter label text";
       this.keyboard?.watch(labelInput, labelGroup);
       labelInput.onchange = () => {

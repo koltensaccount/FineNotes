@@ -135,3 +135,21 @@ describe("StrokeBuilder: the pressure a stroke starts at, and rewrites (2026-09-
     expect(fresh.revision).toBe(0);
   });
 });
+
+it("adjusts pressure sensitivity while keeping legacy behavior at 100%",()=>{
+  const options={pressureEnabled:true,fallbackPressure:.5,minDistance:0};
+  expect(mapPressure(.2,{...options,pressureSensitivity:0})).toBe(.5);
+  expect(mapPressure(.8,{...options,pressureSensitivity:.5})).toBeCloseTo(.65);
+  expect(mapPressure(.8,{...options,pressureSensitivity:1})).toBe(.8);
+  const pen=new StrokeBuilder({...options,pressureSensitivity:.5});
+  pen.add({x:0,y:0,pressure:.2}); pen.addFinal({x:20,y:0,pressure:.8}); pen.settle();
+  expect(pen.points()[2]).toBeCloseTo(.35);
+  expect(pen.points().at(-1)).toBeCloseTo(.65);
+});
+it("stabilizes sampled jitter but keeps the actual pen-up endpoint",()=>{
+  const raw=new StrokeBuilder({minDistance:0}), stable=new StrokeBuilder({minDistance:0,stabilization:1});
+  for(const sample of [{x:0,y:0,pressure:.5},{x:10,y:8,pressure:.5},{x:20,y:-8,pressure:.5}]) {raw.add(sample);stable.add(sample);}
+  expect(Math.abs(stable.points()[4])).toBeLessThan(Math.abs(raw.points()[4]));
+  stable.addFinal({x:30,y:0,pressure:.5}); stable.settle();
+  expect(stable.points().slice(-3,-1)).toEqual([30,0]);
+});

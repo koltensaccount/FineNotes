@@ -224,6 +224,12 @@ export function circuitToTikz(circuit: KirchhoffCircuit): string {
       continue;
     }
 
+    if (comp.type === "current_arrow") {
+      const angle=((90-comp.rotation)%360+360)%360;
+      lines.push(`  \\draw (${toTikzCoord(comp.x)}, ${toTikzCoord(-comp.y)}) node[currarrow, rotate=${angle}, label=right:{$${tikzMath(comp.label)}$}] (${comp.id}) {};`);
+      compVisited.add(comp.id); continue;
+    }
+
     if (comp.type === "voltage_label") {
       lines.push(`  \\draw (${toTikzCoord(comp.x)}, ${toTikzCoord(-comp.y)}) node (${comp.id}) {$\\begin{gathered}+\\\\${tikzMath(comp.label)}\\\\-\\end{gathered}$};`);
       compVisited.add(comp.id);
@@ -677,6 +683,7 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
 
         if (rawType === "njfet") multiType = "transistor_njfet";
         if (rawType === "pjfet") multiType = "transistor_pjfet";
+        if (rawType === "currarrow") multiType = "current_arrow";
         if (multiType) {
           let label = "";
           let rotation = 0;
@@ -692,6 +699,11 @@ export function tikzToCircuit(tikzCode: string): TikzParseResult {
             if (/xscale\s*=\s*-1/i.test(opt)) mirror = true;
           }
 
+          if (multiType === "current_arrow") {
+            rotation=(rotation+90)%360;
+            const text=optTokens.find(opt=>opt.startsWith("label=right:"));
+            if(text) label=stripMathDelimiters(text.slice("label=right:".length).replace(/^\{|\}$/g,""));
+          }
           const compId = getNextCompId(explicitId);
           const catalogEntry = COMPONENT_CATALOG[multiType];
           const ports: Record<string, string> = {};
