@@ -2048,7 +2048,7 @@ export class InkView extends TextFileView {
 
   /**
    * Copy an embed reference that embeds this notebook on page `index` (0-based)
-   * in ordinary Markdown: `[![[Physics-page-3.png]]](<Physics.notebook#page=3>)`.
+   * in ordinary Markdown: `![[Physics-page-3.png]]` (click navigation uses saved embed metadata).
    */
   async copyPageEmbed(index = this.surface?.currentPage ?? 0): Promise<void> {
     const file = this.file;
@@ -2091,8 +2091,7 @@ export class InkView extends TextFileView {
     page.pageEmbedPath = targetPath;
     this.requestSave();
 
-    const imgEmbed = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
-    const link = `[${imgEmbed}](<${file.path}#page=${pageNum}>)`;
+    const link = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
 
     void navigator.clipboard.writeText(link).then(
       () => new Notice(`Page ${pageNum} embed copied to clipboard.`),
@@ -2161,8 +2160,7 @@ export class InkView extends TextFileView {
 
     this.requestSave();
 
-    const imgEmbed = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
-    const link = `[${imgEmbed}](<${file.path}#^${clipId}>)`;
+    const link = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
 
     void navigator.clipboard.writeText(link).then(
       () => new Notice("Notebook clip image embed copied to clipboard."),
