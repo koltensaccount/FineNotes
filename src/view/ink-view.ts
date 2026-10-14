@@ -91,6 +91,7 @@ import { InkSurface } from "./ink-surface";
 import { PdfBackdropCache } from "./pdf-backdrop";
 import { acquirePdfWorker, releasePdfWorker } from "./pdf-worker";
 import { vaultPathFromDrop } from "../model/file-drop";
+import { renderPdfSlides } from "./pdf-slides";
 import { measurePdfPages } from "./pdf-pages";
 import { PdfImportModal, VaultPdfSuggestModal } from "./pdf-import-modal";
 import { WriteHold } from "./write-hold";
@@ -2683,14 +2684,29 @@ export class InkView extends TextFileView {
         return;
       const before = surface.document.pages[gap];
       const item: ScanItem = { kind: "pdf", bytes, name, savedPath, pages: [] };
-      new PdfImportModal(this.app, name, pages.length, async (indices) => {
+      new PdfImportModal(this.app, name, pages.length, async (indices, layout) => {
         if (this.file !== note || this.surface !== surface || this.isProtected()) return false;
+        if (layout) {
+          const slides: ScanItem[] = [];
+          const rendering = new Notice("FineNotes: rendering slides…", 0);
+          try {
+            for await (const slide of renderPdfSlides(bytes, indices)) {
+              if (this.file !== note || this.surface !== surface || this.isProtected()) return false;
+              slides.push({ ...slide, slideLayout: layout, name: `${name.replace(/\.pdf$/i, "")} slide ${indices[slides.length]+1}` });
+              rendering.setMessage(`FineNotes: rendered ${slides.length} of ${indices.length} slides…`);
+            }
+            return this.insertScans(slides, "Import slides with notes", {beforeId:before?.id ?? null});
+          } finally { rendering.hide(); }
+        }
         item.pages = [...indices].sort((a, b) => a - b).map((page) => ({ ...pages[page], page }));
         const destination = before
           ? surface.document.pages.indexOf(before)
           : surface.document.pages.length;
         if (destination < 0) return false;
         return this.insertScans([item], "Import PDF", { beforeId: before?.id ?? null });
+      }, pages[0], async () => {
+        for await (const slide of renderPdfSlides(bytes, [0], 800)) return slide.bytes;
+        throw new Error("No preview page");
       }).open();
     } catch (error) {
       new Notice(`FineNotes: couldn't import PDF — ${errorMessage(error)}`, 8000);
@@ -2760,11 +2776,11 @@ export class InkView extends TextFileView {
         saved.push({ kind: "pdf", path: item.savedPath, pages: item.pages });
         continue;
       }
-      const name = scanFileName(now, photo++, photos);
+      const name = item.name ?? scanFileName(now, photo++, photos);
       item.savedPath ??= (
         await saveImageAttachment(this.app, item, name, note.path, this.attachmentFolder("images"))
       ).path;
-      saved.push({ path: item.savedPath, width: item.width, height: item.height });
+      saved.push({ path: item.savedPath, width: item.width, height: item.height, slideLayout: item.slideLayout });
     }
     // Read the surface again: the view may have closed while the files saved.
     const surface = this.surface;

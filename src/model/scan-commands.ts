@@ -21,6 +21,7 @@
  * be pages — are left out (the view does not offer them there).
  */
 
+import { slidePlacement, type SlideLayout } from "./slide-layout";
 import { AddPage, type Command, InsertImage } from "./commands";
 import type { Backdrop, InkDocument, Page, PageGeometry } from "./document";
 import { newImageElement } from "./images";
@@ -33,6 +34,7 @@ export const SCAN_MARGIN = 0.035;
 /** A straightened photo already saved in the vault. */
 export interface SavedScan {
   kind?: "image";
+  slideLayout?: SlideLayout;
   /** Vault path of the picture. */
   path: string;
   /** Its pixel size, for the aspect. */
@@ -200,11 +202,12 @@ export function buildScanInsert(
       });
       continue;
     }
+    const slide = item.slideLayout ? slidePlacement(item, current.geometry.width, item.slideLayout) : null;
     const pageIndex = single ? currentIndex : at;
     const page = single
       ? current
-      : addPage(scanPageGeometry(current.geometry, item), scanBackdrop(doc, currentIndex));
-    const image = newImageElement(preview(), item.path, scanImageBox(item, page.geometry));
+      : addPage(slide?.geometry ?? scanPageGeometry(current.geometry, item), slide ? { kind: "blank" } : scanBackdrop(doc, currentIndex));
+    const image = newImageElement(preview(), item.path, slide?.image ?? scanImageBox(item, page.geometry));
     parts.push(new InsertImage(page.id, image));
     // Account for the image in the id preview without touching the real page.
     pages[pageIndex] = { ...pages[pageIndex], images: [...pages[pageIndex].images, image] };

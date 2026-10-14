@@ -53,6 +53,8 @@ const BW_PNG_BUDGET = 400 * 1024;
 /** A finished photo scan, encoded and ready to save. `savedPath` is set once it is in the vault. */
 export interface EncodedScan extends PreparedImage {
   kind: "image";
+  slideLayout?: import("../model/slide-layout").SlideLayout;
+  name?: string;
   savedPath?: string;
 }
 

@@ -255,3 +255,32 @@ describe("buildScanInsert", () => {
     expect(snapshot(doc)).toBe(before);
   });
 });
+
+it("imports large slide images on blank pages with adjustable notes space as one undo", () => {
+  const doc=notebook(1), before=structuredClone(doc);
+  const layout={widthPercent:94,notesPercent:100};
+  const inserted=buildScanInsert(doc,0,[
+    {path:"slide1.png",width:1600,height:900,slideLayout:layout},
+    {path:"slide2.png",width:1600,height:900,slideLayout:layout},
+  ],"Import slides");
+  inserted!.command.apply(doc);
+  expect(doc.pages).toHaveLength(3);
+  for (const page of doc.pages.slice(1)) {
+    expect(page.backdrop.kind).toBe("blank");
+    expect(page.images[0].w/page.geometry.width).toBeCloseTo(.94);
+    expect(page.images[0].w/page.images[0].h).toBeCloseTo(16/9);
+    expect(page.geometry.height-page.images[0].y-page.images[0].h).toBeGreaterThanOrEqual(page.images[0].h);
+  }
+  inserted!.command.invert(doc); expect(doc).toEqual(before);
+  inserted!.command.apply(doc); expect(doc.pages).toHaveLength(3);
+});
+
+it("adds more notes space without shrinking slide images", () => {
+  const doc=notebook(1);
+  const insert=(notesPercent:number)=>buildScanInsert(doc,0,[{path:"slide.png",width:1600,height:900,slideLayout:{widthPercent:94,notesPercent}}])!;
+  const small=insert(25); small.command.apply(doc); const first=structuredClone(doc.pages[1]); small.command.invert(doc);
+  insert(200).command.apply(doc);
+  expect(doc.pages[1].images[0].w).toBe(first.images[0].w);
+  expect(doc.pages[1].images[0].h).toBe(first.images[0].h);
+  expect(doc.pages[1].geometry.height).toBeGreaterThan(first.geometry.height);
+});
