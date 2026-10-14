@@ -68,7 +68,9 @@ export class PdfImportModal extends Modal {
         .onChange(value => { this.slides=value==="slides"; slideControls.toggle(this.slides); if(this.slides) void loadPreview(); }));
       slideControls.before(layoutSetting.settingEl);
     }
-    const preview = slideControls.createDiv({cls:"goodobsidian-slide-import-preview"});
+    const previewPane = slideControls.createDiv({cls:"goodobsidian-slide-import-preview-pane"});
+    const preview = previewPane.createDiv({cls:"goodobsidian-slide-import-preview"});
+    const settingsPane = slideControls.createDiv({cls:"goodobsidian-slide-import-settings"});
     const paperCanvas = preview.createEl("canvas", {cls:"goodobsidian-slide-import-paper"});
     const slideImage = preview.createEl("img",{attr:{alt:"First PDF slide preview"}});
     const notes = preview.createDiv({text:"Blank space for notes",cls:"goodobsidian-slide-import-notes"});
@@ -82,7 +84,7 @@ export class PdfImportModal extends Modal {
         const context=paperCanvas.getContext("2d");
         if(context) { context.scale(scale,scale); drawSynthetic(context,templateBackdrop(paper.ruling,paper.paper),placed.geometry,LIGHT_PAPER); }
       }
-      preview.style.width = `min(100%, ${Math.min(350,400*placed.geometry.width/placed.geometry.height)}px)`;
+      preview.style.setProperty("--slide-preview-ratio", String(placed.geometry.width/placed.geometry.height));
       preview.style.aspectRatio = `${placed.geometry.width} / ${placed.geometry.height}`;
       slideImage.style.left=`${placed.image.x/placed.geometry.width*100}%`;
       slideImage.style.top=`${placed.image.y/placed.geometry.height*100}%`;
@@ -104,7 +106,7 @@ export class PdfImportModal extends Modal {
     };
     if (this.notebookChoices) {
       const choices=this.notebookChoices;
-      const section=slideControls.createDiv();
+      const section=settingsPane.createDiv();
       section.createEl("h3",{text:"Paper"});
       let grid: TemplateGrid;
       new PaperControls(section.createDiv({cls:"goodobsidian-templates-controls"}),{
@@ -124,13 +126,13 @@ export class PdfImportModal extends Modal {
     }
 
     for (const [key,name,min,max] of [["widthPercent","Slide width",50,100],["notesPercent","Notes space (relative to slide height)",25,300]] as const) {
-      const setting=new Setting(slideControls).setName(name);
+      const setting=new Setting(settingsPane).setName(name);
       const value=setting.nameEl.createSpan({text:` · ${this.layout[key]}%`});
       setting.addSlider(slider=>slider.setLimits(min,max,1).setValue(this.layout[key]).setDynamicTooltip().onChange(v=>{
         this.layout[key]=v; value.setText(` · ${v}%`); updatePreview();
       }));
     }
-    slideControls.createEl("p",{text:this.notebookChoices ? "Paper size is fixed. Slides fit without distortion, leaving your chosen notes space below; choose less notes space for a larger slide." : "Preview uses the first PDF page. Slides retain their aspect ratio; pages grow to leave notes space below. You can write on the slide image too."});
+    settingsPane.createEl("p",{text:this.notebookChoices ? "Paper size is fixed. Slides fit without distortion, leaving your chosen notes space below; choose less notes space for a larger slide." : "Preview uses the first PDF page. Slides retain their aspect ratio; pages grow to leave notes space below. You can write on the slide image too."});
     updatePreview();
 
     new Setting(this.contentEl).setName("Pages").addDropdown((dropdown) =>

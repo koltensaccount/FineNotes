@@ -7384,3 +7384,17 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .modal.goodobsidian-slide-import-modal { width: min(680px, 94vw); max-height: min(90vh, calc(100vh - var(--keyboard-height, 0px) - 24px)); overflow-y: auto; }
 
 .goodobsidian-slide-import-paper { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Keep slide feedback beside settings, or pin a compact preview above them. */
+.modal.goodobsidian-slide-import-modal { width: min(980px, 96vw); }
+.goodobsidian-slide-import-controls { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
+.goodobsidian-slide-import-preview-pane { position: sticky; top: 0; align-self: start; padding: 8px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: var(--gob-radius-m); z-index: 2; }
+.goodobsidian-slide-import-preview { --slide-preview-height: min(60vh, 400px); width: min(100%, 350px, calc(var(--slide-preview-height) * var(--slide-preview-ratio, 1))); max-height: none; margin: 0 auto; }
+.goodobsidian-slide-import-settings { min-width: 0; }
+@media (max-width: 760px) {
+  .goodobsidian-slide-import-controls { display: block; }
+  .goodobsidian-slide-import-preview-pane { margin-bottom: 12px; }
+  .goodobsidian-slide-import-preview { --slide-preview-height: min(26vh, 180px); }
+  .goodobsidian-slide-import-notes { font-size: 10px; }
+}
+@media (max-height: 500px) { .goodobsidian-slide-import-preview { --slide-preview-height: min(24vh, 120px); } }
