@@ -110,3 +110,22 @@ it("supports transparent embed rendering without drawing page paper backdrop", a
     vi.unstubAllGlobals();
   }
 });
+
+it("refreshPngEmbeds refreshes open InkViews and updates theme appearance", async () => {
+  const manager = Object.create(FineNotesEmbedManager.prototype) as any;
+  manager.pngRefreshPending = false;
+  manager.pngRefreshRunning = null;
+  manager.disposed = false;
+  manager.plugin = { settings: { embedBackground: false }, isInkFile: () => false };
+  const mockView = { updateClipsPng: vi.fn(async () => {}) };
+  manager.app = {
+    workspace: {
+      getLeavesOfType: vi.fn(() => [{ view: mockView }]),
+    },
+    vault: {
+      getFiles: () => [],
+    },
+  };
+  await manager.refreshPngEmbeds();
+  expect(mockView.updateClipsPng).toHaveBeenCalledOnce();
+});

@@ -1,3 +1,6 @@
+import { renderClipPng } from "./clip-png";
+import { VIEW_TYPE_INK } from "../constants";
+import type { InkView } from "./ink-view";
 import { PdfBackdropCache } from "./pdf-backdrop";
 /**
  * Live FineNotes embeds for Obsidian markdown notes.
@@ -51,11 +54,62 @@ interface CachedDoc {
 }
 
 export class FineNotesEmbedManager {
+  private pngRefreshPending = false;
+  private pngRefreshRunning: Promise<void> | null = null;
+  private disposed = false;
   private readonly docCache = new Map<string, CachedDoc>();
   private readonly imageCache: VaultImageCache;
   private readonly backdropPainter: VaultBackdropRenderer;
   readonly pdfCache: PdfBackdropCache;
   private readonly activeEmbedViews = new Set<FineNotesEmbedView>();
+
+  /** Refresh theme-dependent PNGs, including notebooks that are not open. */
+  refreshPngEmbeds(): Promise<void> {
+    this.pngRefreshPending = true;
+    if (this.pngRefreshRunning) return this.pngRefreshRunning;
+    this.pngRefreshRunning = (async () => {
+      while (this.pngRefreshPending && !this.disposed) {
+        this.pngRefreshPending = false;
+        const themeMode = typeof document !== "undefined" && document.body?.classList.contains("theme-dark") ? "dark" : "light";
+        const includeBackground = this.plugin.settings.embedBackground === true;
+        const openViews = this.app.workspace.getLeavesOfType(VIEW_TYPE_INK).map(leaf => leaf.view as InkView);
+        const openPaths = new Set(openViews.map(view => view.file?.path));
+        await Promise.all(openViews.map(view => view.updateClipsPng()));
+        for (const file of this.app.vault.getFiles()) {
+          if (this.disposed || this.pngRefreshPending) break;
+          if (!this.plugin.isInkFile(file) || openPaths.has(file.path)) continue;
+          try {
+            const mtime = file.stat.mtime;
+            const doc = await this.loadDocument(file);
+            if (!doc?.pages) continue;
+            for (const page of doc.pages) {
+              const geom = page.geometry ?? { width: 1024, height: 1366 };
+              const assets = (page.clips ?? []).filter(clip => clip.imagePath).map(clip => ({
+                path: clip.imagePath!, bounds: clipCurrentBounds(page, clip), padding: 8,
+              }));
+              if (page.pageEmbedPath) assets.push({path: page.pageEmbedPath, bounds: {minX: 0, minY: 0, maxX: geom.width, maxY: geom.height}, padding: 0});
+              for (const asset of assets) {
+                if (this.disposed || this.pngRefreshPending || file.stat.mtime !== mtime) break;
+                const image = this.app.vault.getAbstractFileByPath(asset.path);
+                if (!(image instanceof TFile)) continue;
+                const buffer = await renderClipPng(page, asset.bounds, {
+                  images: this.imageCache, backdropPainter: this.backdropPainter, pdf: this.pdfCache,
+                  includeBackground, themeMode, padding: asset.padding,
+                });
+                if (this.disposed || this.pngRefreshPending || file.stat.mtime !== mtime) break;
+                // A notebook opened during rendering is now owned by its InkView.
+                if (this.app.workspace.getLeavesOfType(VIEW_TYPE_INK).some(leaf => (leaf.view as InkView).file === file)) break;
+                await this.app.vault.modifyBinary(image, buffer);
+              }
+            }
+          } catch (error) {
+            console.warn("[FineNotes] Failed to refresh embed appearance", file.path, error);
+          }
+        }
+      }
+    })().finally(() => { this.pngRefreshRunning = null; });
+    return this.pngRefreshRunning;
+  }
 
   constructor(
     private readonly plugin: GoodObsidianPlugin,
@@ -63,7 +117,7 @@ export class FineNotesEmbedManager {
   ) {
     this.pdfCache = new PdfBackdropCache(app);
     this.imageCache = new VaultImageCache(app);
-    this.plugin.register(()=>{ for(const view of [...this.activeEmbedViews]) view.destroy(); this.imageCache.destroy(); this.pdfCache.destroy(); this.docCache.clear(); });
+    this.plugin.register(()=>{ this.disposed = true; for(const view of [...this.activeEmbedViews]) view.destroy(); this.imageCache.destroy(); this.pdfCache.destroy(); this.docCache.clear(); });
     this.backdropPainter = new VaultBackdropRenderer(this.pdfCache);
 
     this.imageCache.onReady = () => {
@@ -71,6 +125,8 @@ export class FineNotesEmbedManager {
         view.refresh();
       }
     };
+
+    this.plugin.registerEvent(this.app.workspace.on("css-change", () => { void this.refreshPngEmbeds(); }));
 
     // Watch vault modifications to update embedded notes in real-time
     this.plugin.registerEvent(
@@ -128,35 +184,39 @@ export class FineNotesEmbedManager {
       }
     };
     this.plugin.registerMarkdownPostProcessor(el=>markImages(el));
-    const observer=new MutationObserver(records=>{
-      for(const record of records) {
-        if(record.type === "attributes" && record.target instanceof Element) markImages(record.target);
-        else for(const node of record.addedNodes) if(node instanceof Element) markImages(node);
-      }
-    });
-    observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["src"]});
-    this.plugin.register(()=>observer.disconnect());
-    this.plugin.registerDomEvent(document,"click",(event:MouseEvent)=>{
-      const target=event.target instanceof Element ? event.target : null;
-      if(!target || event.button!==0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      const anchor=target.closest("a");
-      const href=anchor?.getAttribute("href") || (anchor as HTMLElement | null)?.dataset.href;
-      if(href && /\.notebook(?:\.md)?#(?:\^clip-|page=)/i.test(href)) {
-        event.preventDefault(); event.stopPropagation();
-        let destination=href;
-        try {destination=decodeURIComponent(href);} catch { /* Retain a literal percent in an unencoded name. */ }
-        void this.app.workspace.openLinkText(destination,this.app.workspace.getActiveFile()?.path ?? "",false);
-        return;
-      }
-      const image=target.closest("img");
-      if(image?.classList.contains("finenotes-live-embed-image")) { event.preventDefault(); event.stopPropagation(); }
-      if(image) void this.imageSource(image).then(source=>{
-        if(source) {
-          image.classList.add("finenotes-live-embed-image");
-          void this.app.workspace.openLinkText(source,"",false);
+    if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === "attributes" && record.target instanceof Element) markImages(record.target);
+          else for (const node of record.addedNodes) if (node instanceof Element) markImages(node);
         }
       });
-    });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+      this.plugin.register(() => observer.disconnect());
+    }
+    if (typeof document !== "undefined") {
+      this.plugin.registerDomEvent(document,"click",(event:MouseEvent)=>{
+        const target=event.target instanceof Element ? event.target : null;
+        if(!target || event.button!==0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        const anchor=target.closest("a");
+        const href=anchor?.getAttribute("href") || (anchor as HTMLElement | null)?.dataset.href;
+        if(href && /\.notebook(?:\.md)?#(?:\^clip-|page=)/i.test(href)) {
+          event.preventDefault(); event.stopPropagation();
+          let destination=href;
+          try {destination=decodeURIComponent(href);} catch { /* Retain a literal percent in an unencoded name. */ }
+          void this.app.workspace.openLinkText(destination,this.app.workspace.getActiveFile()?.path ?? "",false);
+          return;
+        }
+        const image=target.closest("img");
+        if(image?.classList.contains("finenotes-live-embed-image")) { event.preventDefault(); event.stopPropagation(); }
+        if(image) void this.imageSource(image).then(source=>{
+          if(source) {
+            image.classList.add("finenotes-live-embed-image");
+            void this.app.workspace.openLinkText(source,"",false);
+          }
+        });
+      });
+    }
   }
 
   /** Resolve by persisted image path, not basename or a warm notebook cache. */

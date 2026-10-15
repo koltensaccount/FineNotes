@@ -2075,6 +2075,7 @@ export class InkView extends TextFileView {
         pdf: this.pdfCache,
         padding: 0,
         includeBackground: this.settings.embedBackground === true,
+        themeMode: (typeof document !== "undefined" && document.body?.classList.contains("theme-dark")) ? "dark" : "light",
       });
     } catch {
       new Notice("FineNotes failed to render page embed PNG.");
@@ -2132,6 +2133,7 @@ export class InkView extends TextFileView {
         backdropPainter: this.backdrops,
         pdf: this.pdfCache,
         includeBackground: this.settings.embedBackground === true,
+        themeMode: (typeof document !== "undefined" && document.body?.classList.contains("theme-dark")) ? "dark" : "light",
       });
     } catch {
       new Notice("FineNotes failed to render clip PNG.");
@@ -2217,6 +2219,7 @@ export class InkView extends TextFileView {
                 backdropPainter: this.backdrops,
                 pdf: this.pdfCache,
                 includeBackground: incBg,
+                themeMode: isDark ? "dark" : "light",
               });
               if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
               await this.app.vault.modifyBinary(abstract, buffer);
@@ -2242,6 +2245,7 @@ export class InkView extends TextFileView {
               pdf: this.pdfCache,
               padding: 0,
               includeBackground: incBg,
+                themeMode: isDark ? "dark" : "light",
             });
             if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
             await this.app.vault.modifyBinary(abstract, buffer);

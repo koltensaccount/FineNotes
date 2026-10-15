@@ -317,6 +317,7 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
     }
     storeShownValue(this.plugin.settings, key, value);
     await this.plugin.saveSettings();
+    if (key === "embedBackground") void this.plugin.embedManager.refreshPngEmbeds();
     if (changesTabLayout(key)) this.update();
   }
 
