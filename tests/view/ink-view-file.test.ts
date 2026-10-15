@@ -1,3 +1,4 @@
+import { ConfirmModal } from "../../src/ui/confirm-modal";
 /**
  * The notebook view's file handling, without its DOM: what it saves after a
  * load, and the protection that stops a bad read from being saved over a
@@ -357,13 +358,14 @@ describe("clearing a page", () => {
     return `${body}\n\n%%goodobsidian\n${encodeDocument(doc)}\n%%\n`;
   }
 
-  it("drops only that page's transcription, and the old whole-note hash", () => {
+  it("drops only that page's transcription, and the old whole-note hash", async () => {
+    vi.spyOn(ConfirmModal, "confirm").mockResolvedValueOnce(true);
     const view = openView();
     view.setViewData(twoPageNote(), true);
     const surfaceClear = vi.fn(() => true);
     inside(view).surface = { clearStrokes: surfaceClear, currentPage: 0 };
     const saves = inside(view).saveRequests;
-    inside(view).clearPage();
+    await inside(view).clearPage();
     expect(surfaceClear).toHaveBeenCalledTimes(1);
     const saved = parseInkFile(view.getViewData(), 1024);
     const section = readTextSection(saved.body) ?? "";

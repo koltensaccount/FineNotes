@@ -98,7 +98,8 @@ function golden(): string {
         .join("");
       lines.push(`${optionName} / ${streamName}: kept ${builder.length} empty=${builder.isEmpty}`);
       lines.push(`  ${kept}`);
-      const points = JSON.stringify(builder.points());
+      // Ignore arithmetic roundoff in pressure, while retaining exact coordinates and keep decisions.
+      const points = JSON.stringify(builder.points().map((value, i) => i % 3 === 2 ? Number(value.toPrecision(14)) : value));
       // The default options in full, so a change can be read; the rest by hash.
       lines.push(options === undefined ? `  ${points}` : `  points#${digest(points)}`);
     }
@@ -109,7 +110,7 @@ function golden(): string {
     fallbackPressure: 0.5,
   };
   const raws = [0, -1, 0.001, 0.25, 0.999, 1, 1.0001, 7, Number.NaN, Infinity, -Infinity];
-  lines.push(`mapPressure on: ${JSON.stringify(raws.map((r) => mapPressure(r, mapped)))}`);
+  lines.push(`mapPressure on: ${JSON.stringify(raws.map((r) => Number(mapPressure(r, mapped).toPrecision(14))))}`);
   lines.push(
     `mapPressure off: ${JSON.stringify(raws.map((r) => mapPressure(r, { ...mapped, pressureEnabled: false })))}`,
   );

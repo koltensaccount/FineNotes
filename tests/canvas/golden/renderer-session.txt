@@ -128,7 +128,7 @@ el2 stroke path2d#4358bfa8afc7 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle
 el2 stroke path2d#bc40f8ab2808 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.5762 lineCap=round lineJoin=round}
 el2 stroke path2d#d0913bf01cdb at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.4511 lineCap=round lineJoin=round}
 el2 stroke path2d#1a18610d6dbf at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.3256 lineCap=round lineJoin=round}
-el2 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,0,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el2 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,0,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el2 stroke path2d#ce614dffca78 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
 el2 stroke path2d#ae5cc3768b22 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.9899 lineCap=round lineJoin=round}
 el2 stroke path2d#b92c8a421918 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.0598 lineCap=round lineJoin=round}
@@ -216,7 +216,7 @@ el3 fillRect -512,0 208,0 208,900 -512,900 {fillStyle=#ffffff}
 el3 painter ruled-narrow 800x1000 weight=1 at 0.9,0,0,0.9,-512,0
 el3 image i1 200x120 scale=0.9 at 0.8598,0.266,-0.266,0.8598,-42.0222,110.815
 el3 strokeRect -511.5,0.5 207.5,0.5 207.5,899.5 -511.5,899.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111}
-el3 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,-512,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el3 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,-512,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el3 stroke path2d#dd8b914b790f at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
 el3 stroke path2d#2a0050e6aa88 at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.9887 lineCap=round lineJoin=round}
 el3 stroke path2d#a418c0f0a142 at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.0573 lineCap=round lineJoin=round}
@@ -265,7 +265,7 @@ el4 clip nonzero [R(0,-512 720,-512 720,388 0,388)]
 el4 fillRect 0,-512 720,-512 720,388 0,388 {fillStyle=#ffffff}
 el4 painter ruled-narrow 800x1000 weight=1 at 0.9,0,0,0.9,0,-512
 el4 strokeRect 0.5,-511.5 719.5,-511.5 719.5,387.5 0.5,387.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111}
-el4 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,0,-512 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el4 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,0,-512 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el4 stroke path2d#a7fc28f51d10 at 0.9,0,0,0.9,0,-512 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 dry drawImage el4 -> 24,404 536,404 536,792 24,792 {imageSmoothingEnabled=false}
 el5.width = 208
@@ -275,7 +275,7 @@ el5 clip nonzero [R(-512,-512 208,-512 208,388 -512,388)]
 el5 fillRect -512,-512 208,-512 208,388 -512,388 {fillStyle=#ffffff}
 el5 painter ruled-narrow 800x1000 weight=1 at 0.9,0,0,0.9,-512,-512
 el5 strokeRect -511.5,-511.5 207.5,-511.5 207.5,387.5 -511.5,387.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111}
-el5 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,-512,-512 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el5 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,-512,-512 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el5 stroke path2d#1336cc68644a at 0.9,0,0,0.9,-512,-512 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.64 lineCap=round lineJoin=round}
 dry drawImage el5 -> 536,404 744,404 744,792 536,792 {imageSmoothingEnabled=false}
 dry clip nonzero [R(24,-108 744,-108 744,792 24,792)] {imageSmoothingEnabled=false}
@@ -288,7 +288,7 @@ el6 fillRect 0,0 720,0 720,900 0,900 {fillStyle=#fdf6e3}
 el6 painter squared 800x1000 weight=1 at 0.9,0,0,0.9,0,0
 el6 strokeRect 0.5,0.5 719.5,0.5 719.5,899.5 0.5,899.5 {fillStyle=#fdf6e3 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111}
 el6 stroke path2d#9b533da56a2e at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.176 lineCap=round lineJoin=round}
-el6 stroke path2d#343c2e1e01e7 at 0.9,0,0,0.9,0,0 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el6 fill nonzero path2d#b7558cec8493 at 0.9,0,0,0.9,0,0 {fillStyle=#7dd3fc strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 dry drawImage el6 -> 24,828 536,828 536,1340 24,1340 {imageSmoothingEnabled=false}
 el7.width = 208
 el7.height = 512
@@ -399,7 +399,7 @@ el10 stroke path2d#4358bfa8afc7 at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1
 el10 stroke path2d#bc40f8ab2808 at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.5762 lineCap=round lineJoin=round}
 el10 stroke path2d#d0913bf01cdb at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.4511 lineCap=round lineJoin=round}
 el10 stroke path2d#1a18610d6dbf at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.3256 lineCap=round lineJoin=round}
-el10 stroke path2d#d70b6aa3446c at 1,0,0,1,0,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el10 fill nonzero path2d#18ae4281732a at 1,0,0,1,0,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) globalAlpha=0.4 globalCompositeOperation=multiply}
 el10 stroke path2d#a7fc28f51d10 at 1,0,0,1,0,0 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 el10 stroke path2d#1336cc68644a at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.64 lineCap=round lineJoin=round}
 el10 stroke path2d#a14b86a5f041 at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
@@ -503,7 +503,7 @@ el11 fillRect 0,0 800,0 800,1000 0,1000 {fillStyle=#fdf6e3}
 el11 painter squared 800x1000 weight=1 at 1,0,0,1,0,0
 el11 strokeRect 0.5,0.5 799.5,0.5 799.5,999.5 0.5,999.5 {fillStyle=#fdf6e3 strokeStyle=rgba(16, 24, 40, 0.16)}
 el11 stroke path2d#9b533da56a2e at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.176 lineCap=round lineJoin=round}
-el11 stroke path2d#343c2e1e01e7 at 1,0,0,1,0,0 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el11 fill nonzero path2d#b7558cec8493 at 1,0,0,1,0,0 {fillStyle=#7dd3fc strokeStyle=rgba(16, 24, 40, 0.16) globalAlpha=0.4 globalCompositeOperation=multiply}
 more=false stats={"level":0.9,"tiles":8,"tileBytes":5184000,"previews":2}
 # commit a stroke
 el2.getContext 2d null
@@ -626,6 +626,7 @@ dry drawImage el9 -> 536,1340 744,1340 744,1728 536,1728 {imageSmoothingEnabled=
 # wet strokes
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(24,-108 744,-108 744,792 24,792)]
+wet.style.mixBlendMode = normal
 wet stroke path2d#99674db202c3 at 0.9,0,0,0.9,24,-108 {fillStyle=#16a34a strokeStyle=#16a34a lineWidth=1.92 lineCap=round lineJoin=round}
 wet stroke path2d#e578be9f38ba at 0.9,0,0,0.9,24,-108 {fillStyle=#16a34a strokeStyle=#16a34a lineWidth=1.9953 lineCap=round lineJoin=round}
 wet stroke path2d#52254be299e3 at 0.9,0,0,0.9,24,-108 {fillStyle=#16a34a strokeStyle=#16a34a lineWidth=2.0703 lineCap=round lineJoin=round}
@@ -677,21 +678,26 @@ wet stroke path2d#f87f6ea615cb at 0.9,0,0,0.9,24,-108 {fillStyle=#16a34a strokeS
 wet.classList - goodobsidian-wet-hidden
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(24,-108 744,-108 744,792 24,792)]
-wet stroke path2d#af2bdea1ac44 at 0.9,0,0,0.9,24,-108 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+wet.style.mixBlendMode = multiply
+wet fill nonzero path2d#3be3d22a1197 at 0.9,0,0,0.9,24,-108 {fillStyle=#ffd400 globalAlpha=0.4 globalCompositeOperation=multiply}
 wet.classList - goodobsidian-wet-hidden
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(24,-108 744,-108 744,792 24,792)]
+wet.style.mixBlendMode = normal
 wet stroke path2d#a7fc28f51d10 at 0.9,0,0,0.9,24,-108 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 wet.classList - goodobsidian-wet-hidden
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(24,-108 744,-108 744,792 24,792)]
+wet.style.mixBlendMode = normal
 wet stroke path2d#524f13d9a1a9 at 0.9,0,0,0.9,24,-108 {fillStyle=#16a34a strokeStyle=#16a34a lineWidth=3 lineCap=round lineJoin=round}
 wet.classList - goodobsidian-wet-hidden
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(24,-108 744,-108 744,792 24,792)]
+wet.style.mixBlendMode = normal
 wet.classList - goodobsidian-wet-hidden
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(24,828 744,828 744,1728 24,1728)]
+wet.style.mixBlendMode = normal
 wet stroke path2d#3c1e18df3a83 at 0.9,0,0,0.9,24,828 {lineWidth=2 lineCap=round lineJoin=round}
 wet stroke path2d#aeaabba3393e at 0.9,0,0,0.9,24,828 {lineWidth=2 lineCap=round lineJoin=round}
 wet.classList - goodobsidian-wet-hidden
@@ -797,7 +803,7 @@ el12 stroke path2d#4358bfa8afc7 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyl
 el12 stroke path2d#bc40f8ab2808 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.5762 lineCap=round lineJoin=round}
 el12 stroke path2d#d0913bf01cdb at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.4511 lineCap=round lineJoin=round}
 el12 stroke path2d#1a18610d6dbf at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.3256 lineCap=round lineJoin=round}
-el12 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,0,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el12 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,0,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el12 stroke path2d#903b6865e168 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
 el12 stroke path2d#5628bfc0784e at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.9765 lineCap=round lineJoin=round}
 el12 stroke path2d#9ba15ed18071 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.0385 lineCap=round lineJoin=round}
@@ -906,7 +912,7 @@ el13 clip nonzero [R(-512,0 208,0 208,900 -512,900)]
 el13 fillRect -512,0 208,0 208,900 -512,900 {fillStyle=#ffffff}
 el13 painter ruled-narrow 800x1000 weight=1 at 0.9,0,0,0.9,-512,0
 el13 strokeRect -511.5,0.5 207.5,0.5 207.5,899.5 -511.5,899.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111}
-el13 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,-512,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el13 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,-512,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el13 stroke path2d#903b6865e168 at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
 el13 stroke path2d#5628bfc0784e at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.9765 lineCap=round lineJoin=round}
 el13 stroke path2d#9ba15ed18071 at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.0385 lineCap=round lineJoin=round}
@@ -972,6 +978,7 @@ wet image i1 200x120 scale=0.9 at 0.8598,0.266,-0.266,0.8598,493.9778,2.815
 wet fill evenodd [R(493.9778,2.815 665.9384,56.0086 634.0222,159.185 462.0616,105.9914) R(504.7906,28.7696 590.7709,55.3665 571.6212,117.2723 485.6409,90.6754)] {fillStyle=rgba(0, 0, 0, 0.55)}
 wet.classList - goodobsidian-wet-hidden
 wet clearRect 0,0 780,0 780,1400 0,1400
+wet.style.mixBlendMode = normal
 wet.classList + goodobsidian-wet-hidden
 el12.width = 0
 el12.height = 0
@@ -1061,7 +1068,7 @@ el14 stroke path2d#4358bfa8afc7 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyl
 el14 stroke path2d#bc40f8ab2808 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.5762 lineCap=round lineJoin=round}
 el14 stroke path2d#d0913bf01cdb at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.4511 lineCap=round lineJoin=round}
 el14 stroke path2d#1a18610d6dbf at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.3256 lineCap=round lineJoin=round}
-el14 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,0,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el14 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,0,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el14 stroke path2d#903b6865e168 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
 el14 stroke path2d#5628bfc0784e at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.9765 lineCap=round lineJoin=round}
 el14 stroke path2d#9ba15ed18071 at 0.9,0,0,0.9,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.0385 lineCap=round lineJoin=round}
@@ -1171,7 +1178,7 @@ el15 fillRect -512,0 208,0 208,900 -512,900 {fillStyle=#ffffff}
 el15 painter ruled-narrow 800x1000 weight=1 at 0.9,0,0,0.9,-512,0
 el15 image i1 200x120 scale=0.9 at 0.8598,0.266,-0.266,0.8598,-42.0222,110.815
 el15 strokeRect -511.5,0.5 207.5,0.5 207.5,899.5 -511.5,899.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111}
-el15 stroke path2d#d70b6aa3446c at 0.9,0,0,0.9,-512,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el15 fill nonzero path2d#18ae4281732a at 0.9,0,0,0.9,-512,0 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=1.1111 globalAlpha=0.4 globalCompositeOperation=multiply}
 el15 stroke path2d#903b6865e168 at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
 el15 stroke path2d#5628bfc0784e at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.9765 lineCap=round lineJoin=round}
 el15 stroke path2d#9ba15ed18071 at 0.9,0,0,0.9,-512,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.0385 lineCap=round lineJoin=round}
@@ -1281,7 +1288,7 @@ el16 fillRect 0,-512 1440,-512 1440,1288 0,1288 {fillStyle=#ffffff}
 el16 painter ruled-narrow 800x1000 weight=1 at 1.8,0,0,1.8,0,-512
 el16 strokeRect 0.5,-511.5 1439.5,-511.5 1439.5,1287.5 0.5,1287.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556}
 el16 stroke path2d#4753e795d1bc at 1.8,0,0,1.8,0,-512 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=5 lineCap=round lineJoin=round}
-el16 stroke path2d#d70b6aa3446c at 1.8,0,0,1.8,0,-512 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el16 fill nonzero path2d#18ae4281732a at 1.8,0,0,1.8,0,-512 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556 globalAlpha=0.4 globalCompositeOperation=multiply}
 el16 stroke path2d#15bf6353e912 at 1.8,0,0,1.8,0,-512 {fillStyle=#16a34a strokeStyle=#16a34a lineWidth=3 lineCap=round lineJoin=round}
 dry drawImage el16 -> -80,-28 432,-28 432,484 -80,484 {imageSmoothingEnabled=false}
 el17.width = 512
@@ -1293,7 +1300,7 @@ el17 painter ruled-narrow 800x1000 weight=1 at 1.8,0,0,1.8,-512,-512
 el17 image i1 200x120 scale=1.8 at 1.7196,0.5319,-0.5319,1.7196,427.9556,-290.37
 el17 strokeRect -511.5,-511.5 927.5,-511.5 927.5,1287.5 -511.5,1287.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556}
 el17 stroke path2d#4753e795d1bc at 1.8,0,0,1.8,-512,-512 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=5 lineCap=round lineJoin=round}
-el17 stroke path2d#d70b6aa3446c at 1.8,0,0,1.8,-512,-512 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el17 fill nonzero path2d#18ae4281732a at 1.8,0,0,1.8,-512,-512 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556 globalAlpha=0.4 globalCompositeOperation=multiply}
 el17 stroke path2d#8feac8c51484 at 1.8,0,0,1.8,-512,-512 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3 lineCap=round lineJoin=round}
 el17 stroke path2d#15bf6353e912 at 1.8,0,0,1.8,-512,-512 {fillStyle=#16a34a strokeStyle=#16a34a lineWidth=3 lineCap=round lineJoin=round}
 dry drawImage el17 -> 432,-28 944,-28 944,484 432,484 {imageSmoothingEnabled=false}
@@ -1304,7 +1311,7 @@ el18 clip nonzero [R(0,-1024 1440,-1024 1440,776 0,776)]
 el18 fillRect 0,-1024 1440,-1024 1440,776 0,776 {fillStyle=#ffffff}
 el18 painter ruled-narrow 800x1000 weight=1 at 1.8,0,0,1.8,0,-1024
 el18 strokeRect 0.5,-1023.5 1439.5,-1023.5 1439.5,775.5 0.5,775.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556}
-el18 stroke path2d#d70b6aa3446c at 1.8,0,0,1.8,0,-1024 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el18 fill nonzero path2d#18ae4281732a at 1.8,0,0,1.8,0,-1024 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556 globalAlpha=0.4 globalCompositeOperation=multiply}
 el18 stroke path2d#a7fc28f51d10 at 1.8,0,0,1.8,0,-1024 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 dry drawImage el18 -> -80,484 432,484 432,996 -80,996 {imageSmoothingEnabled=false}
 el19.width = 512
@@ -1314,7 +1321,7 @@ el19 clip nonzero [R(-512,-1024 928,-1024 928,776 -512,776)]
 el19 fillRect -512,-1024 928,-1024 928,776 -512,776 {fillStyle=#ffffff}
 el19 painter ruled-narrow 800x1000 weight=1 at 1.8,0,0,1.8,-512,-1024
 el19 strokeRect -511.5,-1023.5 927.5,-1023.5 927.5,775.5 -511.5,775.5 {fillStyle=#ffffff strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556}
-el19 stroke path2d#d70b6aa3446c at 1.8,0,0,1.8,-512,-1024 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el19 fill nonzero path2d#18ae4281732a at 1.8,0,0,1.8,-512,-1024 {fillStyle=#ffd400 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556 globalAlpha=0.4 globalCompositeOperation=multiply}
 el19 stroke path2d#a7fc28f51d10 at 1.8,0,0,1.8,-512,-1024 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 dry drawImage el19 -> 432,484 944,484 944,996 432,996 {imageSmoothingEnabled=false}
 el20.width = 512
@@ -1386,7 +1393,7 @@ el24 clip nonzero [R(0,-512 1440,-512 1440,1288 0,1288)]
 el24 fillRect 0,-512 1440,-512 1440,1288 0,1288 {fillStyle=#fdf6e3}
 el24 painter squared 800x1000 weight=1 at 1.8,0,0,1.8,0,-512
 el24 strokeRect 0.5,-511.5 1439.5,-511.5 1439.5,1287.5 0.5,1287.5 {fillStyle=#fdf6e3 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556}
-el24 stroke path2d#343c2e1e01e7 at 1.8,0,0,1.8,0,-512 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el24 fill nonzero path2d#b7558cec8493 at 1.8,0,0,1.8,0,-512 {fillStyle=#7dd3fc strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556 globalAlpha=0.4 globalCompositeOperation=multiply}
 dry drawImage el24 -> -80,764 432,764 432,1276 -80,1276 {imageSmoothingEnabled=false}
 el25.width = 512
 el25.height = 512
@@ -1395,7 +1402,7 @@ el25 clip nonzero [R(-512,-512 928,-512 928,1288 -512,1288)]
 el25 fillRect -512,-512 928,-512 928,1288 -512,1288 {fillStyle=#fdf6e3}
 el25 painter squared 800x1000 weight=1 at 1.8,0,0,1.8,-512,-512
 el25 strokeRect -511.5,-511.5 927.5,-511.5 927.5,1287.5 -511.5,1287.5 {fillStyle=#fdf6e3 strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556}
-el25 stroke path2d#343c2e1e01e7 at 1.8,0,0,1.8,-512,-512 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+el25 fill nonzero path2d#b7558cec8493 at 1.8,0,0,1.8,-512,-512 {fillStyle=#7dd3fc strokeStyle=rgba(16, 24, 40, 0.16) lineWidth=0.5556 globalAlpha=0.4 globalCompositeOperation=multiply}
 dry drawImage el25 -> 432,764 944,764 944,1276 432,1276 {imageSmoothingEnabled=false}
 el26.width = 512
 el26.height = 512
@@ -1553,7 +1560,7 @@ el33 clip nonzero [R(0,-512 1440,-512 1440,1288 0,1288)]
 el33 fillRect 0,-512 1440,-512 1440,1288 0,1288 {fillStyle=#fdf6e3}
 el33 painter squared 800x1000 weight=1 at 1.8,0,0,1.8,0,-512
 el33 strokeRect 0.5,-511.5 1439.5,-511.5 1439.5,1287.5 0.5,1287.5 {fillStyle=#fdf6e3 strokeStyle=rgba(0, 0, 0, 0.55) lineWidth=0.5556}
-el33 stroke path2d#343c2e1e01e7 at 1.8,0,0,1.8,0,-512 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+el33 fill nonzero path2d#b7558cec8493 at 1.8,0,0,1.8,0,-512 {fillStyle=#7dd3fc strokeStyle=rgba(0, 0, 0, 0.55) lineWidth=0.5556 globalAlpha=0.25 globalCompositeOperation=multiply}
 dry drawImage el33 -> -80,764 432,764 432,1276 -80,1276 {imageSmoothingEnabled=false}
 el34.width = 512
 el34.height = 512
@@ -1562,7 +1569,7 @@ el34 clip nonzero [R(-512,-512 928,-512 928,1288 -512,1288)]
 el34 fillRect -512,-512 928,-512 928,1288 -512,1288 {fillStyle=#fdf6e3}
 el34 painter squared 800x1000 weight=1 at 1.8,0,0,1.8,-512,-512
 el34 strokeRect -511.5,-511.5 927.5,-511.5 927.5,1287.5 -511.5,1287.5 {fillStyle=#fdf6e3 strokeStyle=rgba(0, 0, 0, 0.55) lineWidth=0.5556}
-el34 stroke path2d#343c2e1e01e7 at 1.8,0,0,1.8,-512,-512 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+el34 fill nonzero path2d#b7558cec8493 at 1.8,0,0,1.8,-512,-512 {fillStyle=#7dd3fc strokeStyle=rgba(0, 0, 0, 0.55) lineWidth=0.5556 globalAlpha=0.25 globalCompositeOperation=multiply}
 dry drawImage el34 -> 432,764 944,764 944,1276 432,1276 {imageSmoothingEnabled=false}
 el35.width = 512
 el35.height = 512
@@ -1582,7 +1589,8 @@ el36 strokeRect -511.5,-1023.5 927.5,-1023.5 927.5,775.5 -511.5,775.5 {fillStyle
 dry drawImage el36 -> 432,1276 944,1276 944,1788 432,1788 {imageSmoothingEnabled=false}
 wet clearRect 0,0 780,0 780,1400 0,1400
 wet clip nonzero [R(-80,252 1360,252 1360,2052 -80,2052)]
-wet stroke path2d#619094be5f3c at 1.8,0,0,1.8,-80,252 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+wet.style.mixBlendMode = multiply
+wet fill nonzero path2d#adfa408834cb at 1.8,0,0,1.8,-80,252 {fillStyle=#7dd3fc globalAlpha=0.25 globalCompositeOperation=multiply}
 wet.classList - goodobsidian-wet-hidden
 # resize
 backdrop.width = 500
@@ -1633,9 +1641,10 @@ el38 fillRect 0,0 800,0 800,1000 0,1000 {fillStyle=#fdf6e3}
 el38 painter squared 800x1000 weight=1 at 1,0,0,1,0,0
 el38 strokeRect 0.5,0.5 799.5,0.5 799.5,999.5 0.5,999.5 {fillStyle=#fdf6e3 strokeStyle=rgba(0, 0, 0, 0.55)}
 el38 stroke path2d#9b533da56a2e at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.176 lineCap=round lineJoin=round}
-el38 stroke path2d#343c2e1e01e7 at 1,0,0,1,0,0 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+el38 fill nonzero path2d#b7558cec8493 at 1,0,0,1,0,0 {fillStyle=#7dd3fc strokeStyle=rgba(0, 0, 0, 0.55) globalAlpha=0.25 globalCompositeOperation=multiply}
 dry drawImage el38 -> 0,24 480,24 480,624 0,624
 wet clearRect 0,0 500,0 500,300 0,300
+wet.style.mixBlendMode = normal
 wet.classList + goodobsidian-wet-hidden
 # pages side by side
 el29.width = 0
@@ -1761,7 +1770,7 @@ el39 stroke path2d#4358bfa8afc7 at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1
 el39 stroke path2d#bc40f8ab2808 at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.5762 lineCap=round lineJoin=round}
 el39 stroke path2d#d0913bf01cdb at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.4511 lineCap=round lineJoin=round}
 el39 stroke path2d#1a18610d6dbf at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.3256 lineCap=round lineJoin=round}
-el39 stroke path2d#d70b6aa3446c at 1,0,0,1,0,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+el39 fill nonzero path2d#18ae4281732a at 1,0,0,1,0,0 {fillStyle=#ffd400 strokeStyle=rgba(0, 0, 0, 0.55) globalAlpha=0.25 globalCompositeOperation=multiply}
 el39 stroke path2d#a7fc28f51d10 at 1,0,0,1,0,0 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 el39 stroke path2d#1336cc68644a at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.64 lineCap=round lineJoin=round}
 el39 stroke path2d#a14b86a5f041 at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
@@ -1918,12 +1927,12 @@ el40 fillRect 0,0 800,0 800,1000 0,1000 {fillStyle=#fdf6e3}
 el40 painter squared 800x1000 weight=1 at 1,0,0,1,0,0
 el40 strokeRect 0.5,0.5 799.5,0.5 799.5,999.5 0.5,999.5 {fillStyle=#fdf6e3 strokeStyle=rgba(0, 0, 0, 0.55)}
 el40 stroke path2d#9b533da56a2e at 1,0,0,1,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.176 lineCap=round lineJoin=round}
-el40 stroke path2d#343c2e1e01e7 at 1,0,0,1,0,0 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+el40 fill nonzero path2d#b7558cec8493 at 1,0,0,1,0,0 {fillStyle=#7dd3fc strokeStyle=rgba(0, 0, 0, 0.55) globalAlpha=0.25 globalCompositeOperation=multiply}
 dry drawImage el40 -> 120,-50 520,-50 520,450 120,450
 wet clearRect 0,0 500,0 500,300 0,300
 wet clip nonzero [R(120,-50 520,-50 520,450 120,450)]
 wet stroke path2d#9b533da56a2e at 0.5,0,0,0.5,120,-50 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=4 lineCap=round lineJoin=round}
-wet stroke path2d#343c2e1e01e7 at 0.5,0,0,0.5,120,-50 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.25 globalCompositeOperation=multiply}
+wet fill nonzero path2d#b7558cec8493 at 0.5,0,0,0.5,120,-50 {fillStyle=#7dd3fc globalAlpha=0.25 globalCompositeOperation=multiply}
 wet.classList - goodobsidian-wet-hidden
 # destroy
 el39.width = 0
@@ -2017,7 +2026,7 @@ thumb1 stroke path2d#4358bfa8afc7 at 0.3,0,0,0.3,0,0 {fillStyle=#1a1a1a strokeSt
 thumb1 stroke path2d#bc40f8ab2808 at 0.3,0,0,0.3,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.5762 lineCap=round lineJoin=round}
 thumb1 stroke path2d#d0913bf01cdb at 0.3,0,0,0.3,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.4511 lineCap=round lineJoin=round}
 thumb1 stroke path2d#1a18610d6dbf at 0.3,0,0,0.3,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=3.3256 lineCap=round lineJoin=round}
-thumb1 stroke path2d#d70b6aa3446c at 0.3,0,0,0.3,0,0 {fillStyle=#ffd400 strokeStyle=#ffd400 lineWidth=12 lineCap=round lineJoin=round globalAlpha=0.4 globalCompositeOperation=multiply}
+thumb1 fill nonzero path2d#18ae4281732a at 0.3,0,0,0.3,0,0 {fillStyle=#ffd400 globalAlpha=0.4 globalCompositeOperation=multiply}
 thumb1 stroke path2d#a7fc28f51d10 at 0.3,0,0,0.3,0,0 {fillStyle=#2563eb strokeStyle=#2563eb lineWidth=3 lineCap=round lineJoin=round}
 thumb1 stroke path2d#1336cc68644a at 0.3,0,0,0.3,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=2.64 lineCap=round lineJoin=round}
 thumb1 stroke path2d#a14b86a5f041 at 0.3,0,0,0.3,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=1.92 lineCap=round lineJoin=round}
@@ -2172,4 +2181,4 @@ thumb2 fillRect 0,0 270,0 270,338 0,338 {fillStyle=#fdf6e3}
 thumb2 clip nonzero [R(0,0 270,0 270,338 0,338)] {fillStyle=#fdf6e3}
 thumb2 painter squared 800x1000 weight=4.4444 at 0.3375,0,0,0.338,0,0
 thumb2 stroke path2d#9b533da56a2e at 0.3375,0,0,0.338,0,0 {fillStyle=#1a1a1a strokeStyle=#1a1a1a lineWidth=4 lineCap=round lineJoin=round}
-thumb2 stroke path2d#343c2e1e01e7 at 0.3375,0,0,0.338,0,0 {fillStyle=#7dd3fc strokeStyle=#7dd3fc lineWidth=10 lineCap=round lineJoin=round globalAlpha=0.3 globalCompositeOperation=multiply}
+thumb2 fill nonzero path2d#b7558cec8493 at 0.3375,0,0,0.338,0,0 {fillStyle=#7dd3fc globalAlpha=0.3 globalCompositeOperation=multiply}

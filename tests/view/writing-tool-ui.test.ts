@@ -138,7 +138,8 @@ describe("reusable writing previews", () => {
     ) as unknown as El;
     expect(svg.attrs["data-preview-style"]).toBe("solid");
     expect(svg.attrs["data-highlighter-alpha"]).toBe("0.4");
-    expect(svg.children.at(-1)!.attrs.stroke).toBe(highlighterSwatch(HIGHLIGHTER_COLORS[0], 0.4));
+    expect(svg.children.at(-1)!.attrs.stroke).toBe(HIGHLIGHTER_COLORS[0]);
+    expect(svg.children.at(-1)!.attrs.opacity).toBe("0.4");
     expect(svg.children[0].attrs["stroke-dasharray"]).toBeUndefined();
   });
   it.each(["#ffffff", "#fbf8ed", "#fdf6d8", "#1c1d21"])(
@@ -286,7 +287,7 @@ describe("shape-following preview contrast", () => {
   });
 });
 
-it("selected width tap edits the exact stable slot; unselected tap selects and Save targets that slot", () => {
+it("selected width tap edits the exact stable slot; slider updates the width while retaining the editing slot", () => {
   const body = new El();
   let selected = "second",
     editing: string | undefined;
@@ -297,6 +298,7 @@ it("selected width tap edits the exact stable slot; unselected tap selects and S
     selected = id;
   });
   const save = vi.fn();
+  const select = vi.fn();
   renderThicknessEditor(body as unknown as HTMLElement, {
     current: () => ({ type: "ball", width: 3 }),
     presets: () => [2, 3, 5, 8, 12, 3],
@@ -306,7 +308,7 @@ it("selected width tap edits the exact stable slot; unselected tap selects and S
     editing: () => editing,
     edit,
     selectSlot,
-    select: vi.fn(),
+    select,
     reset: vi.fn(),
     manage: { save, remove: vi.fn(), restore: vi.fn() },
   });
@@ -314,8 +316,11 @@ it("selected width tap edits the exact stable slot; unselected tap selects and S
   expect(selectSlot).toHaveBeenCalledWith("first");
   body.find("0.41 mm thickness").click();
   expect(edit).toHaveBeenCalledWith("first");
-  body.find("Save current width").click();
-  expect(save).toHaveBeenCalledWith(3, "first");
+  const range = body.all().find(el => el.attrs["aria-label"] === "Stroke thickness")!;
+  range.value = "1";
+  range.handlers.get("input")?.();
+  expect(editing).toBe("first");
+  expect(select).toHaveBeenCalledWith(3);
   expect(body.all().filter((el) => el.classes.has("goodobsidian-thickness-choice"))).toHaveLength(
     6,
   );

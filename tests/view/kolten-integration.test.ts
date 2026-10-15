@@ -80,7 +80,7 @@ function setup() {
     ) => controller.update(id, factory, force),
   };
   const app = {
-    vault: {
+    vault: { getName: () => "Test vault",
       getFileByPath: (path: string) => (path === note.path ? note : (assets.get(path) ?? null)),
     },
   };

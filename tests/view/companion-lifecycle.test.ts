@@ -53,7 +53,7 @@ function setup(enabled = true) {
       force: boolean,
     ) => controller.update(id, factory, force),
   };
-  const app = { vault: { getFileByPath: (path: string) => (path === note.path ? note : null) } };
+  const app = { vault: { getName: () => "Test vault", getFileByPath: (path: string) => (path === note.path ? note : null) } };
   const plugin = { settings: { ...DEFAULT_SETTINGS }, companionPdfs, fileMoves: { log: () => [] } };
   const make = () => {
     const view = new InkView(new WorkspaceLeaf(app) as never, plugin as never);

@@ -15,6 +15,7 @@ export class FakeEl {
   text = "";
   href = "";
   hidden = false;
+  style = {setProperty() {}};
 
   constructor(tag = "div", info?: ElInfo) {
     this.tag = tag;
@@ -61,6 +62,8 @@ export class FakeEl {
   hasClass(name: string): boolean {
     return this.classes.has(name);
   }
+  hide(): void { this.hidden = true; }
+  show(): void { this.hidden = false; }
   toggle(show: boolean): void {
     this.hidden = !show;
   }
@@ -178,6 +181,10 @@ export class Setting {
   setHeading(): this {
     this.settingEl.addClass("setting-item-heading");
     return this;
+  }
+  addSlider(build: (slider: any) => unknown): this {
+    const slider = {setLimits: () => slider, setValue: () => slider, setDynamicTooltip: () => slider, onChange: () => slider};
+    build(slider); return this;
   }
   addText(build: (text: TextComponent) => unknown): this {
     const text = new TextComponent();

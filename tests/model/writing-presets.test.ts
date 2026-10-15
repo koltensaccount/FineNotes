@@ -18,7 +18,14 @@ import {
   widthSlotsFor,
   selectWidthSlot,
 } from "../../src/model/writing-presets";
-const fresh = () => migrateWritingPresets({ ...DEFAULT_SETTINGS });
+// Use an explicit custom palette: slot-editing tests must not depend on fresh-install defaults.
+const fresh = () => {
+  const p = migrateWritingPresets({ ...DEFAULT_SETTINGS });
+  p.widths = [2, 3, 5, 8, 12];
+  widthSlotsFor(p, "pen");
+  selectWidth(p, "pen", p.selectedWidth);
+  return p;
+};
 describe("writing width presets", () => {
   it.each([
     [1.22, [2, 3, 5, 1.22]],

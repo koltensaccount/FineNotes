@@ -53,8 +53,8 @@ function open(insert = vi.fn(async (_pages: number[]) => true)) {
   return {
     modal: modal as unknown as InstanceType<typeof Modal>,
     insert,
-    range: Setting.created[1],
-    buttons: Setting.created[2],
+    range: Setting.created.find(row => row.nameEl.text === "Page range")!,
+    buttons: Setting.created.at(-1)!,
   };
 }
 describe("PDF import dialog", () => {
@@ -62,7 +62,7 @@ describe("PDF import dialog", () => {
     const { modal, insert, range, buttons } = open();
     expect(range.settingEl.hidden).toBe(true);
     await buttons.button("Import").click();
-    expect(insert).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5]);
+    expect(insert).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5], undefined);
     expect(modal.isOpen).toBe(false);
   });
   it("imports selected pages in entered order and deduplicates them", async () => {
@@ -71,7 +71,7 @@ describe("PDF import dialog", () => {
     expect(range.settingEl.hidden).toBe(false);
     await range.texts[0].type("5, 3-1, 5");
     await buttons.button("Import").click();
-    expect(insert).toHaveBeenCalledWith([4, 2, 1, 0]);
+    expect(insert).toHaveBeenCalledWith([4, 2, 1, 0], undefined);
   });
   it("rejects an invalid page before saving anything, and allows correction", async () => {
     const { modal, insert, range, buttons } = open();
@@ -83,7 +83,7 @@ describe("PDF import dialog", () => {
     expect(modal.isOpen).toBe(true);
     await range.texts[0].type("2-3");
     await buttons.button("Import").click();
-    expect(insert).toHaveBeenCalledWith([1, 2]);
+    expect(insert).toHaveBeenCalledWith([1, 2], undefined);
   });
   it("cancel changes nothing", async () => {
     const { insert, modal, buttons } = open();

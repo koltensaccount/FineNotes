@@ -293,6 +293,7 @@ class MockDoc {
   body: MockEl;
   documentElement: MockEl;
   defaultView = {
+    innerWidth: 1000, innerHeight: 800,
     visualViewport: {
       offsetLeft: 0,
       offsetTop: 0,

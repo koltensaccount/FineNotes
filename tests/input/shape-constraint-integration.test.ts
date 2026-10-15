@@ -3,7 +3,7 @@ import { PointerController, type PointerControllerCallbacks } from "../../src/in
 import { History } from "../../src/model/history";
 import { emptyDocument } from "../../src/model/document";
 import { StrokeIndex } from "../../src/view/stroke-index";
-vi.mock("obsidian", () => ({ Notice: class {}, Platform: {}, setIcon: () => {} }));
+vi.mock("obsidian", async () => ({...await import("../view/fake-obsidian"), MarkdownRenderChild: class {}}));
 const { InkSurface } = await import("../../src/view/ink-surface");
 class InputElement {
   captured = new Set<number>();

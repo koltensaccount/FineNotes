@@ -20,8 +20,8 @@ describe("tool-specific fresh/restored writing defaults", () => {
     expect(selectedColor(p, "highlighter")).toBe(HIGHLIGHTER_COLORS[0]);
     expect(p.highlighterWidths).toEqual(HIGHLIGHTER_SIZES);
     expect(selectedWidthFor(p, "highlighter")).toBe(8);
-    expect(p.widths).toEqual(SIZES);
-    expect(p.selectedWidth).toBe(3);
+    expect(p.widths).toEqual([2, 5, 8]);
+    expect(p.selectedWidth).toBe(5);
     expect(p.palettes.pen.map((v) => v.color)).toEqual(PALETTE);
   });
   it("existing pre-preset settings preserve colors, widths and chosen size", () => {
@@ -89,7 +89,7 @@ describe("tool-specific fresh/restored writing defaults", () => {
     expect(widthsFor(p, "highlighter")).toEqual([5, 5, 12]);
     expect(selectedWidthFor(p, "highlighter")).toBe(5);
     expect(p.widths).toEqual(pen);
-    expect(p.selectedWidth).toBe(3);
+    expect(p.selectedWidth).toBe(5);
   });
   it("Restore Defaults resets only that tool's palette and widths", () => {
     const p = migrateWritingPresets(DEFAULT_SETTINGS, true),

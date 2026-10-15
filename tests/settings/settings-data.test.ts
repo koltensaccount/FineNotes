@@ -28,6 +28,9 @@ import {
  * it went; vaults that have it keep it, as they keep any key (below).
  */
 const FRESH_INSTALL = {
+  constrainShapes: false,
+  writingGuides: {style: "lines", spacing: 32, thickness: 1, opacity: 0.2, colorMode: "auto", customColor: "#64748b"},
+  pdfExportQuality: "high",
   drawAndHold: true,
   defaultTool: "pen",
   customColors: [],
@@ -37,6 +40,7 @@ const FRESH_INSTALL = {
   eraserSize: 24,
   eraserFilter: "all",
   lassoMode: "freehand",
+  lassoBehavior: "default",
   lassoFilter: { handwriting: true, images: true, shapes: true, arrows: true, textBoxes: true },
   highlighterAlpha: 0.4,
   paperWidth: 1024,
@@ -152,7 +156,7 @@ describe("data.json", () => {
 
   it("a used vault's file survives a load and a save, every key and value", () => {
     const written = loadAndSave(USED_VAULT) as Record<string, unknown>;
-    expect(written).toEqual(USED_VAULT);
+    expect(written).toEqual({...FRESH_INSTALL, ...USED_VAULT});
     for (const key of Object.keys(FRESH_INSTALL)) expect(written).toHaveProperty([key]);
   });
 

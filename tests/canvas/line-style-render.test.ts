@@ -45,7 +45,7 @@ describe("line styles in shared wet/dry/thumbnail renderer", () => {
     "wet, cached dry and thumbnail geometry agree for %s",
     (style) => {
       const ctx = context();
-      const canvas = {
+      const canvas = { style: {},
         width: 0,
         height: 0,
         getContext: () => ctx,
