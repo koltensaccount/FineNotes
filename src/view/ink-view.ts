@@ -1182,6 +1182,7 @@ export class InkView extends TextFileView {
           this.requestSave();
           this.relinkMovedFiles();
           this.markCompanionChanged();
+          void this.updateClipsPng();
         },
         // The zoom or the screen changed: keep PDF pages as sharp as the ink.
         onStatus: () => { this.matchPdfResolution(); this.refreshGuideContext(); },
@@ -2093,6 +2094,10 @@ export class InkView extends TextFileView {
     page.pageEmbedPath = targetPath;
     this.requestSave();
 
+    const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+    this.embedHashes.set(targetPath, JSON.stringify([page, fullBounds, this.settings.embedBackground === true, isDark]));
+    if (imageFile instanceof TFile) this.plugin.embedManager?.refreshEmbedImagesInDom(imageFile);
+
     const link = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
 
     void navigator.clipboard.writeText(link).then(
@@ -2164,6 +2169,10 @@ export class InkView extends TextFileView {
 
     this.requestSave();
 
+    const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+    this.embedHashes.set(targetPath, JSON.stringify([page, bounds, this.settings.embedBackground === true, isDark]));
+    if (imageFile instanceof TFile) this.plugin.embedManager?.refreshEmbedImagesInDom(imageFile);
+
     const link = "!" + this.app.fileManager.generateMarkdownLink(imageFile as TFile, "");
 
     void navigator.clipboard.writeText(link).then(
@@ -2180,7 +2189,8 @@ export class InkView extends TextFileView {
   private readonly embedHashes=new Map<string,string>();
 
   async updateClipsPng(): Promise<void> {
-    if(!this.doc?.pages.some(page=>page.pageEmbedPath || page.clips?.some(clip=>clip.imagePath))) return;
+    const doc = this.surface?.document ?? this.doc;
+    if(!doc?.pages.some(page=>page.pageEmbedPath || page.clips?.some(clip=>clip.imagePath))) return;
     this.embedRefreshPending=true;
     if(this.embedRefreshRunning) return this.embedRefreshRunning;
     this.embedRefreshRunning=(async()=>{
@@ -2197,14 +2207,14 @@ export class InkView extends TextFileView {
   private async refreshEmbedImages(): Promise<void> {
     if (!this.file || this.guard.locked) return;
     const sourceFile=this.file;
-    const doc = structuredClone(this.doc);
+    const doc = structuredClone(this.surface?.document ?? this.doc);
     if (!doc || !doc.pages) return;
 
     const isDark = typeof document !== "undefined" && document.body.classList.contains("theme-dark");
     const incBg = this.settings.embedBackground === true;
 
     for (const page of doc.pages) {
-      if(performance.now()-this.latestDrawingAt < 300) {this.embedRefreshPending=true;return;}
+      if(Date.now()-this.latestDrawingAt < 300) {this.embedRefreshPending=true;return;}
       if (page.clips && page.clips.length > 0) {
         for (const clip of page.clips) {
           if (!clip.imagePath) continue;
@@ -2224,6 +2234,7 @@ export class InkView extends TextFileView {
               if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
               await this.app.vault.modifyBinary(abstract, buffer);
               this.embedHashes.set(clip.imagePath,hash);
+              this.plugin.embedManager?.refreshEmbedImagesInDom(abstract);
             } catch (err) {
               console.warn("[FineNotes] Failed to update clip PNG", clip.id, err);
             }
@@ -2250,6 +2261,7 @@ export class InkView extends TextFileView {
             if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
             await this.app.vault.modifyBinary(abstract, buffer);
             this.embedHashes.set(page.pageEmbedPath,hash);
+            this.plugin.embedManager?.refreshEmbedImagesInDom(abstract);
           } catch (err) {
             console.warn("[FineNotes] Failed to update page embed PNG", page.id, err);
           }

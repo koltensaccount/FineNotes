@@ -100,6 +100,7 @@ export class FineNotesEmbedManager {
                 // A notebook opened during rendering is now owned by its InkView.
                 if (this.app.workspace.getLeavesOfType(VIEW_TYPE_INK).some(leaf => (leaf.view as InkView).file === file)) break;
                 await this.app.vault.modifyBinary(image, buffer);
+                this.refreshEmbedImagesInDom(image);
               }
             }
           } catch (error) {
@@ -131,6 +132,9 @@ export class FineNotesEmbedManager {
     // Watch vault modifications to update embedded notes in real-time
     this.plugin.registerEvent(
       this.app.vault.on("modify", (file) => {
+        if (file instanceof TFile && file.extension === "png" && /-clip-|-page-/i.test(file.name)) {
+          this.refreshEmbedImagesInDom(file);
+        }
         if (file instanceof TFile && this.plugin.isInkFile(file)) {
           this.docCache.delete(file.path);
           this.refreshEmbedsForFile(file.path);
@@ -272,6 +276,46 @@ export class FineNotesEmbedManager {
       }
     }
     return null;
+  }
+
+  /**
+   * Immediately refresh all <img> elements in open markdown notes that display this embed file.
+   */
+  refreshEmbedImagesInDom(file: TFile): void {
+    if (typeof document === "undefined") return;
+    let resourcePath = "";
+    try {
+      resourcePath = (this.app.vault.getResourcePath(file) || "").split("?")[0];
+    } catch {
+      // In testing or environments without getResourcePath
+    }
+    const filename = file.name;
+    const filePath = file.path;
+    const images = Array.from(document.querySelectorAll<HTMLImageElement>("img"));
+    const now = Date.now();
+    for (const img of images) {
+      const srcAttr = img.getAttribute("src") || "";
+      const baseSrc = srcAttr.split("?")[0];
+      const alt = img.getAttribute("alt") || "";
+      const parentEmbed = img.closest(".image-embed");
+      const parentSrc = parentEmbed?.getAttribute("src") || "";
+
+      const matches =
+        (resourcePath && baseSrc === resourcePath) ||
+        alt === filename ||
+        alt === filePath ||
+        parentSrc === filename ||
+        parentSrc === filePath ||
+        baseSrc.endsWith("/" + encodeURIComponent(filename)) ||
+        baseSrc.endsWith("/" + filename) ||
+        srcAttr.includes(encodeURIComponent(filename)) ||
+        srcAttr.includes(filename);
+
+      if (matches) {
+        const cleanBase = (img.src || srcAttr).split("?")[0];
+        img.src = `${cleanBase}?t=${now}`;
+      }
+    }
   }
 
   /** Notify all active embed views for `filePath` to re-render. */

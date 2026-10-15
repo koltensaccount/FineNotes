@@ -129,3 +129,26 @@ it("refreshPngEmbeds refreshes open InkViews and updates theme appearance", asyn
   await manager.refreshPngEmbeds();
   expect(mockView.updateClipsPng).toHaveBeenCalledOnce();
 });
+
+it("refreshEmbedImagesInDom updates img src with cache buster timestamp", () => {
+  const fakeImg = {
+    getAttribute: (attr: string) => (attr === "src" ? "app://vault/clip-abc.png" : "clip-abc.png"),
+    closest: () => null,
+    src: "app://vault/clip-abc.png",
+  };
+  vi.stubGlobal("document", {
+    querySelectorAll: () => [fakeImg],
+  });
+  try {
+    const manager = Object.create(FineNotesEmbedManager.prototype) as any;
+    manager.app = {
+      vault: {
+        getResourcePath: () => "app://vault/clip-abc.png",
+      },
+    };
+    manager.refreshEmbedImagesInDom({ name: "clip-abc.png", path: "clip-abc.png" } as any);
+    expect(fakeImg.src).toMatch(/^app:\/\/vault\/clip-abc\.png\?t=\d+$/);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

@@ -8,6 +8,16 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 74 — Fix Live Embed Auto-Updates Across Open Markdown Notes
+
+- **Real-Time Live Updating**:
+  - Automatically triggers embed PNG updates directly from handwriting `onChange` events, refreshing without waiting for background auto-save delays.
+  - Fixed a timestamp comparison clock mismatch (`Date.now()` vs `performance.now()`) that was blocking `refreshEmbedImages` from rasterizing updated strokes to disk.
+  - Active drawing surfaces now feed the live in-memory document state to embed renderers so that new strokes, erasures, and moved handwriting reflect immediately.
+- **Immediate DOM Image Refreshing**:
+  - When embed PNG files are updated on disk, FineNotes now actively updates the `src` attribute with a cache buster timestamp on all corresponding `<img>` elements in open markdown notes.
+  - Live Preview and Reading View notes now repaint changes live in real-time without requiring note reloads or window refocusing.
+
 ### Beta 73 — Transparent Embeds Toggle with Intelligent Dark/Light Theme Contrast
 
 - **Transparent Background by Default**:
