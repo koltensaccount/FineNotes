@@ -150,3 +150,32 @@ describe("NotebookClip and Live Embeds model", () => {
     expect(clipCurrentBounds(page, clip)).toEqual({ minX: 40, minY: 40, maxX: 140, maxY: 140 });
   });
 });
+
+it("persists expandable regions and grows with ink, text, pictures, and circuits while excluding earlier content", () => {
+  const doc = emptyDocument(); const page = doc.pages[0];
+  const clip: NotebookClip = {id: "clip-writing", pageId: page.id, bounds: {minX: 40, minY: 300, maxX: 760, maxY: 540}, isExpandable: true, originY: 300, createdAt: 0, updatedAt: 0};
+  page.clips = [clip];
+  expect(clipCurrentBounds(page, clip)).toEqual(clip.bounds);
+  page.strokes.push(stroke("old", [0, 100, 1, 800, 200, 1]), stroke("new", [100, 310, 1, 500, 700, 1]));
+  expect(clipCurrentBounds(page, clip)).toEqual({minX: 40, minY: 294, maxX: 760, maxY: 724});
+  page.textBoxes.push({id: "text", x: 20, y: 750, w: 200, h: 80, text: "proof", color: "#000"} as never);
+  expect(clipCurrentBounds(page, clip).maxY).toBe(854);
+  page.images.push({id: "image", path: "picture.png", x: 60, y: 860, w: 40, h: 80});
+  expect(clipCurrentBounds(page, clip).maxY).toBe(964);
+  page.circuits = [{id: "c", x: 60, y: 960, w: 40, h: 80} as never];
+  expect(clipCurrentBounds(page, clip).maxY).toBe(1064);
+  const parsed = parseInkFile(buildInkFile("", doc), 800).doc!;
+  expect(parsed.pages[0].clips![0]).toMatchObject({isExpandable: true, originY: 300});
+  page.strokes = []; page.images = []; page.textBoxes = []; page.circuits = [];
+  expect(clipCurrentBounds(page, clip)).toEqual(clip.bounds);
+});
+
+it("does not absorb later handwriting sections into an earlier expandable clip", () => {
+  const page = blankPage();
+  const first: NotebookClip = {id: "clip-first", pageId: page.id, bounds: {minX: 40, minY: 60, maxX: 760, maxY: 300}, isExpandable: true, originY: 60, createdAt: 0, updatedAt: 0};
+  const second = {...first, id: "clip-second", originY: 500, bounds: {...first.bounds, minY: 500, maxY: 740}};
+  page.clips = [first, second];
+  page.strokes.push(stroke("first", [100, 80, 1, 200, 200, 1]), stroke("second", [100, 510, 1, 200, 900, 1]));
+  expect(clipCurrentBounds(page, first).maxY).toBe(224);
+  expect(clipCurrentBounds(page, second).maxY).toBe(924);
+});

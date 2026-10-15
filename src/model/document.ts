@@ -302,6 +302,8 @@ export interface CircuitElement {
 
 /** A persistent clip reference capturing a cropped region of a notebook page. */
 export interface NotebookClip {
+  isExpandable?: boolean;
+  originY?: number;
   id: string;
   pageId: string;
   bounds: Bounds;
@@ -605,6 +607,23 @@ export function elementsBounds(
  * (e.g. from space insertion or dragging), the bounds dynamically follow the elements.
  */
 export function clipCurrentBounds(page: Page, clip: NotebookClip): Bounds {
+  if (clip.isExpandable && typeof clip.originY === "number" && Number.isFinite(clip.originY)) {
+    const origin = clip.originY;
+    const nextOrigin = Math.min(...(page.clips ?? []).filter(other => other !== clip && other.isExpandable && typeof other.originY === "number" && other.originY > origin).map(other => other.originY!));
+    const boxes: Bounds[] = [];
+    const include = (box: Bounds | null) => { if (box && box.minY >= origin - 20 && box.minY < nextOrigin - 20) boxes.push(box); };
+    for (const stroke of page.strokes) include(strokeBounds(stroke));
+    for (const element of [...page.images, ...page.textBoxes, ...(page.circuits ?? [])]) {
+      include({minX: element.x, minY: element.y, maxX: element.x + element.w, maxY: element.y + (element.h ?? 100)});
+    }
+    if (!boxes.length) return {...clip.bounds};
+    return boxes.reduce((bounds, box) => ({
+      minX: Math.min(bounds.minX, box.minX - 16),
+      minY: Math.min(bounds.minY, box.minY - 16),
+      maxX: Math.max(bounds.maxX, box.maxX + 16),
+      maxY: Math.max(bounds.maxY, box.maxY + 24),
+    }), {minX: clip.bounds.minX, minY: origin, maxX: clip.bounds.maxX, maxY: origin + 120});
+  }
   if (clip.elements && clip.elementBounds) {
     const currentElemBounds = elementsBounds(page, clip.elements);
     if (currentElemBounds) {

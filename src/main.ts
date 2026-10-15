@@ -1,3 +1,4 @@
+import { registerHandwriteHere } from "./view/handwrite-here";
 import { PdfImportModal } from "./view/pdf-import-modal";
 import { FineNotesEmbedManager } from "./view/embed-renderer";
 import { renderPdfSlides } from "./view/pdf-slides";
@@ -182,6 +183,7 @@ export default class GoodObsidianPlugin extends Plugin {
     this.embedManager = new FineNotesEmbedManager(this, this.app);
 
     this.registerView(VIEW_TYPE_INK, (leaf) => new InkView(leaf, this));
+    registerHandwriteHere(this);
     // The image menu's "Generate with AI" row: the same modal as the AI menu,
     // listed only when an image service is configured.
     this.register(

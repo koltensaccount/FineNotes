@@ -8,6 +8,14 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 75 — Handwrite Here
+
+- Run **FineNotes: Handwrite Here** from an ordinary Markdown note to insert a live handwriting embed and open its notebook beside the note with Pen selected.
+- Resolve notebooks from frontmatter (`notebook` / `finenotes-notebook`), saved associations, existing embeds, or a unique notebook in the same folder; otherwise choose one in a searchable picker.
+- Allocate space after existing content, reuse the notebook paper template when a new page is needed, and expand the clip as handwriting, text, images, or circuits are added.
+- Preserve standard image embeds, transparent/theme-aware rendering, live updates, source navigation, and notebook undo/redo. Associations follow file and folder renames.
+- Validation: 105 focused tests and production build passed. Full-suite failures match unchanged beta 74 (39 existing failures); physical Mac/iPad verification is pending.
+
 ### Beta 74 — Fix Live Embed Auto-Updates Across Open Markdown Notes
 
 - **Real-Time Live Updating**:

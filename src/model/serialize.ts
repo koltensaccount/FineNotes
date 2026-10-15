@@ -615,6 +615,7 @@ function normalizeClip(raw: unknown, pageId: string): NotebookClip | null {
     ...(elements ? { elements } : {}),
     ...(elementBounds ? { elementBounds } : {}),
     ...(typeof raw.label === "string" ? { label: raw.label } : {}),
+    ...(raw.isExpandable === true && typeof raw.originY === "number" && Number.isFinite(raw.originY) ? {isExpandable: true, originY: raw.originY} : {}),
     ...(typeof raw.imagePath === "string" ? { imagePath: raw.imagePath } : {}),
     createdAt: typeof raw.createdAt === "number" ? Math.round(raw.createdAt) : Date.now(),
     updatedAt: typeof raw.updatedAt === "number" ? Math.round(raw.updatedAt) : Date.now(),

@@ -382,6 +382,7 @@ describe("registration", () => {
         "export-pdf",
         "update-companion-pdf",
         "fit-reset-view",
+        "handwrite-here",
         "import-pdf",
         "import-vault-pdf",
         "recognize-handwriting",

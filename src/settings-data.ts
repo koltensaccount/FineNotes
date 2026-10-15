@@ -61,6 +61,8 @@ export interface GoodObsidianSettings {
   optionsPosition?: ToolbarPosition;
   /** Include notebook paper color and ruling lines in live image embeds (default false/transparent). */
   embedBackground?: boolean;
+  /** Markdown note path -> associated notebook path. */
+  notebookAssociations?: Record<string, string>;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;
