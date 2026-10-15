@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 77 — Reuse Empty Handwriting Regions
+
+- Handwrite Here reuses the earliest empty region after its Markdown embed is deleted, instead of reserving more space or advancing through blank pages.
+- Consult current editors and the vault link index to preserve regions still referenced elsewhere. Regions containing handwriting, crossing strokes, text, images, or circuits are never reclaimed.
+- Subtle notebook-only outlines mark live handwriting regions and follow their expanding bounds. Guides pass input through and stay out of PNG/PDF exports.
+- Mac/iPad interaction and appearance verification remain pending.
+
 ### Beta 76 — Reachable Menus and Restored Test Coverage
 
 - Floating tool, selection, image/AI/template, and More menus stay inside the available viewport, wrap long rows, and scroll instead of squeezing or clipping their contents.

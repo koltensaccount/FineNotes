@@ -1,3 +1,4 @@
+import { clipCurrentBounds } from "../model/document";
 import { penDynamicsProfile } from "../model/pen-dynamics";
 import { connectRecognizedLine } from "../ink/line-connection";
 import type { PdfRegion } from "./pdf-region-copy";
@@ -1529,6 +1530,9 @@ export class InkSurface {
    * host's to remove.
    */
   destroy(): void {
+    if (this.handwritingGuideFrame) window.cancelAnimationFrame(this.handwritingGuideFrame);
+    for (const el of this.handwritingGuideEls?.values() ?? []) el.remove();
+    this.handwritingGuideEls?.clear();
     this.cancelShapeDraft();
     this.pasteGate.cancel();
     this.pasteRequest = null;
@@ -1741,6 +1745,7 @@ export class InkSurface {
 
   /** The document changed: the host refreshes its status and saves. */
   private changed(): void {
+    this.scheduleHandwritingRegions();
     this.reportStatus();
     this.callbacks.onChange();
   }
@@ -1870,6 +1875,43 @@ export class InkSurface {
     this.flashChrome();
     this.flashRegion(clamped, bounds);
     this.requestFrame();
+  }
+
+  private handwritingGuideFrame = 0;
+  private handwritingGuideEls = new Map<string, HTMLElement>();
+
+  /** DOM-only guides: coalesced away from Pencil input, never rendered into PNG/PDF. */
+  private scheduleHandwritingRegions(): void {
+    if (!this.selectionUiEl || this.handwritingGuideFrame) return;
+    this.handwritingGuideFrame = window.requestAnimationFrame(() => {
+      this.handwritingGuideFrame = 0;
+      this.syncHandwritingRegions();
+    });
+  }
+
+  private syncHandwritingRegions(): void {
+    const visible = new Set<string>();
+    for (const page of this.doc.pages) {
+      if (!page.clips?.some(clip => clip.isExpandable)) continue;
+      const box = this.boxForPage(page.id);
+      if (!box) continue;
+      for (const clip of page.clips) {
+        if (!clip.isExpandable) continue;
+        const key = `${page.id}:${clip.id}`;
+        visible.add(key);
+        let el = this.handwritingGuideEls.get(key);
+        if (!el) {
+          el = this.selectionUiEl.createDiv({cls: "finenotes-handwriting-region"});
+          el.setAttribute("aria-hidden", "true");
+          el.createSpan({cls: "finenotes-handwriting-region-label", text: "Live handwriting · grows as you write"});
+          this.handwritingGuideEls.set(key, el);
+        }
+        const bounds = clipCurrentBounds(page, clip), scale = this.unitScale;
+        el.setCssStyles({left: `${(box.x + bounds.minX) * scale}px`, top: `${(box.y + bounds.minY) * scale}px`,
+          width: `${(bounds.maxX - bounds.minX) * scale}px`, height: `${(bounds.maxY - bounds.minY) * scale}px`});
+      }
+    }
+    for (const [key, el] of this.handwritingGuideEls) if (!visible.has(key)) {el.remove(); this.handwritingGuideEls.delete(key);}
   }
 
   /** Briefly pulses a dashed highlight box around the target region. */
@@ -2351,6 +2393,7 @@ export class InkSurface {
     this.viewport = { scrollY: y / scale, scale, width: this.pageLayout.width };
     this.renderer.setViewport(this.viewport, this.offsetX, this.userZoom);
     this.updatePageIndicator();
+    this.scheduleHandwritingRegions();
   }
 
   private updatePageIndicator(): void {

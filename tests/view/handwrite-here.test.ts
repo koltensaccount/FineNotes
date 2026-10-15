@@ -1,3 +1,4 @@
+import { InkSurface } from "../../src/view/ink-surface";
 import { describe, it, expect, vi } from "vitest";
 vi.mock("obsidian", async () => ({
   ...(await import("./fake-obsidian")),
@@ -21,6 +22,7 @@ import {
   insertHandwritingEmbed,
   handwriteHere,
   registerHandwriteHere,
+  referencedEmbedImages,
 } from "../../src/view/handwrite-here";
 vi.mock("../../src/view/clip-png", () => ({
   renderClipPng: vi.fn(async () => new ArrayBuffer(8)),
@@ -211,7 +213,7 @@ describe("safe Markdown insertion and command", () => {
     await handwriteHere(plugin as never, source as never, editor as never, note, "Proof", 5);
     expect(plugin.settings).toEqual({ notebookAssociations: { [note.path]: book.path } });
     expect(leaf.setViewState).toHaveBeenCalled();
-    expect(ink.createHandwritingRegion).toHaveBeenCalledWith(false);
+    expect(ink.createHandwritingRegion).toHaveBeenCalledWith(false, expect.any(Set));
     expect(editor.replaceRange).toHaveBeenCalledWith("\n![[assets/a-clip-test.png]]\n", 5);
   });
   it("captures the editor cursor synchronously and disables the command inside notebooks", () => {
@@ -295,6 +297,9 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
   expect(view.saveNow).toHaveBeenCalledOnce();
   expect(surface.setTool).toHaveBeenCalledWith("pen");
   expect(view.pendingSubpath).toBe(`#^${doc.pages[0].clips![0].id}`);
+  expect(await view.createHandwritingRegion(false, new Set())).toBe(image);
+  expect(surface.applyCommand).toHaveBeenCalledOnce();
+  expect(doc.pages[0].clips).toHaveLength(1);
   doc.pages[0].strokes.push({
     id: "ink",
     color: "#000",
@@ -310,4 +315,137 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
   );
   expect(view.app.vault.modifyBinary).toHaveBeenCalledWith(image, expect.any(ArrayBuffer));
   expect(view.plugin.embedManager.refreshEmbedImagesInDom).toHaveBeenCalledWith(image);
+});
+
+it("reclaims the earliest unreferenced empty region instead of reserving more blank space", () => {
+  const doc = emptyDocument(),
+    page = doc.pages[0];
+  page.clips = [60, 340, 620].map((originY, i) => ({
+    id: `clip-${i}`,
+    pageId: page.id,
+    bounds: { minX: 40, minY: originY, maxX: 760, maxY: originY + 240 },
+    isExpandable: true,
+    originY,
+    imagePath: `assets/clip-${i}.png`,
+    createdAt: 0,
+    updatedAt: 0,
+  }));
+  const allocation = allocateHandwritingRegion(doc, 0, new Set());
+  expect(allocation.reusableClip).toBe(page.clips[0]);
+  expect(allocation.bounds.minY).toBe(60);
+  expect(allocation.newPage).toBe(false);
+  // A still-visible blank embed retains its reservation.
+  expect(allocateHandwritingRegion(doc, 0, new Set(["assets/clip-0.png"])).reusableClip).toBe(
+    page.clips[1],
+  );
+  page.strokes.push({
+    id: "ink",
+    color: "#000",
+    size: 2,
+    tool: "pen",
+    pts: [100, 70, 1, 200, 100, 1],
+  });
+  expect(allocateHandwritingRegion(doc, 0, new Set()).reusableClip).toBe(page.clips[1]);
+});
+
+it("never reclaims handwriting, crossing strokes, text, images, or circuits", () => {
+  const doc = emptyDocument(),
+    page = doc.pages[0];
+  page.clips = [
+    {
+      id: "clip-a",
+      pageId: page.id,
+      bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
+      isExpandable: true,
+      originY: 60,
+      imagePath: "a.png",
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  ];
+  const content = { id: "element", x: 100, y: 600, w: 20, h: 20 };
+  for (const kind of ["images", "textBoxes", "circuits"] as const) {
+    page[kind] = [content as never];
+    expect(allocateHandwritingRegion(doc, 0, new Set()).reusableClip).toBeUndefined();
+    page[kind] = [];
+  }
+  page.strokes.push({
+    id: "crossing",
+    color: "#000",
+    size: 2,
+    tool: "pen",
+    pts: [100, 20, 1, 100, 80, 1],
+  });
+  expect(allocateHandwritingRegion(doc, 0, new Set()).reusableClip).toBeUndefined();
+});
+
+it("uses the live Markdown contents after deletion while protecting references in other notes", () => {
+  const source = { path: "note.md" };
+  const app = {
+    workspace: { getLeavesOfType: () => [] },
+    metadataCache: {
+      resolvedLinks: { "note.md": { "assets/old.png": 1 }, "other.md": { "assets/shared.png": 1 } },
+      getFirstLinkpathDest: (link: string) => ({ path: link }),
+    },
+  };
+  expect([...referencedEmbedImages(app as never, source as never, "")]).toEqual([
+    "assets/shared.png",
+  ]);
+  expect(referencedEmbedImages(app as never, source as never, "![[assets/new.png]]")).toEqual(
+    new Set(["assets/shared.png", "assets/new.png"]),
+  );
+});
+
+it("keeps a notebook-only writing guide aligned as the live region grows and removes stale guides", () => {
+  const doc = emptyDocument(),
+    page = doc.pages[0];
+  page.clips = [
+    {
+      id: "clip-guide",
+      pageId: page.id,
+      bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
+      isExpandable: true,
+      originY: 60,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  ];
+  const guide = {
+    style: {} as Record<string, string>,
+    setAttribute: vi.fn(),
+    createSpan: vi.fn(),
+    remove: vi.fn(),
+    setCssStyles(style: Record<string, string>) {
+      Object.assign(this.style, style);
+    },
+  };
+  const surface = Object.create(InkSurface.prototype) as any;
+  Object.assign(surface, {
+    doc,
+    handwritingGuideEls: new Map(),
+    selectionUiEl: { createDiv: () => guide },
+    boxForPage: () => ({ x: 10, y: 20 }),
+  });
+  Object.defineProperty(surface, "unitScale", { value: 2 });
+  surface.syncHandwritingRegions();
+  expect(guide.style).toMatchObject({
+    left: "100px",
+    top: "160px",
+    width: "1440px",
+    height: "480px",
+  });
+  expect(guide.setAttribute).toHaveBeenCalledWith("aria-hidden", "true");
+  page.strokes.push({
+    id: "ink",
+    color: "#000",
+    size: 2,
+    tool: "pen",
+    pts: [100, 70, 1, 200, 800, 1],
+  });
+  surface.syncHandwritingRegions();
+  expect(guide.style.height).toBe("1540px");
+  page.clips = [];
+  surface.syncHandwritingRegions();
+  expect(guide.remove).toHaveBeenCalledOnce();
+  expect(page.strokes).toHaveLength(1);
 });

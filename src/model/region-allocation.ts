@@ -21,10 +21,38 @@ export function pageContentBottom(page: Page): number | null {
   return bottoms.length ? bottoms.reduce((a, b) => Math.max(a, b), -Infinity) : null;
 }
 
+/** Empty means no content anywhere in this expandable section, including crossing strokes. */
+export function handwritingRegionEmpty(page: Page, clip: NotebookClip): boolean {
+  if (!clip.isExpandable || typeof clip.originY !== "number") return false;
+  const start = clip.originY - 20;
+  const end = Math.min(
+    ...(page.clips ?? [])
+      .filter(
+        (other) =>
+          other !== clip &&
+          other.isExpandable &&
+          typeof other.originY === "number" &&
+          other.originY > clip.originY!,
+      )
+      .map((other) => other.originY! - 20),
+  );
+  const occupied = (min: number, max: number) => min < end && max >= start;
+  return (
+    !page.strokes.some((stroke) => {
+      const box = strokeBounds(stroke);
+      return box && occupied(box.minY, box.maxY);
+    }) &&
+    ![...page.images, ...page.textBoxes, ...(page.circuits ?? [])].some((element) =>
+      occupied(element.y, element.y + (element.h ?? 100)),
+    )
+  );
+}
+
 export interface RegionAllocation {
   page: Page;
   pageIndex: number;
   newPage: boolean;
+  reusableClip?: NotebookClip;
   bounds: Bounds;
 }
 
@@ -32,7 +60,22 @@ export interface RegionAllocation {
 export function allocateHandwritingRegion(
   doc: InkDocument,
   preferredPage = doc.pages.length - 1,
+  referencedImages?: ReadonlySet<string>,
 ): RegionAllocation {
+  if (referencedImages) {
+    for (const [pageIndex, page] of doc.pages.entries()) {
+      const clip = page.clips
+        ?.filter(
+          (clip) =>
+            clip.imagePath &&
+            !referencedImages.has(clip.imagePath) &&
+            handwritingRegionEmpty(page, clip),
+        )
+        .sort((a, b) => a.bounds.minY - b.bounds.minY)[0];
+      if (clip)
+        return { page, pageIndex, bounds: { ...clip.bounds }, newPage: false, reusableClip: clip };
+    }
+  }
   let pageIndex = doc.pages[preferredPage] ? preferredPage : doc.pages.length - 1;
   let page = doc.pages[pageIndex];
   if (!page) throw new Error("The notebook has no pages.");

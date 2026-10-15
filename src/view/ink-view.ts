@@ -2049,34 +2049,38 @@ export class InkView extends TextFileView {
   }
 
   /** Allocate only against the live document; never overwrite an open view from disk. */
-  async createHandwritingRegion(useCurrentPage = false): Promise<TFile> {
+  async createHandwritingRegion(useCurrentPage = false, referencedImages?: ReadonlySet<string>): Promise<TFile> {
     const file = this.file;
     const surface = this.surface;
     if (!file || !surface || this.isProtected()) throw new Error("This notebook is unavailable or protected.");
     const doc = surface.document;
     const preferredPage = useCurrentPage ? surface.currentPage : doc.pages.length - 1;
-    const allocation = allocateHandwritingRegion(doc, preferredPage);
+    // Legacy notebook embeds do not expose individual clip paths in the link index.
+    const reusableReferences = referencedImages?.has(file.path) ? undefined : referencedImages;
+    const allocation = allocateHandwritingRegion(doc, preferredPage, reusableReferences);
     if (allocation.newPage && this.isSinglePage) throw new Error("This single-page note has no room for another region.");
-    const clipId = `clip-${crypto.randomUUID()}`;
-    const targetPath = await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
+    const clipId = allocation.reusableClip?.id ?? `clip-${crypto.randomUUID()}`;
+    const targetPath = allocation.reusableClip?.imagePath ?? await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
     const buffer = await renderClipPng(allocation.page, allocation.bounds, {
       images: this.images, backdropPainter: this.backdrops, pdf: this.pdfCache,
       includeBackground: this.settings.embedBackground === true,
     });
     const stillValid = () => {
       if (this.file !== file || this.surface !== surface || surface.document !== doc || this.isProtected()) return false;
-      const current = allocateHandwritingRegion(doc, preferredPage);
-      return current.page.id === allocation.page.id &&
+      const current = allocateHandwritingRegion(doc, preferredPage, reusableReferences);
+      return current.page.id === allocation.page.id && current.reusableClip?.id === allocation.reusableClip?.id &&
         JSON.stringify([current.pageIndex, current.bounds, current.newPage]) === JSON.stringify([allocation.pageIndex, allocation.bounds, allocation.newPage]);
     };
     if (!stillValid()) throw new Error("The notebook changed while preparing the region. Try again.");
-    // A unique attachment is created before committing the model or inserting Markdown.
-    const image = await this.app.vault.createBinary(targetPath, buffer);
+    // Ensure the attachment exists before committing the model or inserting Markdown.
+    const existing = allocation.reusableClip ? this.app.vault.getAbstractFileByPath(targetPath) : null;
+    const image = existing instanceof TFile ? existing : await this.app.vault.createBinary(targetPath, buffer);
+    if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, buffer);
     if (!stillValid()) throw new Error("The notebook changed; try again.");
     const now = Date.now();
     const clip: NotebookClip = {id: clipId, pageId: allocation.page.id, bounds: allocation.bounds,
       isExpandable: true, originY: allocation.bounds.minY, imagePath: image.path, createdAt: now, updatedAt: now};
-    surface.applyCommand(new AddHandwritingRegion(allocation, clip));
+    if (!allocation.reusableClip) surface.applyCommand(new AddHandwritingRegion(allocation, clip));
     await this.saveNow();
     if (this.file !== file || this.surface !== surface || this.isProtected()) throw new Error("The notebook view changed; the region has been saved.");
     this.pendingSubpath = `#^${clipId}`;
