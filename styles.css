@@ -7527,3 +7527,39 @@ img.finenotes-live-embed-image:hover {
 }
 
 
+
+/* Floating menus scroll as a whole, including on narrow splits and above keyboards. */
+.goodobsidian-popover,
+.goodobsidian-addpage,
+.goodobsidian-more,
+.goodobsidian-selection-menu {
+  box-sizing: border-box;
+  min-width: 0;
+  overscroll-behavior: contain;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.goodobsidian-more > *,
+.goodobsidian-selection-menu > *,
+.goodobsidian-popover-body > * {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.goodobsidian-popover .goodobsidian-wide,
+.goodobsidian-addpage-row,
+.goodobsidian-more-row,
+.goodobsidian-selection-row {
+  height: auto;
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.goodobsidian-popover .setting-item {
+  flex-wrap: wrap;
+}
+.goodobsidian-popover .setting-item-info,
+.goodobsidian-popover .setting-item-control {
+  min-width: 0;
+  max-width: 100%;
+}

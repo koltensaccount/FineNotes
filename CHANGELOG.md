@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 76 — Reachable Menus and Restored Test Coverage
+
+- Floating tool, selection, image/AI/template, and More menus stay inside the available viewport, wrap long rows, and scroll instead of squeezing or clipping their contents.
+- Respect the on-screen keyboard and all toolbar docking positions; recalculate when the viewport scrolls or menu content changes.
+- Remove conflicting text-menu positioning that could shift a menu off-screen after it was fitted.
+- Repair outdated test expectations and incomplete Obsidian mocks without changing notebook, drawing, or export behavior. All 3,653 tests pass; physical screen-size verification is pending.
+
 ### Beta 75 — Handwrite Here
 
 - Run **FineNotes: Handwrite Here** from an ordinary Markdown note to insert a live handwriting embed and open its notebook beside the note with Pen selected.

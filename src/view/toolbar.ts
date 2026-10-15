@@ -1,3 +1,4 @@
+import { fitPopover } from "./writing-popover-fit";
 import { penDynamicsProfile, type PenDynamics } from "../model/pen-dynamics";
 import { claimTransient, presetActivation } from "./transient-popover";
 import { bindColorStripInput } from "./color-strip-input";
@@ -2153,38 +2154,6 @@ export class Toolbar {
     };
     this.popoverRender();
     this.keepPopoverInside(anchor);
-    this.keepPopoverAboveKeyboard(anchor);
-  }
-
-  /**
-   * The text pill is used with the on-screen keyboard up, and a popover
-   * hanging below it used to run under the keyboard, out of reach (Joost's
-   * recording, 2026-09-22). Fit it into the room between its button and the
-   * keyboard; if there is more room above the button, open it upwards
-   * instead. Whatever still does not fit scrolls inside the popover.
-   */
-  private keepPopoverAboveKeyboard(anchor: HTMLElement): void {
-    const popover = this.popover;
-    if (!popover) return;
-    const hostBox = this.host.getBoundingClientRect();
-    const anchorBox = anchor.getBoundingClientRect();
-    const win = this.host.ownerDocument.defaultView!;
-    const floor = Math.min(hostBox.bottom, win.innerHeight - keyboardHeight()) - EDGE_INSET;
-    const below = floor - (anchorBox.bottom + 8);
-    const above = anchorBox.top - 8 - (hostBox.top + EDGE_INSET);
-    const height = popover.offsetHeight;
-    if (height <= below) return;
-    if (above > below) {
-      const room = Math.min(height, above);
-      popover.addClass("opens-up");
-      popover.setCssStyles({
-        top: `${Math.round(anchorBox.top - 8 - room - hostBox.top)}px`,
-        maxHeight: `${Math.max(0, Math.round(room))}px`,
-        transform: "translateX(-50%)",
-      });
-      return;
-    }
-    popover.setCssStyles({ maxHeight: `${Math.max(0, Math.round(below))}px` });
   }
 
   private renderTextColors(body: HTMLElement): void {
@@ -2793,13 +2762,19 @@ export class Toolbar {
       this.popoverAnchor = this.resolvePopoverAnchor();
       if (!this.popoverAnchor) { this.closePopover(); return; }
       this.keepPopoverInside(this.popoverAnchor);
-      if (this.popoverKind?.startsWith("text-")) this.keepPopoverAboveKeyboard(this.popoverAnchor);
     };
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(reposition);
+      observer.observe(body);
+      this.popoverDisposers.push(() => observer.disconnect());
+    }
     win?.addEventListener("resize", reposition);
     win?.visualViewport?.addEventListener("resize", reposition);
+    win?.visualViewport?.addEventListener("scroll", reposition);
     this.popoverDisposers.push(() => {
       win?.removeEventListener("resize", reposition);
       win?.visualViewport?.removeEventListener("resize", reposition);
+      win?.visualViewport?.removeEventListener("scroll", reposition);
     });
     return body;
   }
@@ -3209,40 +3184,24 @@ export class Toolbar {
       (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth)) - EDGE_INSET);
     const topEdge = Math.max(hostBox.top, viewport?.offsetTop ?? 0) + EDGE_INSET;
     const bottomEdge = Math.max(topEdge, Math.min(hostBox.bottom,
-      (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight)) - EDGE_INSET);
-    let left = leftEdge;
-    let right = rightEdge;
-    let top = topEdge;
-    let bottom = bottomEdge;
-    if (pos === "left") left = Math.min(right, Math.max(left, anchorBox.right + 8));
-    else if (pos === "right") right = Math.max(left, Math.min(right, anchorBox.left - 8));
-    else {
-      const below = Math.max(0, bottom - anchorBox.bottom - 8);
-      const above = Math.max(0, anchorBox.top - 8 - top);
-      if ((pos === "bottom" && above > 0) || (below < 200 && above > below)) {
-        bottom = Math.max(top, Math.min(bottom, anchorBox.top - 8));
-      } else {
-        top = Math.min(bottom, Math.max(top, anchorBox.bottom + 8));
-      }
-    }
+      (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight), win.innerHeight - keyboardHeight(this.host.ownerDocument)) - EDGE_INSET);
+    const measured = popover.getBoundingClientRect();
+    const fit = fitPopover({left: leftEdge, right: rightEdge, top: topEdge, bottom: bottomEdge}, anchorBox,
+      {width: measured.width, height: Math.max(measured.height, popover.scrollHeight ?? 0)}, pos);
     popover.setCssStyles({
-      maxWidth: `${Math.floor(right - left)}px`,
-      maxHeight: `${Math.floor(bottom - top)}px`,
-      transform: "none",
+      maxWidth: `${Math.floor(fit.maxWidth)}px`, maxHeight: `${Math.floor(fit.maxHeight)}px`,
+      transform: "none", boxSizing: "border-box",
     });
-    const box = popover.getBoundingClientRect();
-    const width = Math.min(box.width, right - left);
-    const height = Math.min(box.height, bottom - top);
-    const centre = anchorBox.left + anchorBox.width / 2;
-    const x = pos === "left" ? left : pos === "right" ? right - width :
-      Math.max(left, Math.min(right - width, centre - width / 2));
-    const y = pos === "bottom" || bottom < bottomEdge ? bottom - height :
-      pos === "top" ? top : Math.max(top, Math.min(bottom - height, anchorBox.top));
+    // Measure after width constraints: wrapped labels can make the menu taller.
+    const resized = popover.getBoundingClientRect();
+    const placed = fitPopover({left: leftEdge, right: rightEdge, top: topEdge, bottom: bottomEdge}, anchorBox,
+      {width: resized.width, height: Math.max(resized.height, popover.scrollHeight ?? 0)}, pos);
     popover.setCssStyles({
-      left: `${Math.round(x - hostBox.left)}px`,
-      top: `${Math.round(y - hostBox.top)}px`,
+      left: `${Math.round(placed.left - hostBox.left)}px`, top: `${Math.round(placed.top - hostBox.top)}px`,
+      maxHeight: `${Math.floor(placed.maxHeight)}px`,
     });
-    popover.setCssProps({ "--gob-popover-arrow": `${Math.round(centre - x - width / 2)}px` });
+    const centre = (anchorBox.left + anchorBox.right) / 2;
+    popover.setCssProps({ "--gob-popover-arrow": `${Math.round(centre - placed.left - resized.width / 2)}px` });
   }
 
   /** Dismiss the popover on an outside press or Escape. */

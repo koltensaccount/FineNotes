@@ -5,8 +5,8 @@
  * the keyboard off `visualViewport` — on Obsidian's iPad app it does not
  * shrink for the keyboard (ledger: "Obsidian's iPad keyboard cap").
  */
-export function keyboardHeight(): number {
-  const raw = getComputedStyle(document.body).getPropertyValue("--keyboard-height");
+export function keyboardHeight(doc: Document = document): number {
+  const raw = getComputedStyle(doc.body).getPropertyValue("--keyboard-height");
   const px = parseFloat(raw);
   return Number.isFinite(px) && px > 0 ? px : 0;
 }

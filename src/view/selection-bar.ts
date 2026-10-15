@@ -1,3 +1,4 @@
+import { fitPopover } from "./writing-popover-fit";
 import { claimTransient } from "./transient-popover";
 /**
  * The selection's floating action bar and its "…" menu (0.5), drawn from a
@@ -39,9 +40,6 @@ import {
 const BAR_GAP_PX = 12;
 /** Least distance kept between the bar or menu and the edge of the visible area, px. */
 const EDGE_MARGIN_PX = 8;
-/** Space between the "…" button and the menu, px. */
-const MENU_GAP_PX = 6;
-/** The menu's height cap never goes below this, however little room is left. */
 
 export interface ShowOptions {
   /** Room to keep free above the selection (a handle drawn there), px. */
@@ -360,17 +358,12 @@ export class SelectionActionBar {
       maxY: this.el.offsetTop + this.el.offsetHeight,
     };
     const visible = this.visible ?? anchor;
-    // Never taller than the room beside the bar (the custom colour picker
-    // made it run off the screen): past that it scrolls.
-    const below = visible.maxY - EDGE_MARGIN_PX - (anchor.maxY + MENU_GAP_PX);
-    const above = anchor.minY - MENU_GAP_PX - (visible.minY + EDGE_MARGIN_PX);
-    menu.setCssStyles({ maxHeight: `${Math.round(Math.max(0, below, above))}px`, maxWidth: `${Math.max(0, visible.maxX - visible.minX - 2 * EDGE_MARGIN_PX)}px` });
-    const at = placeFloating(anchor, { w: menu.offsetWidth, h: menu.offsetHeight }, visible, {
-      gap: MENU_GAP_PX,
-      margin: EDGE_MARGIN_PX,
-      prefer: "below",
-    });
-    menu.setCssStyles({ left: `${Math.round(at.x)}px`, top: `${Math.round(at.y)}px` });
+    const rect = {left: visible.minX + EDGE_MARGIN_PX, right: visible.maxX - EDGE_MARGIN_PX,
+      top: visible.minY + EDGE_MARGIN_PX, bottom: visible.maxY - EDGE_MARGIN_PX};
+    const anchorRect = {left: anchor.minX, right: anchor.maxX, top: anchor.minY, bottom: anchor.maxY};
+    menu.setCssStyles({maxWidth: `${Math.max(0, rect.right - rect.left)}px`});
+    const fit = fitPopover(rect, anchorRect, {width: menu.offsetWidth, height: Math.max(menu.offsetHeight, menu.scrollHeight ?? 0)});
+    menu.setCssStyles({left: `${Math.round(fit.left)}px`, top: `${Math.round(fit.top)}px`, maxHeight: `${Math.floor(fit.maxHeight)}px`});
   }
 }
 

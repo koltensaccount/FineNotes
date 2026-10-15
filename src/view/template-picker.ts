@@ -1,3 +1,5 @@
+import { keyboardHeight } from "./keyboard";
+import { fitPopover } from "./writing-popover-fit";
 import { claimTransient } from "./transient-popover";
 /**
  * Choosing a page template, after GoodNotes:
@@ -63,19 +65,15 @@ export function placePopover(el: HTMLElement, anchor: HTMLElement, maxWidth: num
   const leftEdge = (viewport?.offsetLeft ?? 0) + 8;
   const topEdge = (viewport?.offsetTop ?? 0) + 8;
   const rightEdge = (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth) - 8;
-  const bottomEdge = (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight) - 8;
+  const bottomEdge = Math.max(topEdge, Math.min((viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight), win.innerHeight - keyboardHeight(anchor.ownerDocument)) - 8);
   const r = anchor.getBoundingClientRect();
   const width = Math.max(0, Math.min(maxWidth, rightEdge - leftEdge));
-  el.setCssStyles({ width: `${width}px`, maxHeight: `${Math.max(0, bottomEdge - topEdge)}px` });
-  const desiredHeight = el.offsetHeight;
-  const below = Math.max(0, bottomEdge - r.bottom - 6);
-  const above = Math.max(0, r.top - topEdge - 6);
-  const flip = desiredHeight > below && above > below;
-  const room = flip ? above : below;
-  const height = Math.min(desiredHeight, room);
+  el.setCssStyles({ width: `${width}px`, maxWidth: `${width}px`, boxSizing: "border-box", maxHeight: `${Math.max(0, bottomEdge - topEdge)}px` });
+  const fit = fitPopover({left: leftEdge, right: rightEdge, top: topEdge, bottom: bottomEdge}, r,
+    {width: el.offsetWidth, height: Math.max(el.offsetHeight, el.scrollHeight)});
+  // Body-mounted menus align to the right edge of their anchor.
   const left = Math.max(leftEdge, Math.min(r.right - width, rightEdge - width));
-  const top = Math.max(topEdge, Math.min(flip ? r.top - height - 6 : r.bottom + 6, bottomEdge - height));
-  el.setCssStyles({ left: `${left}px`, top: `${top}px`, maxHeight: `${room}px`, overflowY: "auto" });
+  el.setCssStyles({ left: `${left}px`, top: `${fit.top}px`, maxHeight: `${fit.maxHeight}px`, overflowY: "auto" });
 }
 
 /**
@@ -107,6 +105,8 @@ export function installPopoverDismiss(
   // Capture: the drawing surface consumes its own pointer events.
   doc.addEventListener("pointerdown", onDown, true);
   doc.addEventListener("keydown", onKey);
+  const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
+  observer?.observe(el);
   win.addEventListener("resize", onResize);
   win.visualViewport?.addEventListener("resize", onResize);
   win.visualViewport?.addEventListener("scroll", onResize);
@@ -114,6 +114,7 @@ export function installPopoverDismiss(
   // popover instead of opening another (see each popover's `isOpen`).
   return () => {
     release();
+    observer?.disconnect();
     doc.removeEventListener("pointerdown", onDown, true);
     doc.removeEventListener("keydown", onKey);
     win.removeEventListener("resize", onResize);
