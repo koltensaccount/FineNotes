@@ -2074,6 +2074,7 @@ export class InkView extends TextFileView {
         backdropPainter: this.backdrops,
         pdf: this.pdfCache,
         padding: 0,
+        includeBackground: this.settings.embedBackground === true,
       });
     } catch {
       new Notice("FineNotes failed to render page embed PNG.");
@@ -2130,6 +2131,7 @@ export class InkView extends TextFileView {
         images: this.images,
         backdropPainter: this.backdrops,
         pdf: this.pdfCache,
+        includeBackground: this.settings.embedBackground === true,
       });
     } catch {
       new Notice("FineNotes failed to render clip PNG.");
@@ -2196,6 +2198,9 @@ export class InkView extends TextFileView {
     const doc = structuredClone(this.doc);
     if (!doc || !doc.pages) return;
 
+    const isDark = typeof document !== "undefined" && document.body.classList.contains("theme-dark");
+    const incBg = this.settings.embedBackground === true;
+
     for (const page of doc.pages) {
       if(performance.now()-this.latestDrawingAt < 300) {this.embedRefreshPending=true;return;}
       if (page.clips && page.clips.length > 0) {
@@ -2204,13 +2209,14 @@ export class InkView extends TextFileView {
           const abstract = this.app.vault.getAbstractFileByPath(clip.imagePath);
           if (abstract instanceof TFile) {
             const currentBounds = clipCurrentBounds(page, clip);
-            const hash=JSON.stringify([page,currentBounds]);
+            const hash=JSON.stringify([page,currentBounds,incBg,isDark]);
             if(this.embedHashes.get(clip.imagePath)===hash) continue;
             try {
               const buffer = await renderClipPng(page, currentBounds, {
                 images: this.images,
                 backdropPainter: this.backdrops,
                 pdf: this.pdfCache,
+                includeBackground: incBg,
               });
               if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
               await this.app.vault.modifyBinary(abstract, buffer);
@@ -2227,7 +2233,7 @@ export class InkView extends TextFileView {
         if (abstract instanceof TFile) {
           const geom = page.geometry ?? { width: 1024, height: 1366 };
           const fullBounds: Bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
-          const hash=JSON.stringify([page,fullBounds]);
+          const hash=JSON.stringify([page,fullBounds,incBg,isDark]);
           if(this.embedHashes.get(page.pageEmbedPath)===hash) continue;
           try {
             const buffer = await renderClipPng(page, fullBounds, {
@@ -2235,6 +2241,7 @@ export class InkView extends TextFileView {
               backdropPainter: this.backdrops,
               pdf: this.pdfCache,
               padding: 0,
+              includeBackground: incBg,
             });
             if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
             await this.app.vault.modifyBinary(abstract, buffer);

@@ -269,7 +269,28 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
   }
 
   override getSettingDefinitions(): SettingDefinitionItem[] {
-    return [...this.writingRows(), group("PDF Export", [dropdown("pdfExportQuality", "Default quality", "Raster detail for manual and inherited Companion PDF exports. Physical page sizes and source PDF vectors stay unchanged.", PDF_QUALITY_LABELS)]), ...this.recognitionRows(), this.aiGroup(), this.supportGroup()];
+    return [
+      ...this.writingRows(),
+      group("Notebook Embeds", [
+        toggle(
+          "embedBackground",
+          "Embed paper background",
+          "Include notebook paper color and ruling lines when copying live image embeds. When disabled (default), embeds have a transparent background with intelligent text contrast.",
+          ["embed", "background", "clip", "transparent"],
+        ),
+      ]),
+      group("PDF Export", [
+        dropdown(
+          "pdfExportQuality",
+          "Default quality",
+          "Raster detail for manual and inherited Companion PDF exports. Physical page sizes and source PDF vectors stay unchanged.",
+          PDF_QUALITY_LABELS,
+        ),
+      ]),
+      ...this.recognitionRows(),
+      this.aiGroup(),
+      this.supportGroup(),
+    ];
   }
 
   override getControlValue(key: string): unknown {

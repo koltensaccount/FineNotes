@@ -1,7 +1,7 @@
 import {it,expect,vi} from "vitest";
 vi.mock("obsidian",async()=>({...await import("./fake-obsidian"),MarkdownRenderChild:class {onunload(){} }}));
 import {blankPage,emptyDocument} from "../../src/model/document";
-import {renderClipPng} from "../../src/view/clip-png";
+import {renderClipPng, adaptColorForTheme} from "../../src/view/clip-png";
 import {FineNotesEmbedManager} from "../../src/view/embed-renderer";
 import {InkView} from "../../src/view/ink-view";
 
@@ -56,4 +56,57 @@ it("never overlaps refreshes when a newer save arrives during rendering",async()
   const second=view.updateClipsPng();release();await vi.advanceTimersByTimeAsync(250);await Promise.all([first,second]);
   expect(maximum).toBe(1);expect(view.refreshEmbedImages).toHaveBeenCalledTimes(2);
  } finally {vi.useRealTimers();vi.unstubAllGlobals();}
+});
+
+it("adapts monochrome dark text to white in dark mode, and light text to dark in light mode, preserving colors", () => {
+  expect(adaptColorForTheme("#000000", true)).toBe("#ffffff");
+  expect(adaptColorForTheme("black", true)).toBe("#ffffff");
+  expect(adaptColorForTheme("#1a1a1a", true)).toBe("#ffffff");
+  expect(adaptColorForTheme("#ffffff", false)).toBe("#1a1a1a");
+  expect(adaptColorForTheme("white", false)).toBe("#1a1a1a");
+  // Vibrant colors must not be altered
+  expect(adaptColorForTheme("#1971c2", true)).toBe("#1971c2");
+  expect(adaptColorForTheme("#e03131", true)).toBe("#e03131");
+  expect(adaptColorForTheme("#2f9e44", false)).toBe("#2f9e44");
+  expect(adaptColorForTheme("#fcc419", false)).toBe("#fcc419");
+});
+
+it("supports transparent embed rendering without drawing page paper backdrop", async () => {
+  let backdropPainted = false;
+  const context = {
+    save: vi.fn(),
+    restore: vi.fn(),
+    scale: vi.fn(),
+    translate: vi.fn(),
+    fillRect: vi.fn(() => { backdropPainted = true; }),
+  };
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => context,
+    toBlob: (cb: (b: Blob) => void) => cb(new Blob(["png"])),
+  };
+  vi.stubGlobal("createEl", () => canvas);
+  try {
+    const page = blankPage("p1");
+    // With includeBackground = false, backdrop should not be painted
+    await renderClipPng(page, { minX: 0, minY: 0, maxX: 100, maxY: 100 }, {
+      includeBackground: false,
+      backdropPainter: {
+        paint: () => { backdropPainted = true; },
+      },
+    });
+    expect(backdropPainted).toBe(false);
+
+    // With includeBackground = true, backdrop is painted
+    await renderClipPng(page, { minX: 0, minY: 0, maxX: 100, maxY: 100 }, {
+      includeBackground: true,
+      backdropPainter: {
+        paint: () => { backdropPainted = true; },
+      },
+    });
+    expect(backdropPainted).toBe(true);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

@@ -59,6 +59,8 @@ export interface GoodObsidianSettings {
   toolbarPosition?: ToolbarPosition;
   /** Docked position of the tool options sub-menu pill: top, bottom, left, or right. */
   optionsPosition?: ToolbarPosition;
+  /** Include notebook paper color and ruling lines in live image embeds (default false/transparent). */
+  embedBackground?: boolean;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;
@@ -314,6 +316,7 @@ export function shownValue(settings: GoodObsidianSettings, key: string): unknown
       settings.writingPresets,
       settings.defaultTool === "highlighter" ? "highlighter" : "pen",
     );
+  if (key === "embedBackground") return settings.embedBackground ?? false;
   const stored = (settings as unknown as Record<string, unknown>)[key];
   const convert = conversion(key);
   return convert ? convert.show(stored) : stored;

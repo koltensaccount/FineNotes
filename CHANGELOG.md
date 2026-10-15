@@ -8,6 +8,31 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 73 — Transparent Embeds Toggle with Intelligent Dark/Light Theme Contrast
+
+- **Transparent Background by Default**:
+  - Live notebook embeds are now rendered with a clean transparent background by default, allowing notes to blend seamlessly into markdown documents.
+  - Added "Embed paper background" toggle in Settings -> Notebook Embeds (default: off). Enabling it includes notebook paper color and ruling lines in the PNG.
+- **Intelligent Contrast Adaptation**:
+  - Automatically converts dark/black text and strokes to white (`#ffffff`) when Obsidian is in Dark Mode with transparent background enabled.
+  - Automatically converts light/white text and strokes to high-contrast dark (`#1a1a1a`) when Obsidian is in Light Mode.
+  - Vibrantly colored handwriting (blue, red, green, highlighter yellow) is preserved without alteration.
+  - Circuits rendered in dark mode on transparent canvases are automatically inverted for crisp readability.
+- **Immediate Live Updating**:
+  - Changing the background setting or switching between light and dark themes immediately invalidates cached PNG hashes and refreshes open embeds on next notebook save.
+
+### Beta 72 — Clean Markdown Embed Markup
+
+- **Standard Markdown Embeds**:
+  - Embed references now paste as standard `![[Notebook-clip-xyz.png]]` without extraneous markdown anchor wrappers.
+  - Clicking the embed image seamlessly triggers navigation to the notebook and highlights the clip via native Obsidian markdown post-processors.
+
+### Beta 71 — Live Embed Fixes and Refinements
+
+- **PDF Background and Refresh Stability**:
+  - Fixed PDF canvas cleanup and region capture during clip rasterization.
+  - Coalesced and serialized disk refresh writes to prevent races or overlapping renders during active handwriting.
+
 ### Beta 70 — Live updating PNG notebook region and page embeds
 
 - **PNG Embeds with Authentic Background**:
