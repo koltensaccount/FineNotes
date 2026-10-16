@@ -2613,18 +2613,17 @@ export class Toolbar {
 
   private renderPenTypes(body: HTMLElement, openGestures: () => void): void {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
+    const types = body.createDiv({ cls: "goodobsidian-tool-choices" });
     for (const spec of PEN_MENU_TYPES) {
       if (spec.pressure && this.callbacks.pressureAllowed?.() !== true) continue;
-      const button = body.createEl("button", {
-        cls: "goodobsidian-wide goodobsidian-pen-choice clickable-icon",
-        attr: { "aria-label": spec.label, title: spec.label },
+      const button = types.createEl("button", {
+        cls: "goodobsidian-tool-choice goodobsidian-pen-card clickable-icon",
+        attr: { "aria-label": spec.label, title: `${spec.label} — ${TOOL_HINTS[spec.id]}` },
       });
       button.append(this.penTypeGraphic(spec));
       const caption = button.createSpan({ cls: "goodobsidian-pen-caption" });
       caption.createSpan({ text: spec.label });
-      caption.createSpan({ cls: "goodobsidian-pen-hint", text: TOOL_HINTS[spec.id] });
-      const check = button.createSpan({ cls: "goodobsidian-pen-choice-check", attr: { "aria-hidden": "true" } });
-      setIcon(check, "check");
+
       button.setAttribute("aria-pressed", String(spec.id === this.activePenType().id));
       button.toggleClass("is-active", spec.id === this.activePenType().id);
       button.addEventListener("click", () => {
@@ -2656,14 +2655,14 @@ export class Toolbar {
       };
       range.onchange=()=>this.callbacks.onPenDynamicsChange?.(this.state.penDynamics ?? {});
     }
-    dynamics.createDiv({cls:"goodobsidian-popover-hint",text:"Stabilization steadies new strokes; higher values follow the pen more slowly. Ballpoint has a constant width."});
+    dynamics.createDiv({cls:"goodobsidian-popover-hint",text:"Higher stabilization follows the pen more slowly."});
     body.createDiv({ cls: "goodobsidian-popover-divider" });
     const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(constraints, "Constrain shapes", this.state.constrainShapes === true, on => {
       this.state.constrainShapes = on;
       this.callbacks.onConstrainShapesChange?.(on);
     });
-    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Choose before drawing. Snap shape angles to 15° steps and make rectangles/ellipses square/circular. Handwriting stays unchanged." });
+    body.createDiv({ cls: "goodobsidian-popover-hint", text: "15° angles, squares and circles. Set before drawing." });
     body.createDiv({ cls: "goodobsidian-popover-divider" });
     const link = body.createEl("button", {
       cls: "goodobsidian-wide goodobsidian-popover-link clickable-icon",
