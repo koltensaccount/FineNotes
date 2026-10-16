@@ -24,6 +24,8 @@ export interface RenderClipPngOptions {
   scale?: number;
   images?: ImagePainter | null;
   includeBackground?: boolean;
+  usePressure?: boolean;
+  highlighterAlpha?: number;
   themeMode?: "dark" | "light";
   backdropPainter?: {
     paint: (
@@ -226,9 +228,9 @@ export async function renderClipPng(
     if (!includeBackground) {
       const adaptedColor = adaptColorForTheme(stroke.color, isDark);
       const adaptedStroke = adaptedColor === stroke.color ? stroke : { ...stroke, color: adaptedColor };
-      fillStroke(ctx, adaptedStroke.pts, styleOf(adaptedStroke, true), DEFAULT_HIGHLIGHTER_ALPHA);
+      fillStroke(ctx, adaptedStroke.pts, styleOf(adaptedStroke, options.usePressure ?? true), options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA);
     } else {
-      fillStroke(ctx, stroke.pts, styleOf(stroke, true), DEFAULT_HIGHLIGHTER_ALPHA);
+      fillStroke(ctx, stroke.pts, styleOf(stroke, options.usePressure ?? true), options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA);
     }
   }
 

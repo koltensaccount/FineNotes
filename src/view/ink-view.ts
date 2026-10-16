@@ -283,6 +283,7 @@ export class InkView extends TextFileView {
   /** Tracks whether user handwriting or regions changed during this view session. */
   private clipsDirty = false;
   private embedRefreshTimer = 0;
+  private resolveEmbedRefreshDelay: (() => void) | null = null;
   /** The file whose data `setViewData` last loaded; `null` after `clear`. */
   private loadedPath: string | null = null;
   private backdrops: VaultBackdropRenderer | null = null;
@@ -421,6 +422,8 @@ export class InkView extends TextFileView {
     if (this.embedRefreshTimer) {
       window.clearTimeout(this.embedRefreshTimer);
       this.embedRefreshTimer = 0;
+      this.resolveEmbedRefreshDelay?.();
+      this.resolveEmbedRefreshDelay = null;
     }
     this.embedRefreshPending = false;
     this.clipsDirty = false;
@@ -523,6 +526,8 @@ export class InkView extends TextFileView {
     if (this.embedRefreshTimer) {
       window.clearTimeout(this.embedRefreshTimer);
       this.embedRefreshTimer = 0;
+      this.resolveEmbedRefreshDelay?.();
+      this.resolveEmbedRefreshDelay = null;
     }
     this.embedRefreshPending = false;
     this.clipsDirty = false;
@@ -2099,6 +2104,8 @@ export class InkView extends TextFileView {
     const buffer = await renderClipPng(allocation.page, allocation.bounds, {
       images: this.images, backdropPainter: this.backdrops, pdf: this.pdfCache,
       includeBackground: this.settings.embedBackground === true,
+      usePressure: this.toolState.pressureEnabled,
+      highlighterAlpha: this.settings.highlighterAlpha,
       themeMode: isDark ? "dark" : "light",
     });
     const stillValid = () => {
@@ -2113,7 +2120,7 @@ export class InkView extends TextFileView {
     const image = existing instanceof TFile ? existing : await this.app.vault.createBinary(targetPath, buffer);
     if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, buffer);
     if (!stillValid()) throw new Error("The notebook changed; try again.");
-    this.embedHashes.set(image.path, JSON.stringify([allocation.page, allocation.bounds, this.settings.embedBackground === true, isDark]));
+    this.embedHashes.set(image.path, JSON.stringify([allocation.page, allocation.bounds, this.settings.embedBackground === true, isDark, this.toolState.pressureEnabled, this.settings.highlighterAlpha]));
     const now = Date.now();
     const clip: NotebookClip = {id: clipId, pageId: allocation.page.id, bounds: allocation.bounds,
       isExpandable: true, originY: allocation.bounds.minY, imagePath: image.path, createdAt: now, updatedAt: now};
@@ -2156,6 +2163,8 @@ export class InkView extends TextFileView {
         pdf: this.pdfCache,
         padding: 0,
         includeBackground: this.settings.embedBackground === true,
+        usePressure: this.toolState.pressureEnabled,
+        highlighterAlpha: this.settings.highlighterAlpha,
         themeMode: (typeof document !== "undefined" && document.body?.classList.contains("theme-dark")) ? "dark" : "light",
       });
     } catch {
@@ -2219,6 +2228,8 @@ export class InkView extends TextFileView {
         backdropPainter: this.backdrops,
         pdf: this.pdfCache,
         includeBackground: this.settings.embedBackground === true,
+        usePressure: this.toolState.pressureEnabled,
+        highlighterAlpha: this.settings.highlighterAlpha,
         themeMode: (typeof document !== "undefined" && document.body?.classList.contains("theme-dark")) ? "dark" : "light",
       });
     } catch {
@@ -2280,8 +2291,10 @@ export class InkView extends TextFileView {
       while(this.embedRefreshPending) {
         this.embedRefreshPending=false;
         await new Promise<void>(resolve => {
+          this.resolveEmbedRefreshDelay = resolve;
           this.embedRefreshTimer = window.setTimeout(() => {
             this.embedRefreshTimer = 0;
+            this.resolveEmbedRefreshDelay = null;
             resolve();
           }, 250);
         });
@@ -2316,7 +2329,7 @@ export class InkView extends TextFileView {
             if (!Number.isFinite(currentBounds.minX) || !Number.isFinite(currentBounds.minY) ||
                 !Number.isFinite(currentBounds.maxX) || !Number.isFinite(currentBounds.maxY) ||
                 currentBounds.maxX <= currentBounds.minX || currentBounds.maxY <= currentBounds.minY) continue;
-            const hash=JSON.stringify([page,currentBounds,incBg,isDark]);
+            const hash=JSON.stringify([page,currentBounds,incBg,isDark,this.toolState.pressureEnabled,this.settings.highlighterAlpha]);
             if(this.embedHashes.get(clip.imagePath)===hash) continue;
             try {
               const buffer = await renderClipPng(page, currentBounds, {
@@ -2324,6 +2337,8 @@ export class InkView extends TextFileView {
                 backdropPainter: this.backdrops,
                 pdf: this.pdfCache,
                 includeBackground: incBg,
+                usePressure: this.toolState.pressureEnabled,
+                highlighterAlpha: this.settings.highlighterAlpha,
                 themeMode: isDark ? "dark" : "light",
               });
               if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending || this.surface === null) continue;
@@ -2343,7 +2358,7 @@ export class InkView extends TextFileView {
         if (abstract instanceof TFile) {
           const geom = page.geometry ?? { width: 1024, height: 1366 };
           const fullBounds: Bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
-          const hash=JSON.stringify([page,fullBounds,incBg,isDark]);
+          const hash=JSON.stringify([page,fullBounds,incBg,isDark,this.toolState.pressureEnabled,this.settings.highlighterAlpha]);
           if(this.embedHashes.get(page.pageEmbedPath)===hash) continue;
           try {
             const buffer = await renderClipPng(page, fullBounds, {
@@ -2352,6 +2367,8 @@ export class InkView extends TextFileView {
               pdf: this.pdfCache,
               padding: 0,
               includeBackground: incBg,
+              usePressure: this.toolState.pressureEnabled,
+              highlighterAlpha: this.settings.highlighterAlpha,
               themeMode: isDark ? "dark" : "light",
             });
             if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending || this.surface === null) continue;
@@ -2365,7 +2382,7 @@ export class InkView extends TextFileView {
         }
       }
     }
-    this.clipsDirty = false;
+    if (!this.embedRefreshPending) this.clipsDirty = false;
   }
 
   // --- The ⋯ panel -----------------------------------------------------------

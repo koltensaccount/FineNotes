@@ -97,6 +97,8 @@ export class FineNotesEmbedManager {
                 const buffer = await renderClipPng(page, asset.bounds, {
                   images: this.imageCache, backdropPainter: this.backdropPainter, pdf: this.pdfCache,
                   includeBackground, themeMode, padding: asset.padding,
+                  usePressure: this.plugin.settings.pressureWidth,
+                  highlighterAlpha: this.plugin.settings.highlighterAlpha,
                 });
                 if (this.disposed || this.pngRefreshPending || file.stat.mtime !== mtime) break;
                 // A notebook opened during rendering is now owned by its InkView.

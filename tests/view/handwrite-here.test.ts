@@ -272,6 +272,7 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
     doc,
     guard: { locked: false },
     latestDrawingAt: 0,
+    toolState: { pressureEnabled: false },
     embedRefreshPending: false,
     embedHashes: new Map(),
     isProtected: () => false,
@@ -323,10 +324,16 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
   expect(renderClipPng).toHaveBeenLastCalledWith(
     expect.anything(),
     expect.objectContaining({ maxY: 824 }),
-    expect.objectContaining({ includeBackground: false }),
+    expect.objectContaining({ includeBackground: false, usePressure: false }),
   );
   expect(view.app.vault.modifyBinary).toHaveBeenCalledWith(image, expect.any(ArrayBuffer));
   expect(view.plugin.embedManager.refreshEmbedImagesInDom).toHaveBeenCalledWith(image);
+  // A stroke arriving during async rendering must survive into the next refresh.
+  view.embedHashes.clear();
+  view.clipsDirty = true;
+  view.app.vault.modifyBinary.mockImplementationOnce(async () => { view.embedRefreshPending = true; });
+  await view.refreshEmbedImages();
+  expect(view.clipsDirty).toBe(true);
 });
 
 it("reclaims the earliest unreferenced empty region instead of reserving more blank space", () => {

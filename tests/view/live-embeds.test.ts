@@ -5,6 +5,7 @@ vi.mock("obsidian",async()=>({...await import("./fake-obsidian"),MarkdownRenderC
 import {blankPage,emptyDocument} from "../../src/model/document";
 import {renderClipPng, adaptColorForTheme} from "../../src/view/clip-png";
 import {FineNotesEmbedManager} from "../../src/view/embed-renderer";
+import * as renderer from "../../src/canvas/renderer";
 import {InkView} from "../../src/view/ink-view";
 
 it("waits for PDF pixels before encoding and releases both canvases",async()=>{
@@ -209,4 +210,36 @@ it("navigates renamed PNGs before their closed notebook is rewritten, including 
   manager.sourceIndex = null;
   expect(await manager.imageSource(img(image))).toBe(`${book.path}#^clip-moved`);
   expect(read).toHaveBeenCalledOnce();
+});
+
+
+it("settles the pending embed delay when a notebook view closes", async () => {
+  vi.useFakeTimers(); vi.stubGlobal("window", globalThis);
+  try {
+    const view = Object.assign(Object.create(InkView.prototype), {
+      doc: {pages: [{pageEmbedPath: "embed.png"}]}, clipsDirty: true,
+      embedRefreshPending: false, embedRefreshRunning: null,
+      refreshEmbedImages: vi.fn(), recordLastPage: vi.fn(), dismissMenus: vi.fn(),
+      surface: null, file: null, companionUnloadedFile: null, contentEl: {empty: vi.fn()},
+    });
+    const pending = view.updateClipsPng();
+    await view.onClose();
+    await pending;
+    expect(view.embedRefreshRunning).toBeNull();
+    expect(view.refreshEmbedImages).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+});
+
+it("renders embed ink with the selected pressure and highlighter opacity", async () => {
+  const fill = vi.spyOn(renderer, "fillStroke").mockImplementation(() => {});
+  const context = {save: vi.fn(), restore: vi.fn(), scale: vi.fn(), translate: vi.fn()};
+  vi.stubGlobal("createEl", () => ({width: 0, height: 0, getContext: () => context,
+    toBlob: (cb: (blob: Blob) => void) => cb(new Blob(["png"]))}));
+  try {
+    const page = blankPage("p1");
+    page.strokes = [{id: "s", tool: "highlighter", color: "#1971c2", size: 8, pts: [10,10,.2,50,50,.9]}];
+    await renderClipPng(page, {minX: 0,minY: 0,maxX: 100,maxY: 100}, {usePressure: false, highlighterAlpha: .18});
+    expect(fill).toHaveBeenCalledWith(context, page.strokes[0].pts,
+      expect.objectContaining({usePressure: false, color: "#1971c2"}), .18);
+  } finally { fill.mockRestore(); vi.unstubAllGlobals(); }
 });
