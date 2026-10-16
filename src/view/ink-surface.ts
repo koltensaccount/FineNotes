@@ -1889,6 +1889,8 @@ export class InkSurface {
   private handwritingGuideEls = new Map<string, HTMLElement>();
 
   /** DOM-only guides: coalesced away from Pencil input, never rendered into PNG/PDF. */
+  refreshHandwritingRegions(): void { this.scheduleHandwritingRegions(); }
+
   private scheduleHandwritingRegions(): void {
     if (!this.selectionUiEl || this.handwritingGuideFrame) return;
     this.handwritingGuideFrame = window.requestAnimationFrame(() => {
@@ -1911,7 +1913,6 @@ export class InkSurface {
         if (!el) {
           el = this.selectionUiEl.createDiv({cls: "finenotes-handwriting-region"});
           el.setAttribute("aria-hidden", "true");
-          el.createSpan({cls: "finenotes-handwriting-region-label", text: "Live handwriting"});
           this.handwritingGuideEls.set(key, el);
         }
         const bounds = clipCurrentBounds(page, clip), scale = this.unitScale;

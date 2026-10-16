@@ -303,6 +303,8 @@ export interface CircuitElement {
 /** A persistent clip reference capturing a cropped region of a notebook page. */
 export interface NotebookClip {
   isExpandable?: boolean;
+  /** Derived link state: unreferenced regions must not stop another region expanding. */
+  isUnreferenced?: boolean;
   originY?: number;
   id: string;
   pageId: string;
@@ -609,7 +611,7 @@ export function elementsBounds(
 export function clipCurrentBounds(page: Page, clip: NotebookClip): Bounds {
   if (clip.isExpandable && typeof clip.originY === "number" && Number.isFinite(clip.originY)) {
     const origin = clip.originY;
-    const nextOrigin = Math.min(...(page.clips ?? []).filter(other => other !== clip && other.isExpandable && typeof other.originY === "number" && other.originY > origin).map(other => other.originY!));
+    const nextOrigin = Math.min(...(page.clips ?? []).filter(other => other !== clip && other.isExpandable && !other.isUnreferenced && typeof other.originY === "number" && other.originY > origin).map(other => other.originY!));
     const boxes: Bounds[] = [];
     const include = (box: Bounds | null) => { if (box && box.minY >= origin - 20 && box.minY < nextOrigin - 20) boxes.push(box); };
     for (const stroke of page.strokes) include(strokeBounds(stroke));

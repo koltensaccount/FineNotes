@@ -1,4 +1,5 @@
-import { AddHandwritingRegion, allocateHandwritingRegion } from "../model/region-allocation";
+import { referencedEmbedImages } from "./embed-references";
+import { AddHandwritingRegion, allocateHandwritingRegion, updateHandwritingReferences } from "../model/region-allocation";
 import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
 import { writingGuidesOf, type WritingGuideStyle } from "../model/writing-guides";
 import { ConfirmModal } from "../ui/confirm-modal";
@@ -1515,6 +1516,7 @@ export class InkView extends TextFileView {
     }
     this.pendingSubpath = null;
     this.pendingPageIndex = null;
+    this.syncHandwritingReferences();
     const pages = surface.document.pages;
     let index: number | null = null;
     let targetRegion: Bounds | null = null;
@@ -2048,6 +2050,15 @@ export class InkView extends TextFileView {
     );
   }
 
+  private syncHandwritingReferences(): void {
+    const doc = this.surface?.document ?? this.doc;
+    if (!this.file || this.guard.locked || !this.app.metadataCache?.resolvedLinks || !doc?.pages.some(page => page.clips?.some(clip => clip.isExpandable))) return;
+    if (updateHandwritingReferences(doc, referencedEmbedImages(this.app), this.file.path)) {
+      this.surface?.refreshHandwritingRegions?.();
+      this.requestSave();
+    }
+  }
+
   /** Allocate only against the live document; never overwrite an open view from disk. */
   async createHandwritingRegion(useCurrentPage = false, referencedImages?: ReadonlySet<string>): Promise<TFile> {
     const file = this.file;
@@ -2055,6 +2066,7 @@ export class InkView extends TextFileView {
     if (!file || !surface || this.isProtected()) throw new Error("This notebook is unavailable or protected.");
     const doc = surface.document;
     const preferredPage = useCurrentPage ? surface.currentPage : doc.pages.length - 1;
+    if (referencedImages && updateHandwritingReferences(doc, referencedImages, file.path)) this.requestSave();
     // Legacy notebook embeds do not expose individual clip paths in the link index.
     const reusableReferences = referencedImages?.has(file.path) ? undefined : referencedImages;
     const allocation = allocateHandwritingRegion(doc, preferredPage, reusableReferences);
@@ -2250,6 +2262,7 @@ export class InkView extends TextFileView {
   private async refreshEmbedImages(): Promise<void> {
     if (!this.file || this.guard.locked) return;
     const sourceFile=this.file;
+    this.syncHandwritingReferences();
     const doc = structuredClone(this.surface?.document ?? this.doc);
     if (!doc || !doc.pages) return;
 

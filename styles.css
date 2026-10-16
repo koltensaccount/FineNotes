@@ -7573,18 +7573,3 @@ img.finenotes-live-embed-image:hover {
   border-color: color-mix(in srgb, var(--interactive-accent) 24%, transparent);
   border-radius: 5px;
 }
-.finenotes-handwriting-region-label {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  max-width: 100%;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  opacity: 0.65;
-  font-size: 10px;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-  pointer-events: none;
-}

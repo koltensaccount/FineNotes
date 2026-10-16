@@ -1,3 +1,4 @@
+import { buildInkFile, parseInkFile } from "../../src/model/serialize";
 import { InkSurface } from "../../src/view/ink-surface";
 import { describe, it, expect, vi } from "vitest";
 vi.mock("obsidian", async () => ({
@@ -15,8 +16,9 @@ import {
   AddHandwritingRegion,
   allocateHandwritingRegion,
   pageContentBottom,
+  updateHandwritingReferences,
 } from "../../src/model/region-allocation";
-import { emptyDocument, blankPage } from "../../src/model/document";
+import { emptyDocument, blankPage, clipCurrentBounds } from "../../src/model/document";
 import {
   embedInsertionOffset,
   insertHandwritingEmbed,
@@ -262,6 +264,7 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
     currentPage: 0,
     applyCommand: vi.fn((command: AddHandwritingRegion) => command.apply(doc)),
     setTool: vi.fn(),
+    refreshHandwritingRegions: vi.fn(),
   };
   Object.assign(view, {
     file,
@@ -283,7 +286,7 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
       fileManager: { getAvailablePathForAttachment: vi.fn(async () => image.path) },
       vault: {
         createBinary: vi.fn(async () => image),
-        getAbstractFileByPath: () => image,
+        getAbstractFileByPath: (path: string) => (path === image.path ? image : null),
         modifyBinary: vi.fn(async () => {}),
       },
     },
@@ -300,13 +303,22 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
   expect(await view.createHandwritingRegion(false, new Set())).toBe(image);
   expect(surface.applyCommand).toHaveBeenCalledOnce();
   expect(doc.pages[0].clips).toHaveLength(1);
-  doc.pages[0].strokes.push({
-    id: "ink",
-    color: "#000",
-    size: 2,
-    tool: "pen",
-    pts: [100, 70, 1, 200, 800, 1],
+  const active = doc.pages[0].clips![0];
+  doc.pages[0].clips!.push({
+    ...active,
+    id: "clip-unused",
+    imagePath: "unused.png",
+    originY: 340,
+    bounds: { ...active.bounds, minY: 340, maxY: 580 },
   });
+  view.app.metadataCache = { resolvedLinks: { "proof.md": { [image.path]: 1 } } };
+  view.app.workspace = { getLeavesOfType: () => [] };
+  view.requestSave = vi.fn();
+  surface.refreshHandwritingRegions = vi.fn();
+  doc.pages[0].strokes.push(
+    { id: "ink-1", color: "#000", size: 2, tool: "pen", pts: [100, 70, 1, 200, 200, 1] },
+    { id: "ink-2", color: "#000", size: 2, tool: "pen", pts: [100, 350, 1, 200, 800, 1] },
+  );
   await view.refreshEmbedImages();
   expect(renderClipPng).toHaveBeenLastCalledWith(
     expect.anything(),
@@ -410,7 +422,12 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
       updatedAt: 0,
     },
   ];
-  page.clips.push({...page.clips[0], id: "clip-inactive", originY: 900, bounds: {minX: 40, minY: 900, maxX: 760, maxY: 1140}});
+  page.clips.push({
+    ...page.clips[0],
+    id: "clip-inactive",
+    originY: 900,
+    bounds: { minX: 40, minY: 900, maxX: 760, maxY: 1140 },
+  });
   const guide = {
     style: {} as Record<string, string>,
     setAttribute: vi.fn(),
@@ -453,22 +470,83 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
   expect(page.strokes).toHaveLength(1);
 });
 
-
 it("shows a single persistent handwriting guide instead of a second navigation flash", () => {
-  const doc = emptyDocument(), page = doc.pages[0];
-  const bounds = {minX: 40, minY: 60, maxX: 760, maxY: 300};
-  page.clips = [{id: "clip-active", pageId: page.id, bounds, originY: 60, isExpandable: true, createdAt: 0, updatedAt: 0}];
+  const doc = emptyDocument(),
+    page = doc.pages[0];
+  const bounds = { minX: 40, minY: 60, maxX: 760, maxY: 300 };
+  page.clips = [
+    {
+      id: "clip-active",
+      pageId: page.id,
+      bounds,
+      originY: 60,
+      isExpandable: true,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  ];
   const surface = Object.create(InkSurface.prototype) as any;
   const remove = vi.fn();
-  Object.assign(surface, {doc, cssW: 800, cssH: 600, direction: "vertical", callbacks: {},
-    pageLayout: {boxes: [{index: 0, id: page.id, x: 0, y: 0, width: 800, height: 1100}]},
-    clipHighlightEl: {remove}, scroller: {setPosition: vi.fn()},
-    cancelShapeDraft: vi.fn(), cancelGroupDrag: vi.fn(), ensurePaperSize: vi.fn(), syncViewport: vi.fn(),
-    reportStatus: vi.fn(), flashChrome: vi.fn(), flashRegion: vi.fn(), requestFrame: vi.fn(), scheduleHandwritingRegions: vi.fn(),
+  Object.assign(surface, {
+    doc,
+    cssW: 800,
+    cssH: 600,
+    direction: "vertical",
+    callbacks: {},
+    pageLayout: { boxes: [{ index: 0, id: page.id, x: 0, y: 0, width: 800, height: 1100 }] },
+    clipHighlightEl: { remove },
+    scroller: { setPosition: vi.fn() },
+    cancelShapeDraft: vi.fn(),
+    cancelGroupDrag: vi.fn(),
+    ensurePaperSize: vi.fn(),
+    syncViewport: vi.fn(),
+    reportStatus: vi.fn(),
+    flashChrome: vi.fn(),
+    flashRegion: vi.fn(),
+    requestFrame: vi.fn(),
+    scheduleHandwritingRegions: vi.fn(),
   });
-  Object.defineProperty(surface, "scale", {value: 1});
+  Object.defineProperty(surface, "scale", { value: 1 });
   surface.goToRegion(0, bounds);
   expect(surface.activeHandwritingRegionId).toBe("clip-active");
   expect(surface.flashRegion).not.toHaveBeenCalled();
   expect(remove).toHaveBeenCalledOnce();
+});
+
+it("continues past a deleted region's invisible boundary and retains all source handwriting", () => {
+  const doc = emptyDocument(),
+    page = doc.pages[0];
+  const active = {
+    id: "clip-active",
+    pageId: page.id,
+    bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
+    isExpandable: true,
+    originY: 60,
+    imagePath: "active.png",
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  const deleted = {
+    ...active,
+    id: "clip-deleted",
+    originY: 340,
+    imagePath: "deleted.png",
+    bounds: { ...active.bounds, minY: 340, maxY: 580 },
+  };
+  page.clips = [active, deleted];
+  page.strokes.push(
+    { id: "first-line", tool: "pen", color: "#000", size: 2, pts: [100, 80, 1, 200, 200, 1] },
+    { id: "continuation", tool: "pen", color: "#000", size: 2, pts: [100, 350, 1, 200, 800, 1] },
+  );
+  expect(clipCurrentBounds(page, active).maxY).toBe(224);
+  expect(updateHandwritingReferences(doc, new Set(["active.png"]), "book.notebook.md")).toBe(true);
+  expect(clipCurrentBounds(page, active).maxY).toBe(824);
+  const restored = parseInkFile(buildInkFile("", doc), 800).doc!;
+  expect(restored.pages[0].clips![1].isUnreferenced).toBe(true);
+  expect(clipCurrentBounds(restored.pages[0], restored.pages[0].clips![0]).maxY).toBe(824);
+  expect(page.strokes).toHaveLength(2);
+  expect(page.clips).toHaveLength(2);
+  // A genuinely linked next block continues to isolate its own section.
+  updateHandwritingReferences(doc, new Set(["active.png", "deleted.png"]), "book.notebook.md");
+  expect(clipCurrentBounds(page, active).maxY).toBe(224);
 });

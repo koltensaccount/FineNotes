@@ -31,6 +31,7 @@ export function handwritingRegionEmpty(page: Page, clip: NotebookClip): boolean 
         (other) =>
           other !== clip &&
           other.isExpandable &&
+          !other.isUnreferenced &&
           typeof other.originY === "number" &&
           other.originY > clip.originY!,
       )
@@ -122,4 +123,25 @@ export class AddHandwritingRegion implements Command {
     if (page?.clips) page.clips = page.clips.filter((clip) => clip !== this.clip);
     this.addPage?.invert(doc);
   }
+}
+
+/** Reconcile boundaries without deleting clips, attachments, or any source elements. */
+export function updateHandwritingReferences(
+  doc: InkDocument,
+  referencedImages: ReadonlySet<string>,
+  notebookPath: string,
+): boolean {
+  let changed = false;
+  for (const page of doc.pages)
+    for (const clip of page.clips ?? []) {
+      if (!clip.isExpandable || !clip.imagePath) continue;
+      const unreferenced =
+        !referencedImages.has(notebookPath) && !referencedImages.has(clip.imagePath);
+      if ((clip.isUnreferenced === true) !== unreferenced) {
+        if (unreferenced) clip.isUnreferenced = true;
+        else delete clip.isUnreferenced;
+        changed = true;
+      }
+    }
+  return changed;
 }

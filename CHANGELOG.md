@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 79 — Continued Handwriting Capture
+
+- Remove the handwriting label; retain the subtle active-region outline.
+- Unreferenced regions no longer act as invisible expansion boundaries. Reconcile live Markdown editors and saved references when navigating to or refreshing an embed, so existing lower lines can be captured without redrawing.
+- Preserve all clips, attachments, and source content. Genuinely referenced sections retain their boundaries; derived reference state survives save/reload.
+- Regression coverage includes continuation beyond a stale region, PNG refresh, save/reload, and restoring a real section boundary. All 3,662 tests and production build pass; physical verification is pending.
+
 ### Beta 78 — Subtle Active Writing Guide and Consistent Ink Handoff
 
 - Show one writing guide for the active handwriting region instead of outlining inactive/deleted regions. Suppress the temporary navigation flash for these regions so two boxes do not overlap.
