@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 82 — Pen Menu Polish and Live Embed Reliability
+
+- Give the pen menu clearer sections, a selected-pen checkmark, and aligned slider percentage readouts, using the existing shared menu style and touch targets.
+- Preserve pending live embed updates when newer writing arrives during PNG rendering, and settle cancelled refresh delays when a notebook view closes.
+- Render clip and page embeds with the selected pressure and highlighter opacity settings, including appearance refreshes for closed notebooks.
+- Personal BRAT testing release; physical Mac/iPad verification is pending.
+
 ### Beta 81 — Live Embeds Follow Moved PNGs
 
 - Relink clip and full-page embed PNG paths through the existing file/folder move tracker, including closed notebooks and chained moves already recorded on this device.
