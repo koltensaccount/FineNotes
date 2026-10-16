@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 83 — Quieter Pen Picker
+
+- Replace the long pen list with a compact two-column visual picker, using the same shared card styling as lasso options.
+- Remove the extra selected-pen checkmarks and lengthy visible descriptions; retain pen hints in tooltips, shorten supporting text, and preserve all controls.
+- Keep full-width sliders and readable percentage values below the picker. Pen and lasso cards share hover and selection treatment.
+- Personal BRAT testing release; physical Mac/iPad visual verification is pending.
+
 ### Beta 82 — Pen Menu Polish and Live Embed Reliability
 
 - Give the pen menu clearer sections, a selected-pen checkmark, and aligned slider percentage readouts, using the existing shared menu style and touch targets.
