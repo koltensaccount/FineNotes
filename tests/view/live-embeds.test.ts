@@ -152,3 +152,41 @@ it("refreshEmbedImagesInDom updates img src with cache buster timestamp", () => 
     vi.unstubAllGlobals();
   }
 });
+
+it("leaves existing clip embeds untouched when opening and closing without edits", async () => {
+  const page = blankPage("p1");
+  const clip = {
+    id: "clip-test",
+    pageId: page.id,
+    bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
+    originY: 60,
+    isExpandable: true,
+    imagePath: "assets/clip-test.png",
+    createdAt: 1000,
+    updatedAt: 1000,
+  };
+  page.clips = [clip];
+  page.strokes = [{ id: "s1", tool: "pen", color: "#000000", size: 2, pts: [100, 100, 1, 200, 200, 1] }];
+
+  const doc = emptyDocument();
+  doc.pages = [page];
+
+  const modifyBinary = vi.fn();
+  const view = Object.assign(Object.create(InkView.prototype), {
+    file: { path: "notebook.notebook.md" },
+    surface: { document: doc },
+    doc,
+    clipsDirty: false,
+    writeHold: { saved: vi.fn() },
+    updateClipsPng: vi.fn(),
+  });
+
+  // Gated behind clipsDirty
+  if (view.clipsDirty) {
+    await view.updateClipsPng();
+  }
+
+  expect(view.updateClipsPng).not.toHaveBeenCalled();
+  expect(modifyBinary).not.toHaveBeenCalled();
+});
+

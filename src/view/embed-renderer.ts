@@ -74,7 +74,7 @@ export class FineNotesEmbedManager {
         const includeBackground = this.plugin.settings.embedBackground === true;
         const openViews = this.app.workspace.getLeavesOfType(VIEW_TYPE_INK).map(leaf => leaf.view as InkView);
         const openPaths = new Set(openViews.map(view => view.file?.path));
-        await Promise.all(openViews.map(view => view.updateClipsPng()));
+        await Promise.all(openViews.map(view => view.updateClipsPng(true)));
         for (const file of this.app.vault.getFiles()) {
           if (this.disposed || this.pngRefreshPending) break;
           if (!this.plugin.isInkFile(file) || openPaths.has(file.path)) continue;

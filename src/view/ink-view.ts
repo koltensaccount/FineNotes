@@ -280,6 +280,9 @@ export class InkView extends TextFileView {
    */
   private restoredPath: string | null = null;
   private lastPageTimer = 0;
+  /** Tracks whether user handwriting or regions changed during this view session. */
+  private clipsDirty = false;
+  private embedRefreshTimer = 0;
   /** The file whose data `setViewData` last loaded; `null` after `clear`. */
   private loadedPath: string | null = null;
   private backdrops: VaultBackdropRenderer | null = null;
@@ -349,6 +352,7 @@ export class InkView extends TextFileView {
 
   /** Obsidian read the file (on open, or because it changed on disk). */
   setViewData(data: string, _clear: boolean): void {
+    this.clipsDirty = false;
     this.companionUnloadedFile = null;
     if (this.loadedPath !== (this.file?.path ?? null)) {
       this.latestDrawingAt = 0;
@@ -414,6 +418,12 @@ export class InkView extends TextFileView {
    * file's data arrives: `setViewData` is the only thing that judges a read.
    */
   clear(): void {
+    if (this.embedRefreshTimer) {
+      window.clearTimeout(this.embedRefreshTimer);
+      this.embedRefreshTimer = 0;
+    }
+    this.embedRefreshPending = false;
+    this.clipsDirty = false;
     this.nativePasteModal?.close();
     this.nativePasteModal = null;
     // The page this file was left on, before its document goes.
@@ -453,7 +463,9 @@ export class InkView extends TextFileView {
       await this.updateCompanionPdf(false);
       this.companionUnloadedFile = file;
     }
-    await this.updateClipsPng();
+    if (this.clipsDirty) {
+      await this.updateClipsPng();
+    }
     await super.onUnloadFile(file);
   }
 
@@ -473,8 +485,10 @@ export class InkView extends TextFileView {
   private async saveNow(clear?: boolean): Promise<void> {
     this.writeHold.saved();
     await super.save(clear);
-    if(clear) await this.updateClipsPng();
-    else void this.updateClipsPng();
+    if (this.clipsDirty) {
+      if (clear) await this.updateClipsPng();
+      else void this.updateClipsPng();
+    }
   }
 
   /** The pen touched the page or left it: hold, or let go of, what would stall it. */
@@ -506,6 +520,12 @@ export class InkView extends TextFileView {
   }
 
   override async onClose(): Promise<void> {
+    if (this.embedRefreshTimer) {
+      window.clearTimeout(this.embedRefreshTimer);
+      this.embedRefreshTimer = 0;
+    }
+    this.embedRefreshPending = false;
+    this.clipsDirty = false;
     this.nativeMenus?.destroy();
     this.nativeMenus = null;
     this.nativePasteModal?.close();
@@ -1175,6 +1195,7 @@ export class InkView extends TextFileView {
           }
         },
         onChange: () => {
+          this.clipsDirty = true;
           if (this.surface) this.sidebar?.setDocument(this.surface.document);
           // Undoing or redoing "Convert to notebook" flips `single`.
           this.syncSingle();
@@ -2073,9 +2094,12 @@ export class InkView extends TextFileView {
     if (allocation.newPage && this.isSinglePage) throw new Error("This single-page note has no room for another region.");
     const clipId = allocation.reusableClip?.id ?? `clip-${crypto.randomUUID()}`;
     const targetPath = allocation.reusableClip?.imagePath ?? await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
+    this.clipsDirty = true;
+    const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
     const buffer = await renderClipPng(allocation.page, allocation.bounds, {
       images: this.images, backdropPainter: this.backdrops, pdf: this.pdfCache,
       includeBackground: this.settings.embedBackground === true,
+      themeMode: isDark ? "dark" : "light",
     });
     const stillValid = () => {
       if (this.file !== file || this.surface !== surface || surface.document !== doc || this.isProtected()) return false;
@@ -2089,6 +2113,7 @@ export class InkView extends TextFileView {
     const image = existing instanceof TFile ? existing : await this.app.vault.createBinary(targetPath, buffer);
     if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, buffer);
     if (!stillValid()) throw new Error("The notebook changed; try again.");
+    this.embedHashes.set(image.path, JSON.stringify([allocation.page, allocation.bounds, this.settings.embedBackground === true, isDark]));
     const now = Date.now();
     const clip: NotebookClip = {id: clipId, pageId: allocation.page.id, bounds: allocation.bounds,
       isExpandable: true, originY: allocation.bounds.minY, imagePath: image.path, createdAt: now, updatedAt: now};
@@ -2147,6 +2172,7 @@ export class InkView extends TextFileView {
     }
 
     page.pageEmbedPath = targetPath;
+    this.clipsDirty = true;
     this.requestSave();
 
     const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
@@ -2222,6 +2248,7 @@ export class InkView extends TextFileView {
     page.clips = page.clips ?? [];
     page.clips.push(clip);
 
+    this.clipsDirty = true;
     this.requestSave();
 
     const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
@@ -2243,7 +2270,8 @@ export class InkView extends TextFileView {
   private embedRefreshRunning: Promise<void> | null=null;
   private readonly embedHashes=new Map<string,string>();
 
-  async updateClipsPng(): Promise<void> {
+  async updateClipsPng(force = false): Promise<void> {
+    if (this.clipsDirty === false && !force) return;
     const doc = this.surface?.document ?? this.doc;
     if(!doc?.pages.some(page=>page.pageEmbedPath || page.clips?.some(clip=>clip.imagePath))) return;
     this.embedRefreshPending=true;
@@ -2251,8 +2279,15 @@ export class InkView extends TextFileView {
     this.embedRefreshRunning=(async()=>{
       while(this.embedRefreshPending) {
         this.embedRefreshPending=false;
-        await new Promise(resolve=>window.setTimeout(resolve,250));
+        await new Promise<void>(resolve => {
+          this.embedRefreshTimer = window.setTimeout(() => {
+            this.embedRefreshTimer = 0;
+            resolve();
+          }, 250);
+        });
         if(this.embedRefreshPending) continue;
+        if (this.clipsDirty === false && !force) break;
+        if (this.surface === null) break;
         await this.refreshEmbedImages();
       }
     })().finally(()=>{this.embedRefreshRunning=null;});
@@ -2260,7 +2295,8 @@ export class InkView extends TextFileView {
   }
 
   private async refreshEmbedImages(): Promise<void> {
-    if (!this.file || this.guard.locked) return;
+    if (!this.file || this.guard?.locked || this.mounted === false || this.surface === null) return;
+    if (this.loadedPath !== undefined && this.file && this.loadedPath !== this.file.path) return;
     const sourceFile=this.file;
     this.syncHandwritingReferences();
     const doc = structuredClone(this.surface?.document ?? this.doc);
@@ -2277,6 +2313,9 @@ export class InkView extends TextFileView {
           const abstract = this.app.vault.getAbstractFileByPath(clip.imagePath);
           if (abstract instanceof TFile) {
             const currentBounds = clipCurrentBounds(page, clip);
+            if (!Number.isFinite(currentBounds.minX) || !Number.isFinite(currentBounds.minY) ||
+                !Number.isFinite(currentBounds.maxX) || !Number.isFinite(currentBounds.maxY) ||
+                currentBounds.maxX <= currentBounds.minX || currentBounds.maxY <= currentBounds.minY) continue;
             const hash=JSON.stringify([page,currentBounds,incBg,isDark]);
             if(this.embedHashes.get(clip.imagePath)===hash) continue;
             try {
@@ -2287,7 +2326,8 @@ export class InkView extends TextFileView {
                 includeBackground: incBg,
                 themeMode: isDark ? "dark" : "light",
               });
-              if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
+              if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending || this.surface === null) continue;
+              if (!buffer || buffer.byteLength < 8) continue;
               await this.app.vault.modifyBinary(abstract, buffer);
               this.embedHashes.set(clip.imagePath,hash);
               this.plugin.embedManager?.refreshEmbedImagesInDom(abstract);
@@ -2312,9 +2352,10 @@ export class InkView extends TextFileView {
               pdf: this.pdfCache,
               padding: 0,
               includeBackground: incBg,
-                themeMode: isDark ? "dark" : "light",
+              themeMode: isDark ? "dark" : "light",
             });
-            if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending) continue;
+            if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending || this.surface === null) continue;
+            if (!buffer || buffer.byteLength < 8) continue;
             await this.app.vault.modifyBinary(abstract, buffer);
             this.embedHashes.set(page.pageEmbedPath,hash);
             this.plugin.embedManager?.refreshEmbedImagesInDom(abstract);
@@ -2324,6 +2365,7 @@ export class InkView extends TextFileView {
         }
       }
     }
+    this.clipsDirty = false;
   }
 
   // --- The ⋯ panel -----------------------------------------------------------

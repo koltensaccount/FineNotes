@@ -7,10 +7,12 @@ export function referencedEmbedImages(app: App, source?: TFile, text?: string): 
     if (
       leaf.view instanceof MarkdownView &&
       leaf.view.file &&
-      leaf.view.file !== source &&
-      leaf.view.editor
-    )
-      live.set(leaf.view.file.path, leaf.view.editor.getValue());
+      leaf.view.file !== source
+    ) {
+      const mdView = leaf.view as unknown as { getViewData?: () => string };
+      const val = typeof mdView.getViewData === "function" ? mdView.getViewData() : leaf.view.editor?.getValue();
+      if (typeof val === "string") live.set(leaf.view.file.path, val);
+    }
   }
   const paths = new Set<string>();
   for (const [note, links] of Object.entries(app.metadataCache.resolvedLinks ?? {})) {
