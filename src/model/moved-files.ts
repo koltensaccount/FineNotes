@@ -1,6 +1,6 @@
 /**
  * Files a note points at follow it when they are renamed or moved (#14): PDF
- * pages, pictures, recordings and their transcripts, and the note's own
+ * pages, pictures, live embed PNGs, recordings and their transcripts, and the note's own
  * attachment folders. Those paths live inside the compressed payload, where
  * Obsidian's "Automatically update internal links" cannot see them, so the
  * plugin keeps a log of the moves it saw in the vault and relinks a note from
@@ -106,6 +106,8 @@ export function relinkDocument(
   for (const page of doc.pages) {
     if (page.backdrop.kind === "pdf") page.backdrop.path = swap(page.backdrop.path);
     for (const image of page.images) image.path = swap(image.path);
+    for (const clip of page.clips ?? []) if (clip.imagePath) clip.imagePath = swap(clip.imagePath);
+    if (page.pageEmbedPath) page.pageEmbedPath = swap(page.pageEmbedPath);
   }
   for (const recording of doc.recordings ?? []) {
     recording.path = swap(recording.path);

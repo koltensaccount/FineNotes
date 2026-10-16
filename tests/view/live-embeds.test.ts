@@ -1,3 +1,5 @@
+import { buildInkFile } from "../../src/model/serialize";
+import { movedTarget } from "../../src/model/moved-files";
 import {it,expect,vi} from "vitest";
 vi.mock("obsidian",async()=>({...await import("./fake-obsidian"),MarkdownRenderChild:class {onunload(){} }}));
 import {blankPage,emptyDocument} from "../../src/model/document";
@@ -29,7 +31,7 @@ it("resolves a closed notebook's clip and reordered page from the exact saved im
  manager.plugin={isInkFile:(f:any)=>f===book};manager.loadDocument=async()=>doc;
  const img={getAttribute:(key:string)=>key==="src" ? `app://vault/${image.path}?123` : ""};
  expect(await manager.imageSource(img)).toBe(`${book.path}#^clip-abc`);
- doc.pages[1].clips=[];doc.pages[1].pageEmbedPath=image.path;
+ doc.pages[1].clips=[];doc.pages[1].pageEmbedPath=image.path;manager.sourceIndex=null;
  expect(await manager.imageSource(img)).toBe(`${book.path}#page=2`);
 });
 it("coalesces repeated saves into one serialized refresh",async()=>{
@@ -171,22 +173,40 @@ it("leaves existing clip embeds untouched when opening and closing without edits
   const doc = emptyDocument();
   doc.pages = [page];
 
-  const modifyBinary = vi.fn();
+  const file = {path: "notebook.notebook.md"};
   const view = Object.assign(Object.create(InkView.prototype), {
-    file: { path: "notebook.notebook.md" },
-    surface: { document: doc },
-    doc,
-    clipsDirty: false,
-    writeHold: { saved: vi.fn() },
+    file, surface: {document: doc}, doc, clipsDirty: false,
+    dismissMenus: vi.fn(), companionUnloadedFile: file,
     updateClipsPng: vi.fn(),
   });
-
-  // Gated behind clipsDirty
-  if (view.clipsDirty) {
-    await view.updateClipsPng();
-  }
-
+  await view.onUnloadFile(file as never);
   expect(view.updateClipsPng).not.toHaveBeenCalled();
-  expect(modifyBinary).not.toHaveBeenCalled();
+  expect(doc.pages[0].strokes).toHaveLength(1);
+  expect(doc.pages[0].clips![0].imagePath).toBe("assets/clip-test.png");
 });
 
+
+
+it("navigates renamed PNGs before their closed notebook is rewritten, including cached chained moves", async () => {
+  const doc = emptyDocument(), page = doc.pages[0];
+  page.clips = [{id: "clip-moved", pageId: page.id, bounds: {minX: 0, minY: 0, maxX: 100, maxY: 100}, imagePath: "Old/book-clip-moved.png", createdAt: 0, updatedAt: 0}];
+  page.pageEmbedPath = "Old/book-page-1.png";
+  const image = {path: "Assets/proof.png", extension: "png"};
+  const pageImage = {path: "Assets/page.png", extension: "png"};
+  const book = {path: "book.notebook.md", extension: "md", stat: {mtime: 1}};
+  const log = [{from: "Old/book-clip-moved.png", to: image.path}, {from: "Old/book-page-1.png", to: pageImage.path}];
+  const read = vi.fn(async () => buildInkFile("# Book", doc));
+  const manager = Object.create(FineNotesEmbedManager.prototype) as any;
+  manager.docCache = new Map(); manager.sourceIndex = null;
+  manager.app = {vault: {getFiles: () => [image, pageImage, book], getResourcePath: (file: any) => `app://vault/${file.path}`, read}};
+  manager.plugin = {settings: {paperWidth: 1024}, isInkFile: (file: any) => file === book,
+    fileMoves: {relink: (path: string) => movedTarget(log, candidate => [image.path, pageImage.path].includes(candidate), path)}};
+  const img = (file: any) => ({getAttribute: (key: string) => key === "src" ? `app://vault/${file.path}?t=1` : ""});
+  expect(await manager.imageSource(img(image))).toBe(`${book.path}#^clip-moved`);
+  expect(await manager.imageSource(img(pageImage))).toBe(`${book.path}#page=1`);
+  expect(read).toHaveBeenCalledOnce();
+  log.push({from: image.path, to: "Elsewhere/proof-renamed.png"}); image.path = "Elsewhere/proof-renamed.png";
+  manager.sourceIndex = null;
+  expect(await manager.imageSource(img(image))).toBe(`${book.path}#^clip-moved`);
+  expect(read).toHaveBeenCalledOnce();
+});

@@ -1,3 +1,4 @@
+import { relinkDocument } from "../model/moved-files";
 import { renderClipPng } from "./clip-png";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkView } from "./ink-view";
@@ -57,6 +58,7 @@ export class FineNotesEmbedManager {
   private pngRefreshPending = false;
   private pngRefreshRunning: Promise<void> | null = null;
   private disposed = false;
+  private sourceIndex: Promise<Map<string, string>> | null = null;
   private readonly docCache = new Map<string, CachedDoc>();
   private readonly imageCache: VaultImageCache;
   private readonly backdropPainter: VaultBackdropRenderer;
@@ -118,7 +120,7 @@ export class FineNotesEmbedManager {
   ) {
     this.pdfCache = new PdfBackdropCache(app);
     this.imageCache = new VaultImageCache(app);
-    this.plugin.register(()=>{ this.disposed = true; for(const view of [...this.activeEmbedViews]) view.destroy(); this.imageCache.destroy(); this.pdfCache.destroy(); this.docCache.clear(); });
+    this.plugin.register(()=>{ this.disposed = true; for(const view of [...this.activeEmbedViews]) view.destroy(); this.imageCache.destroy(); this.pdfCache.destroy(); this.docCache.clear(); this.sourceIndex = null; });
     this.backdropPainter = new VaultBackdropRenderer(this.pdfCache);
 
     this.imageCache.onReady = () => {
@@ -136,6 +138,7 @@ export class FineNotesEmbedManager {
           this.refreshEmbedImagesInDom(file);
         }
         if (file instanceof TFile && this.plugin.isInkFile(file)) {
+          this.sourceIndex = null;
           this.docCache.delete(file.path);
           this.refreshEmbedsForFile(file.path);
         }
@@ -145,6 +148,7 @@ export class FineNotesEmbedManager {
     this.plugin.registerEvent(
       this.app.vault.on("delete", (file) => {
         if (file instanceof TFile) {
+          this.sourceIndex = null;
           this.docCache.delete(file.path);
           this.refreshEmbedsForFile(file.path);
         }
@@ -153,9 +157,9 @@ export class FineNotesEmbedManager {
 
     this.plugin.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
-        this.docCache.delete(oldPath);
+        this.sourceIndex = null;
+        this.docCache.clear();
         if (file instanceof TFile) {
-          this.docCache.delete(file.path);
           this.refreshEmbedsForFile(oldPath);
           this.refreshEmbedsForFile(file.path);
         }
@@ -197,6 +201,7 @@ export class FineNotesEmbedManager {
       });
       observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
       this.plugin.register(() => observer.disconnect());
+      this.app.workspace.onLayoutReady(() => { if (!this.disposed) markImages(document.body); });
     }
     if (typeof document !== "undefined") {
       this.plugin.registerDomEvent(document,"click",(event:MouseEvent)=>{
@@ -226,22 +231,33 @@ export class FineNotesEmbedManager {
   /** Resolve by persisted image path, not basename or a warm notebook cache. */
   private async imageSource(image: HTMLImageElement): Promise<string | null> {
     const src=(image.getAttribute("src") || "").split("?")[0], alt=image.getAttribute("alt") || "";
-    if(!/-clip-|-page-/i.test(src+alt)) return null;
     const asset=this.app.vault.getFiles().find(file=>file.extension==="png" &&
       (this.app.vault.getResourcePath(file).split("?")[0]===src || file.path===alt));
     if(!asset) return null;
-    for(const file of this.app.vault.getFiles()) {
-      if(!this.plugin.isInkFile(file)) continue;
-      const doc=await this.loadDocument(file);
-      if(!doc) continue;
-      for(let index=0;index<doc.pages.length;index++) {
-        const page=doc.pages[index];
-        const clip=page.clips?.find(clip=>clip.imagePath===asset.path);
-        if(clip) return `${file.path}#^${clip.id}`;
-        if(page.pageEmbedPath===asset.path) return `${file.path}#page=${index+1}`;
-      }
+    return (await this.imageSources()).get(asset.path) ?? null;
+  }
+
+  /** Index arbitrary PNG names once; ordinary note images must not repeatedly scan notebooks. */
+  private async imageSources(): Promise<Map<string, string>> {
+    if (this.disposed) return new Map();
+    if (!this.sourceIndex) {
+      this.sourceIndex = (async () => {
+        const sources = new Map<string, string>();
+        for (const file of this.app.vault.getFiles()) {
+          if (!this.plugin.isInkFile(file)) continue;
+          const doc = await this.loadDocument(file);
+          if (!doc) continue;
+          for (const [index, page] of doc.pages.entries()) {
+            for (const clip of page.clips ?? []) if (clip.imagePath && !sources.has(clip.imagePath)) sources.set(clip.imagePath, `${file.path}#^${clip.id}`);
+            if (page.pageEmbedPath && !sources.has(page.pageEmbedPath)) sources.set(page.pageEmbedPath, `${file.path}#page=${index + 1}`);
+          }
+        }
+        return sources;
+      })();
     }
-    return null;
+    const pending = this.sourceIndex;
+    const sources = await pending;
+    return pending === this.sourceIndex ? sources : this.imageSources();
   }
 
   findNotebookByBaseName(baseName: string): TFile | null {
@@ -338,12 +354,14 @@ export class FineNotesEmbedManager {
   async loadDocument(file: TFile): Promise<InkDocument | null> {
     const cached = this.docCache.get(file.path);
     if (cached && cached.mtime === file.stat.mtime) {
+      relinkDocument(cached.doc, path => this.plugin.fileMoves?.relink(path));
       return cached.doc;
     }
     try {
       const content = await this.app.vault.read(file);
       const parsed = parseInkFile(content, this.plugin.settings.paperWidth);
       if (parsed.doc) {
+        relinkDocument(parsed.doc, path => this.plugin.fileMoves?.relink(path));
         this.docCache.set(file.path, { mtime: file.stat.mtime, doc: parsed.doc });
         return parsed.doc;
       }

@@ -78,6 +78,22 @@ describe("FileMoveTracker", () => {
     return { ...vault, tracker, relinkOpen };
   }
 
+  it("persists moved clip and page embed PNG paths in closed notebooks", async () => {
+    const doc = emptyDocument(), page = doc.pages[0];
+    page.clips = [{id: "clip-a", pageId: page.id, bounds: {minX: 0, minY: 0, maxX: 100, maxY: 100}, imagePath: "clip.png", createdAt: 0, updatedAt: 0}];
+    page.pageEmbedPath = "page.png";
+    const {tracker, files, move} = setUp({"Notes.notebook.md": buildInkFile("# Keep this prose", doc), "clip.png": "png", "page.png": "png"});
+    move(tracker, "clip.png", "Assets/renamed.png");
+    move(tracker, "page.png", "Assets/page.png");
+    await vi.advanceTimersByTimeAsync(RELINK_DELAY_MS);
+    await tracker.flush();
+    const parsed = parseInkFile(files["Notes.notebook.md"]);
+    expect(parsed.doc!.pages[0].clips![0].imagePath).toBe("Assets/renamed.png");
+    expect(parsed.doc!.pages[0].pageEmbedPath).toBe("Assets/page.png");
+    expect(parsed.body).toContain("# Keep this prose");
+    tracker.destroy();
+  });
+
   it("rewrites a closed notebook that points at the moved PDF", async () => {
     const { tracker, files, writes, move, relinkOpen } = setUp({
       "Lecture.pdf": "%PDF",

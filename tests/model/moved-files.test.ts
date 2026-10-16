@@ -165,3 +165,15 @@ describe("relinkDocument", () => {
     expect(JSON.stringify(doc)).toBe(before);
   });
 });
+
+it("relinks clip and full-page PNG paths without changing source handwriting", () => {
+  const doc = emptyDocument(); const page = doc.pages[0];
+  page.strokes.push({id: "s1", tool: "pen", color: "#000", size: 2, pts: [10, 20, 1, 40, 80, 1]});
+  page.clips = [{id: "clip-a", pageId: page.id, bounds: {minX: 0, minY: 0, maxX: 100, maxY: 100}, imagePath: "old/clip.png", createdAt: 0, updatedAt: 0}];
+  page.pageEmbedPath = "old/page.png";
+  const strokes = JSON.stringify(page.strokes);
+  expect(relinkDocument(doc, path => path.startsWith("old/") ? path.replace("old/", "new/") : undefined)).toBe(2);
+  expect(page.clips[0].imagePath).toBe("new/clip.png");
+  expect(page.pageEmbedPath).toBe("new/page.png");
+  expect(JSON.stringify(page.strokes)).toBe(strokes);
+});

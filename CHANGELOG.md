@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 81 — Live Embeds Follow Moved PNGs
+
+- Relink clip and full-page embed PNG paths through the existing file/folder move tracker, including closed notebooks and chained moves already recorded on this device.
+- Resolve click navigation from repaired notebook metadata before the background rewrite completes. Renamed PNGs no longer need a special filename to remain clickable.
+- Cache the PNG-to-notebook index and invalidate it when notebooks or paths change; recognize images already visible when the plugin reloads.
+- Preserve beta 80's close-without-editing protection, now exercised through the actual unload callback. All 3,666 tests and the production build pass; device verification is pending.
+
 ### Beta 79 — Continued Handwriting Capture
 
 - Remove the handwriting label; retain the subtle active-region outline.
