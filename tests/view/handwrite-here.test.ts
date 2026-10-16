@@ -410,6 +410,7 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
       updatedAt: 0,
     },
   ];
+  page.clips.push({...page.clips[0], id: "clip-inactive", originY: 900, bounds: {minX: 40, minY: 900, maxX: 760, maxY: 1140}});
   const guide = {
     style: {} as Record<string, string>,
     setAttribute: vi.fn(),
@@ -423,7 +424,8 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
   Object.assign(surface, {
     doc,
     handwritingGuideEls: new Map(),
-    selectionUiEl: { createDiv: () => guide },
+    activeHandwritingRegionId: "clip-guide",
+    selectionUiEl: { createDiv: vi.fn(() => guide) },
     boxForPage: () => ({ x: 10, y: 20 }),
   });
   Object.defineProperty(surface, "unitScale", { value: 2 });
@@ -435,6 +437,7 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
     height: "480px",
   });
   expect(guide.setAttribute).toHaveBeenCalledWith("aria-hidden", "true");
+  expect(surface.selectionUiEl.createDiv).toHaveBeenCalledOnce();
   page.strokes.push({
     id: "ink",
     color: "#000",
@@ -448,4 +451,24 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
   surface.syncHandwritingRegions();
   expect(guide.remove).toHaveBeenCalledOnce();
   expect(page.strokes).toHaveLength(1);
+});
+
+
+it("shows a single persistent handwriting guide instead of a second navigation flash", () => {
+  const doc = emptyDocument(), page = doc.pages[0];
+  const bounds = {minX: 40, minY: 60, maxX: 760, maxY: 300};
+  page.clips = [{id: "clip-active", pageId: page.id, bounds, originY: 60, isExpandable: true, createdAt: 0, updatedAt: 0}];
+  const surface = Object.create(InkSurface.prototype) as any;
+  const remove = vi.fn();
+  Object.assign(surface, {doc, cssW: 800, cssH: 600, direction: "vertical", callbacks: {},
+    pageLayout: {boxes: [{index: 0, id: page.id, x: 0, y: 0, width: 800, height: 1100}]},
+    clipHighlightEl: {remove}, scroller: {setPosition: vi.fn()},
+    cancelShapeDraft: vi.fn(), cancelGroupDrag: vi.fn(), ensurePaperSize: vi.fn(), syncViewport: vi.fn(),
+    reportStatus: vi.fn(), flashChrome: vi.fn(), flashRegion: vi.fn(), requestFrame: vi.fn(), scheduleHandwritingRegions: vi.fn(),
+  });
+  Object.defineProperty(surface, "scale", {value: 1});
+  surface.goToRegion(0, bounds);
+  expect(surface.activeHandwritingRegionId).toBe("clip-active");
+  expect(surface.flashRegion).not.toHaveBeenCalled();
+  expect(remove).toHaveBeenCalledOnce();
 });

@@ -603,6 +603,19 @@ export class Renderer {
     ctx.clip();
   }
 
+  /** Match the pixel grid of settled ink tiles so pen-up does not change antialiasing. */
+  private enterWetPage(ctx: CanvasRenderingContext2D, box: PageBox): void {
+    const k = this.deviceScale;
+    const exact = this.level > 0 && Math.abs(k / this.level - 1) < 1e-3;
+    const rect = this.pageDeviceRect(box);
+    ctx.save();
+    ctx.setTransform(exact ? this.level : k, 0, 0, exact ? this.level : k,
+      exact ? Math.round(rect.x) : rect.x, exact ? Math.round(rect.y) : rect.y);
+    ctx.beginPath();
+    ctx.rect(0, 0, box.width, box.height);
+    ctx.clip();
+  }
+
   // --- Backdrop layer -------------------------------------------------------
 
   /** Repaint the backdrop layer: the desk, and a shadow under each visible page. */
@@ -1148,6 +1161,8 @@ export class Renderer {
    * then repaints the dry layer, which is a blit.
    */
   appendCommittedStroke(pageIndex: number, stroke: Stroke, usePressure: boolean): void {
+    // A pen landing after a zoom must not commit into stale, lower-resolution tiles.
+    this.settle();
     const box = this.layout.boxes[pageIndex];
     if (!box) return;
     const entry = this.pathEntry(stroke, usePressure);
@@ -1246,8 +1261,7 @@ export class Renderer {
     const ctx = this.wet.ctx;
     this.wipe(ctx);
     if (!box) return;
-    this.toLayoutSpace(ctx);
-    this.enterPage(ctx, box);
+    this.enterWetPage(ctx, box);
     this.wet.canvas.style.mixBlendMode = style.tool === "highlighter" ? "multiply" : "normal";
     for (const pts of strokes) fillStroke(ctx, pts, style, this.highlighterAlpha);
     ctx.restore();
@@ -1263,8 +1277,7 @@ export class Renderer {
     const ctx = this.wet.ctx;
     this.wipe(ctx);
     if (!box) return;
-    this.toLayoutSpace(ctx);
-    this.enterPage(ctx, box);
+    this.enterWetPage(ctx, box);
     this.wet.canvas.style.mixBlendMode = style.tool === "highlighter" ? "multiply" : "normal";
     paintStroke(ctx, { runs }, style, this.highlighterAlpha);
     ctx.restore();

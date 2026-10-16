@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 78 — Subtle Active Writing Guide and Consistent Ink Handoff
+
+- Show one writing guide for the active handwriting region instead of outlining inactive/deleted regions. Suppress the temporary navigation flash for these regions so two boxes do not overlap.
+- Use a fainter dashed border and a smaller unfilled label.
+- Align live strokes to the same device-pixel grid as settled ink tiles, and settle stale zoom resolution before committing a stroke. Stored stroke data and PNG embed rendering are unchanged.
+- All 3,661 tests and the production build pass. Physical confirmation of the notebook pen-up appearance remains pending.
+
 ### Beta 77 — Reuse Empty Handwriting Regions
 
 - Handwrite Here reuses the earliest empty region after its Markdown embed is deleted, instead of reserving more space or advancing through blank pages.

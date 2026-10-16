@@ -1530,6 +1530,7 @@ export class InkSurface {
    * host's to remove.
    */
   destroy(): void {
+    this.clipHighlightEl?.remove();
     if (this.handwritingGuideFrame) window.cancelAnimationFrame(this.handwritingGuideFrame);
     for (const el of this.handwritingGuideEls?.values() ?? []) el.remove();
     this.handwritingGuideEls?.clear();
@@ -1873,10 +1874,17 @@ export class InkSurface {
     this.callbacks.onPageChange?.(clamped, this.doc.pages.length);
     this.reportStatus();
     this.flashChrome();
-    this.flashRegion(clamped, bounds);
+    const handwriting = this.doc.pages[clamped]?.clips?.find(clip => clip.isExpandable &&
+      JSON.stringify(clipCurrentBounds(this.doc.pages[clamped], clip)) === JSON.stringify(bounds));
+    this.activeHandwritingRegionId = handwriting?.id ?? null;
+    this.scheduleHandwritingRegions();
+    if (handwriting) { this.clipHighlightEl?.remove(); this.clipHighlightEl = null; }
+    else this.flashRegion(clamped, bounds);
     this.requestFrame();
   }
 
+  private activeHandwritingRegionId: string | null = null;
+  private clipHighlightEl: HTMLElement | null = null;
   private handwritingGuideFrame = 0;
   private handwritingGuideEls = new Map<string, HTMLElement>();
 
@@ -1896,14 +1904,14 @@ export class InkSurface {
       const box = this.boxForPage(page.id);
       if (!box) continue;
       for (const clip of page.clips) {
-        if (!clip.isExpandable) continue;
+        if (!clip.isExpandable || clip.id !== this.activeHandwritingRegionId) continue;
         const key = `${page.id}:${clip.id}`;
         visible.add(key);
         let el = this.handwritingGuideEls.get(key);
         if (!el) {
           el = this.selectionUiEl.createDiv({cls: "finenotes-handwriting-region"});
           el.setAttribute("aria-hidden", "true");
-          el.createSpan({cls: "finenotes-handwriting-region-label", text: "Live handwriting · grows as you write"});
+          el.createSpan({cls: "finenotes-handwriting-region-label", text: "Live handwriting"});
           this.handwritingGuideEls.set(key, el);
         }
         const bounds = clipCurrentBounds(page, clip), scale = this.unitScale;
@@ -1922,9 +1930,11 @@ export class InkSurface {
     if (!box) return;
 
     const scale = this.unitScale;
+    this.clipHighlightEl?.remove();
     const el = this.selectionUiEl.createDiv({
       cls: "finenotes-clip-highlight",
     });
+    this.clipHighlightEl = el;
     const left = (box.x + bounds.minX) * scale;
     const top = (box.y + bounds.minY) * scale;
     const width = Math.max(12, (bounds.maxX - bounds.minX) * scale);
@@ -1939,6 +1949,7 @@ export class InkSurface {
 
     window.setTimeout(() => {
       el.remove();
+      if (this.clipHighlightEl === el) this.clipHighlightEl = null;
     }, 1800);
   }
 
