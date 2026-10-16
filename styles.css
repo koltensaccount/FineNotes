@@ -7573,3 +7573,13 @@ img.finenotes-live-embed-image:hover {
   border-color: color-mix(in srgb, var(--interactive-accent) 24%, transparent);
   border-radius: 5px;
 }
+
+/* Pen options use the shared menu rows, dividers and typography. */
+.goodobsidian-pen-caption { flex: 1 1 auto; gap: 2px; }
+.goodobsidian-pen-choice-check { flex: 0 0 16px; width: 16px; height: 16px; color: var(--interactive-accent); visibility: hidden; }
+.goodobsidian-pen-choice-check svg { width: 16px; height: 16px; }
+.goodobsidian-pen-choice.is-active .goodobsidian-pen-choice-check { visibility: visible; }
+.goodobsidian-pen-dynamics { min-width: 0; }
+.goodobsidian-pen-dynamics-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; }
+.goodobsidian-pen-dynamics-heading > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.goodobsidian-pen-dynamics-value { flex: 0 0 auto; color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: var(--font-ui-small); }

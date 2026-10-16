@@ -2623,6 +2623,8 @@ export class Toolbar {
       const caption = button.createSpan({ cls: "goodobsidian-pen-caption" });
       caption.createSpan({ text: spec.label });
       caption.createSpan({ cls: "goodobsidian-pen-hint", text: TOOL_HINTS[spec.id] });
+      const check = button.createSpan({ cls: "goodobsidian-pen-choice-check", attr: { "aria-hidden": "true" } });
+      setIcon(check, "check");
       button.setAttribute("aria-pressed", String(spec.id === this.activePenType().id));
       button.toggleClass("is-active", spec.id === this.activePenType().id);
       button.addEventListener("click", () => {
@@ -2630,18 +2632,24 @@ export class Toolbar {
         this.choosePenType(spec);
       });
     }
+    body.createDiv({ cls: "goodobsidian-popover-divider" });
     const dynamics = body.createDiv({cls:"goodobsidian-pen-dynamics"});
+    dynamics.createDiv({ cls: "goodobsidian-popover-label", text: `${this.activePenType().label} settings` });
     this.switchRow(dynamics,"Pressure-sensitive pens",this.callbacks.pressureAllowed?.() === true,on=>this.callbacks.onPressurePreferenceChange?.(on));
     const active=this.activePenType(), profile=penDynamicsProfile(this.state.penDynamics,active.id);
     for (const [key,label] of [["pressureSensitivity","Pressure sensitivity"],["stabilization","Stroke stabilization"]] as const) {
       if(key === "pressureSensitivity" && !active.pressure) continue;
       const row=dynamics.createEl("label",{cls:"goodobsidian-pen-dynamics-control"});
-      const caption=row.createSpan({text:`${label} · ${Math.round(profile[key]*100)}%`});
+      const heading=row.createSpan({cls:"goodobsidian-pen-dynamics-heading"});
+      heading.createSpan({text:label});
+      const value=heading.createSpan({cls:"goodobsidian-pen-dynamics-value",text:`${Math.round(profile[key]*100)}%`});
       const range=row.createEl("input",{type:"range",attr:{min:"0",max:"100",step:"1","aria-label":label}});
       range.value=String(Math.round(profile[key]*100));
+      range.setAttribute("aria-valuetext", `${range.value}%`);
       range.oninput=()=>{
         profile[key]=Number(range.value)/100;
-        caption.setText(`${label} · ${range.value}%`);
+        value.setText(`${range.value}%`);
+        range.setAttribute("aria-valuetext", `${range.value}%`);
         this.state.penDynamics={...this.state.penDynamics,[active.id]:{...profile}};
         this.state.pressureEnabled=active.pressure && this.callbacks.pressureAllowed?.() === true;
         this.callbacks.onPressureToggle(this.state.pressureEnabled);
@@ -2649,6 +2657,7 @@ export class Toolbar {
       range.onchange=()=>this.callbacks.onPenDynamicsChange?.(this.state.penDynamics ?? {});
     }
     dynamics.createDiv({cls:"goodobsidian-popover-hint",text:"Stabilization steadies new strokes; higher values follow the pen more slowly. Ballpoint has a constant width."});
+    body.createDiv({ cls: "goodobsidian-popover-divider" });
     const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
     this.switchRow(constraints, "Constrain shapes", this.state.constrainShapes === true, on => {
       this.state.constrainShapes = on;
