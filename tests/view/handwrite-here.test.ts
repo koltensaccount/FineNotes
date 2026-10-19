@@ -272,6 +272,7 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
     doc,
     guard: { locked: false },
     latestDrawingAt: 0,
+    writeHold: { writing: vi.fn(() => false) },
     toolState: { pressureEnabled: false },
     embedRefreshPending: false,
     embedHashes: new Map(),
@@ -320,6 +321,12 @@ it("creates a durable expandable region, activates Pen, and refreshes its PNG as
     { id: "ink-1", color: "#000", size: 2, tool: "pen", pts: [100, 70, 1, 200, 200, 1] },
     { id: "ink-2", color: "#000", size: 2, tool: "pen", pts: [100, 350, 1, 200, 800, 1] },
   );
+  vi.mocked(renderClipPng).mockClear();
+  view.writeHold.writing.mockReturnValueOnce(true);
+  await view.refreshEmbedImages();
+  expect(view.embedRefreshPending).toBe(true);
+  expect(renderClipPng).not.toHaveBeenCalled();
+  view.embedRefreshPending = false;
   await view.refreshEmbedImages();
   expect(renderClipPng).toHaveBeenLastCalledWith(
     expect.anything(),

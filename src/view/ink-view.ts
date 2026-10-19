@@ -2310,6 +2310,15 @@ export class InkView extends TextFileView {
   private async refreshEmbedImages(): Promise<void> {
     if (!this.file || this.guard?.locked || this.mounted === false || this.surface === null) return;
     if (this.loadedPath !== undefined && this.file && this.loadedPath !== this.file.path) return;
+    // PNG rasterisation and encoding run on the main thread. Treat them like
+    // notebook saves and PDF work: while the Pencil is down, or between
+    // strokes in the same writing burst, they would starve pointer events.
+    // Older WebKit then delivers one position for the whole stall and a
+    // handwritten curve becomes a straight segment.
+    if (this.writeHold.writing(performance.now())) {
+      this.embedRefreshPending = true;
+      return;
+    }
     const sourceFile=this.file;
     this.syncHandwritingReferences();
     const doc = structuredClone(this.surface?.document ?? this.doc);
@@ -2319,7 +2328,6 @@ export class InkView extends TextFileView {
     const incBg = this.settings.embedBackground === true;
 
     for (const page of doc.pages) {
-      if(Date.now()-this.latestDrawingAt < 300) {this.embedRefreshPending=true;return;}
       if (page.clips && page.clips.length > 0) {
         for (const clip of page.clips) {
           if (!clip.imagePath) continue;
