@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 84 — Smooth Stabilized Loops
+
+- Keep the pen-up sample on the same stabilization path as the rest of the stroke, preventing an abrupt final jump that made handwritten circles and letters such as “o” end with a visible kink.
+- Leave freehand input unchanged when stroke stabilization is off.
+- Add focused coverage for stabilized loop endings and the pen-up transition. Production build passes; physical iPad verification is pending.
+
 ### Beta 83 — Quieter Pen Picker
 
 - Replace the long pen list with a compact two-column visual picker, using the same shared card styling as lasso options.
