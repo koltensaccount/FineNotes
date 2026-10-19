@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 85 — Preserve Pencil Samples During Live Updates
+
+- Defer live-embed PNG rasterization until the existing one-second writing quiet period, just like notebook saves and PDF work.
+- Prevent main-thread embed work from starving Pencil events during a writing burst, which could turn an ordinary handwritten circle into a few straight geometric segments as the notebook began to lag.
+- Keep live updates automatic once the Pencil is idle. Focused handwriting, embed, and save-hold tests pass; physical iPad verification is pending.
+
 ### Beta 84 — Smooth Stabilized Loops
 
 - Keep the pen-up sample on the same stabilization path as the rest of the stroke, preventing an abrupt final jump that made handwritten circles and letters such as “o” end with a visible kink.
