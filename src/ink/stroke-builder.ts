@@ -221,7 +221,12 @@ export class StrokeBuilder {
   private offer(sample: InputSample, final: boolean): boolean {
     const amount=Math.max(0,Math.min(1,this.options.stabilization ?? 0));
     if(amount>0) {
-      if(this.stabilized && !final) {
+      // The pen-up reading belongs to the same filtered path. Bypassing the
+      // filter for that one sample made the end jump from the stabilized tip
+      // to the raw Pencil position; closed handwriting such as “o” showed the
+      // jump as a sharp kink. One final filter step preserves the curve and
+      // still lets the tip catch up naturally.
+      if(this.stabilized) {
         const alpha=1-.85*amount;
         sample={...sample,x:this.stabilized.x+(sample.x-this.stabilized.x)*alpha,y:this.stabilized.y+(sample.y-this.stabilized.y)*alpha};
       }

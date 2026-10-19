@@ -146,10 +146,31 @@ it("adjusts pressure sensitivity while keeping legacy behavior at 100%",()=>{
   expect(pen.points()[2]).toBeCloseTo(.35);
   expect(pen.points().at(-1)).toBeCloseTo(.65);
 });
-it("stabilizes sampled jitter but keeps the actual pen-up endpoint",()=>{
+it("stabilizes sampled jitter through pen-up without an endpoint jump",()=>{
   const raw=new StrokeBuilder({minDistance:0}), stable=new StrokeBuilder({minDistance:0,stabilization:1});
   for(const sample of [{x:0,y:0,pressure:.5},{x:10,y:8,pressure:.5},{x:20,y:-8,pressure:.5}]) {raw.add(sample);stable.add(sample);}
   expect(Math.abs(stable.points()[4])).toBeLessThan(Math.abs(raw.points()[4]));
   stable.addFinal({x:30,y:0,pressure:.5}); stable.settle();
-  expect(stable.points().slice(-3,-1)).toEqual([30,0]);
+  const end=stable.points().slice(-3,-1);
+  expect(end[0]).toBeGreaterThan(5);
+  expect(end[0]).toBeLessThan(30);
+  expect(Math.abs(end[1])).toBeLessThan(2);
+});
+
+it("keeps a stabilized handwritten loop smooth at pen-up",()=>{
+  const stable=new StrokeBuilder({minDistance:0,stabilization:.6});
+  const samples=Array.from({length:17},(_,i)=>{
+    const angle=(Math.PI*2*i)/16;
+    return {x:50+30*Math.cos(angle),y:50+30*Math.sin(angle),pressure:.5};
+  });
+  for(const sample of samples.slice(0,-1)) stable.add(sample);
+  const before=stable.points().slice(-3,-1);
+  stable.addFinal(samples.at(-1)!);
+  const end=stable.points().slice(-3,-1);
+  // Pen-up advances by one normal stabilized step instead of drawing a raw
+  // chord across the lag between the filtered loop and its starting point.
+  const finalStep=Math.hypot(end[0]-before[0],end[1]-before[1]);
+  const rawJump=Math.hypot(samples.at(-1)!.x-before[0],samples.at(-1)!.y-before[1]);
+  expect(finalStep).toBeLessThan(rawJump);
+  expect(finalStep/rawJump).toBeCloseTo(1-.85*.6,10);
 });
