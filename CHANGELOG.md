@@ -8,6 +8,14 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 86 — Fix PDF Circuit Line Consistency and Persist Active Pen
+
+- Fix PDF circuit rendering stroke weight inconsistency by rendering SVG circuit vector assets at target high-DPI canvas resolution, preserving high-frequency resistor zigzags through JPEG DCT compression.
+- Add rounded linecaps to resistor paths matching connecting wire endpoints.
+- Ensure all circuit graphical assets are fully prepared and decoded prior to PDF rasterization.
+- Persist active pen selection (fountain, ballpoint, brush) across notebook sessions and synchronize across open tabs.
+- Retain preferred pen tool when invoking Handwrite Here.
+
 ### Beta 85 — Preserve Pencil Samples During Live Updates
 
 - Defer live-embed PNG rasterization until the existing one-second writing quiet period, just like notebook saves and PDF work.
