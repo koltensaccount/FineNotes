@@ -63,7 +63,7 @@ import { WhatsNewModal } from "./ui/whats-new-modal";
 import { changelogSince, releasedChangelog } from "./changelog";
 import { InkView } from "./view/ink-view";
 import { MARKDOWN_VIEW_TYPE, ViewRouter, isInkNote, showAs } from "./view/view-routing";
-import type { EraserMode } from "./view/toolbar";
+import type { EraserMode, PenType } from "./view/toolbar";
 import type { EraserFilter } from "./ink/stroke-eraser";
 import type { LassoFilter, LassoMode } from "./canvas/lasso";
 import {
@@ -695,6 +695,13 @@ export default class GoodObsidianPlugin extends Plugin {
   saveEraser(mode: EraserMode, size: number): void {
     this.settings.eraserMode = mode;
     this.settings.eraserSize = size;
+    void this.saveSettings();
+  }
+
+  /** Remember the active pen type across sessions and views. */
+  savePenType(type: PenType): void {
+    this.settings.penType = type;
+    for (const view of this.openNotebooks()) view.setPenType?.(type);
     void this.saveSettings();
   }
 

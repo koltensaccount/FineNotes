@@ -37,7 +37,7 @@ import type { ImageAspect } from "./recognition/ai-image";
 import type { ImageVendorChoice } from "./recognition/ai-menu-model";
 import { type LlmVendor, chatCompletionsUrl, isPlainHttpUrl } from "./recognition/llm-request";
 import { MANUAL_PROVIDER_ID } from "./recognition/manual";
-import type { EraserMode } from "./view/toolbar";
+import type { EraserMode, PenType } from "./view/toolbar";
 
 /** The tools an ink note can open with (`defaultTool`). */
 export type ToolId = "pen" | "highlighter" | "eraser" | "select";
@@ -167,6 +167,8 @@ export interface GoodObsidianSettings {
    * (2026-09-30), which was on by default and is dropped on load.
    */
   pressureWidth: boolean;
+  /** Active pen type ("fountain", "ball", "brush", "highlighter"), kept across notebook sessions. */
+  penType?: PenType;
   penDynamics?: import("./model/pen-dynamics").PenDynamics;
   /** Selecting an active secondary tool again returns to the pen or highlighter used before. */
   returnToPenOnReselect: boolean;
@@ -222,6 +224,7 @@ export const DEFAULT_SETTINGS: GoodObsidianSettings = {
   shapeColor: DEFAULT_SHAPE_COLOR,
   recentColors: [],
   pressureWidth: false,
+  penType: "fountain",
   returnToPenOnReselect: false,
   returnToPenAfterUse: false,
   showNewNotebookInContextMenu: true,

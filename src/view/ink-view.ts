@@ -172,7 +172,7 @@ import {
   type PageSidebarRenderOptions,
   thumbnailRasterScale,
 } from "./page-sidebar";
-import { Toolbar, type ToolbarState, penTypeFor } from "./toolbar";
+import { Toolbar, type ToolbarState, penTypeFor, PEN_TYPES, type PenType } from "./toolbar";
 import { PANEL_SLIDE_MS } from "./motion";
 import {
   type LastPages,
@@ -206,18 +206,20 @@ const ignore = (): void => undefined;
 
 /** The tools as the settings left them, for a view that has just opened. */
 function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
+  const penType = s.penType ?? (s.pressureWidth ? "fountain" : "ball");
+  const spec = PEN_TYPES.find((p) => p.id === penType) ?? PEN_TYPES[0];
+  const isHighlighter = s.defaultTool === "highlighter";
   return {
     tool: s.defaultTool,
     lineStyle: lineStyleOf(s.penLineStyle),
     color: s.writingPresets
-      ? selectedColor(s.writingPresets, s.defaultTool === "highlighter" ? "highlighter" : "pen")
+      ? selectedColor(s.writingPresets, isHighlighter ? "highlighter" : "pen")
       : s.defaultColor,
     size: s.writingPresets
-      ? selectedWidthFor(s.writingPresets, s.defaultTool === "highlighter" ? "highlighter" : "pen")
+      ? selectedWidthFor(s.writingPresets, isHighlighter ? "highlighter" : "pen")
       : s.defaultSize,
-    // A notebook opens with the Fountain pen, a pressure pen.
-    pressureEnabled: s.pressureWidth,
-    penType: s.pressureWidth ? "fountain" : "ball",
+    pressureEnabled: spec.pressure && s.pressureWidth,
+    penType: spec.id,
     penDynamics: s.penDynamics,
     shapeSnapEnabled: s.drawAndHold,
     eraserMode: s.eraserMode,
@@ -626,6 +628,15 @@ export class InkView extends TextFileView {
     this.surface?.setPressure(this.toolState.pressureEnabled);
     this.toolbar?.refreshPressurePreference();
     this.updateSidebarRendering();
+  }
+
+  setPenType(type: PenType): void {
+    if (this.toolState.penType === type) return;
+    this.toolState.penType = type;
+    const spec = PEN_TYPES.find((p) => p.id === type) ?? PEN_TYPES[0];
+    this.toolState.pressureEnabled = spec.pressure && this.settings.pressureWidth;
+    this.surface?.setPressure(this.toolState.pressureEnabled);
+    this.toolbar?.setState(this.toolState);
   }
 
   /** The recent strokes and the recogniser's verdicts on them, as JSON, for bug reports. */
@@ -1075,7 +1086,11 @@ export class InkView extends TextFileView {
         onRedo: () => this.surface?.redo(),
         onClear: () => void this.clearPage(),
         onAddPage: (anchor) => this.openAddPage(anchor, this.surface?.currentPage ?? 0, "after"),
-        onPenTypeChange: () => this.toolbar?.syncActive(),
+        onPenTypeChange: (spec) => {
+          this.settings.penType = spec.id;
+          this.plugin.savePenType(spec.id);
+          this.toolbar?.syncActive();
+        },
         onEraserChange: (mode, size) => this.plugin.saveEraser(mode, size),
         onEraserFilterChange: (filter) => this.plugin.saveEraserFilter(filter),
         onLassoChange: (mode, filter, behavior) => this.plugin.saveLasso(mode, filter, behavior),
@@ -2129,6 +2144,9 @@ export class InkView extends TextFileView {
     if (this.file !== file || this.surface !== surface || this.isProtected()) throw new Error("The notebook view changed; the region has been saved.");
     this.pendingSubpath = `#^${clipId}`;
     this.applyPendingPage();
+    if (this.toolState.penType === "highlighter") {
+      this.toolState.penType = this.settings.pressureWidth ? "fountain" : "ball";
+    }
     surface.setTool("pen");
     this.toolbar?.syncActive();
     return image;

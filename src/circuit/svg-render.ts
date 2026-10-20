@@ -170,7 +170,7 @@ function renderComponentSymbol(
     case "variable_resistor": {
       // Zigzag resistor: (-1.5, 0) to (-0.9, 0) to zigzag to (0.9, 0) to (1.5, 0)
       const d = "M -1.5 0 L -0.9 0 L -0.75 -0.35 L -0.45 0.35 L -0.15 -0.35 L 0.15 0.35 L 0.45 -0.35 L 0.75 0.35 L 0.9 0 L 1.5 0";
-      parts.push(`<path d="${d}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linejoin="round" />`);
+      parts.push(`<path d="${d}" fill="none" stroke="${mainStroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`);
       if (type === "variable_resistor") {
         parts.push(`<line x1="-0.7" y1="0.6" x2="0.7" y2="-0.6" stroke="${mainStroke}" stroke-width="${strokeW}" />`);
         parts.push(`<polygon points="0.7,-0.6 0.4,-0.65 0.65,-0.4" fill="${mainStroke}" />`);

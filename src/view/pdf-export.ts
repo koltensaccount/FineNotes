@@ -26,6 +26,7 @@ import {
 } from "../export/pdf-writer";
 import { isWebUrl, parseTextBoxLinks } from "../model/text-box-links";
 import type { Page } from "../model/document";
+import { prepareCircuits } from "../circuit/circuit-render";
 import { VaultBackdropRenderer } from "./backdrop-renderer";
 import type { VaultImageCache } from "./image-cache";
 import { releaseCanvas } from "./image-import";
@@ -256,6 +257,9 @@ async function preparePage(
   if (sources.images && page.images.length > 0) {
     await sources.images.prepare(page.images, scale);
   }
+  if (page.circuits && page.circuits.length > 0) {
+    await prepareCircuits(page.circuits, scale);
+  }
   return painter;
 }
 
@@ -280,6 +284,7 @@ async function renderAnnotationPng(page: Page, sources: PdfExportSources, qualit
   const scale = exportPixelScale(page.geometry.width, page.geometry.height, PDF_QUALITY_FACTORS[quality]);
   if (!scale) throw new Error("A page has no size");
   if (sources.images) await sources.images.prepare(page.images, scale);
+  if (page.circuits && page.circuits.length > 0) await prepareCircuits(page.circuits, scale);
   const canvas = createEl("canvas");
   try {
     renderPageThumbnail(canvas, page, { paint: () => undefined }, page.geometry.width * scale, 1, {

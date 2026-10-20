@@ -73,6 +73,7 @@ const FRESH_INSTALL = {
   shapeColor: "#000000",
   recentColors: [],
   pressureWidth: false,
+  penType: "fountain",
   returnToPenOnReselect: false,
   returnToPenAfterUse: false,
   showNewNotebookInContextMenu: true,

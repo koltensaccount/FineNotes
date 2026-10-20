@@ -32,6 +32,59 @@ export function circuitSvgForDisplay(circuit: CircuitElement): string {
   return svg;
 }
 
+/** Sets explicit width and height on root `<svg>` element for crisp vector rasterization at target resolution */
+export function setSvgDimensions(svg: string, width: number, height: number): string {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  return svg.replace(/<svg\b([^>]*)>/, (_match, attrs) => {
+    let updated = attrs;
+    if (/\bwidth="[^"]*"/.test(updated)) {
+      updated = updated.replace(/\bwidth="[^"]*"/, `width="${w}"`);
+    } else {
+      updated += ` width="${w}"`;
+    }
+    if (/\bheight="[^"]*"/.test(updated)) {
+      updated = updated.replace(/\bheight="[^"]*"/, `height="${h}"`);
+    } else {
+      updated += ` height="${h}"`;
+    }
+    return `<svg${updated}>`;
+  });
+}
+
+/** Extracts width and height from SVG viewBox attribute if present */
+export function parseSvgViewBox(svg: string): { width: number; height: number } | null {
+  const match = svg.match(/\bviewBox="([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)"/);
+  if (!match) return null;
+  const w = parseFloat(match[3]);
+  const h = parseFloat(match[4]);
+  return Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? { width: w, height: h } : null;
+}
+
+/** Calculates target pixel dimensions and drawn page dimensions for a circuit element */
+export function circuitTargetDimensions(
+  circuit: CircuitElement,
+  scale = 1,
+): { targetW: number; targetH: number; drawW: number; drawH: number } {
+  const svg = circuitSvgForDisplay(circuit);
+  const vb = parseSvgViewBox(svg);
+  const viewW = vb ? vb.width : circuit.w;
+  const viewH = vb ? vb.height : circuit.h;
+  const viewAspect = viewW / viewH;
+  const boxAspect = circuit.w / circuit.h;
+  let drawW = circuit.w;
+  let drawH = circuit.h;
+  if (viewAspect > boxAspect) {
+    drawH = circuit.w / viewAspect;
+  } else {
+    drawW = circuit.h * viewAspect;
+  }
+  const effScale = Math.max(1, scale);
+  const targetW = Math.max(1, Math.min(4096, Math.round(drawW * effScale)));
+  const targetH = Math.max(1, Math.min(4096, Math.round(drawH * effScale)));
+  return { targetW, targetH, drawW, drawH };
+}
+
 function hashContent(str: string): string {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c64e6d;
@@ -50,13 +103,15 @@ export function circuitBounds(circuit: CircuitElement): Bounds {
   return imageBounds(circuit);
 }
 
-/** Prepares or retrieves a cached HTMLImageElement for the given circuit */
+/** Prepares or retrieves a cached HTMLImageElement for the given circuit at target device scale */
 export function getCircuitImage(
   circuit: CircuitElement,
   onReady?: () => void,
+  scale = 1,
 ): HTMLImageElement | null {
   const svg = circuitSvgForDisplay(circuit);
-  const cacheKey = `${circuit.id}:${hashContent(svg)}`;
+  const { targetW, targetH } = circuitTargetDimensions(circuit, scale);
+  const cacheKey = `${circuit.id}:${hashContent(svg)}:${targetW}x${targetH}`;
 
   const cached = BITMAP_CACHE.get(cacheKey);
   if (cached && cached.image && cached.ready) {
@@ -65,16 +120,23 @@ export function getCircuitImage(
   }
 
   if (cached && !cached.ready) {
+    // If exact target resolution is decoding, return any ready resolution of this circuit as fallback
+    for (const [k, v] of BITMAP_CACHE.entries()) {
+      if (k.startsWith(`${circuit.id}:`) && v.ready && v.image) {
+        return v.image;
+      }
+    }
     return null;
   }
 
-  // Create new image outside the pencil loop
+  // Create new image outside the pencil loop at target scale
   try {
-    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const sizedSvg = setSvgDimensions(svg, targetW, targetH);
+    const blob = new Blob([sizedSvg], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const img = new Image();
     const entry: CachedCircuitBitmap = {
-      svg,
+      svg: sizedSvg,
       image: img,
       blobUrl: url,
       ready: false,
@@ -113,6 +175,13 @@ export function getCircuitImage(
         BITMAP_CACHE.delete(oldestKey);
       }
     }
+
+    // While decoding target resolution, check if an existing scale is available
+    for (const [k, v] of BITMAP_CACHE.entries()) {
+      if (k !== cacheKey && k.startsWith(`${circuit.id}:`) && v.ready && v.image) {
+        return v.image;
+      }
+    }
   } catch {
     return null;
   }
@@ -120,11 +189,52 @@ export function getCircuitImage(
   return null;
 }
 
+/**
+ * Resolves once all circuits in `circuits` are rasterized at `scale` without placeholders.
+ * Safe for one-shot PDF export. Never throws or rejects.
+ */
+export async function prepareCircuits(
+  circuits: readonly CircuitElement[],
+  scale = 1,
+): Promise<void> {
+  const tasks: Promise<void>[] = [];
+  for (const circuit of circuits) {
+    if (!(circuit.w > 0) || !(circuit.h > 0)) continue;
+    const svg = circuitSvgForDisplay(circuit);
+    const { targetW, targetH } = circuitTargetDimensions(circuit, scale);
+    const cacheKey = `${circuit.id}:${hashContent(svg)}:${targetW}x${targetH}`;
+    const cached = BITMAP_CACHE.get(cacheKey);
+    if (cached && cached.ready) continue;
+
+    tasks.push(
+      new Promise<void>((resolve) => {
+        let finished = false;
+        const done = () => {
+          if (!finished) {
+            finished = true;
+            resolve();
+          }
+        };
+        const img = getCircuitImage(circuit, done, scale);
+        if (img && img.complete && img.naturalWidth > 0) {
+          done();
+        } else {
+          setTimeout(done, 1500);
+        }
+      }),
+    );
+  }
+  if (tasks.length > 0) {
+    await Promise.all(tasks);
+  }
+}
+
 /** Draws a CircuitElement onto the target canvas context in page space */
 export function drawPlacedCircuit(
   ctx: CanvasRenderingContext2D,
   circuit: CircuitElement,
   onReady?: () => void,
+  deviceScale?: number,
 ): void {
   if (!(circuit.w > 0) || !(circuit.h > 0)) return;
 
@@ -134,21 +244,22 @@ export function drawPlacedCircuit(
   if (rotation !== 0) ctx.rotate(rotation);
   ctx.translate(-circuit.w / 2, -circuit.h / 2);
 
-  const img = getCircuitImage(circuit, onReady);
-  if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-    const imgAspect = img.naturalWidth / img.naturalHeight;
-    const boxAspect = circuit.w / circuit.h;
-    let drawW = circuit.w;
-    let drawH = circuit.h;
-    let drawX = 0;
-    let drawY = 0;
-    if (imgAspect > boxAspect) {
-      drawH = circuit.w / imgAspect;
-      drawY = (circuit.h - drawH) / 2;
-    } else {
-      drawW = circuit.h * imgAspect;
-      drawX = (circuit.w - drawW) / 2;
+  let scale = deviceScale;
+  if (!scale || scale <= 0) {
+    try {
+      const t = ctx.getTransform();
+      scale = Math.max(1, Math.hypot(t.a, t.b));
+    } catch {
+      scale = 1;
     }
+  }
+
+  const { drawW, drawH } = circuitTargetDimensions(circuit, scale);
+  const drawX = (circuit.w - drawW) / 2;
+  const drawY = (circuit.h - drawH) / 2;
+
+  const img = getCircuitImage(circuit, onReady, scale);
+  if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
   } else {
     // Subtle placeholder box while decoding

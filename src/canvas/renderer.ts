@@ -978,7 +978,7 @@ export class Renderer {
     });
     if (this.writingGuides) paintWritingGuides(ctx, page, region, this.writingGuides, paperColorOf(page, this.paper), this.view.scale, level);
     this.paintImages(ctx, page, region, level);
-    this.paintCircuits(ctx, page, region);
+    this.paintCircuits(ctx, page, region, level);
     // Inset by half a device pixel so the hairline lies inside the clip.
     const hair = 1 / level;
     ctx.strokeStyle = this.paper.edge;
@@ -1007,12 +1007,13 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     page: Page,
     region: Bounds,
+    level = 1,
   ): void {
     if (!page.circuits || page.circuits.length === 0) return;
     for (const circuit of page.circuits) {
       if (this.hiddenCircuits.has(circuit)) continue;
       if (!overlaps(imageBounds(circuit), region)) continue;
-      drawPlacedCircuit(ctx, circuit, () => this.invalidateAll());
+      drawPlacedCircuit(ctx, circuit, () => this.invalidateAll(), level);
     }
   }
 
@@ -1416,7 +1417,7 @@ export function renderPageThumbnail(
   }
 
   if (page.circuits) {
-    for (const circuit of page.circuits) drawPlacedCircuit(ctx, circuit);
+    for (const circuit of page.circuits) drawPlacedCircuit(ctx, circuit, undefined, k);
   }
 
   for (const box of page.textBoxes) paintTextBox(ctx, box);
