@@ -8,6 +8,15 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 87 — Smooth Handwriting in Large Embed Regions
+
+- Prevent lag and mangled Apple Pencil strokes when handwriting in large or expanding Handwrite Here embed regions.
+- Bound live embed canvas pixel resolution (cap at 2MP and max edge of 2048px) to prevent multi-megapixel PNG compression stalls on the main thread while preserving crisp Retina clarity.
+- Filter out off-clip ink strokes when rendering region embeds.
+- Defer embed PNG refreshes immediately during active handwriting and cancel pending delay timers on pen down.
+- Add pen down and writing guards before rendering, file saving, and DOM image refreshes to guarantee main-thread responsiveness for Apple Pencil input.
+- Hardware-composite handwriting region overlay elements to eliminate DOM repaint overhead.
+
 ### Beta 86 — Fix PDF Circuit Line Consistency and Persist Active Pen
 
 - Fix PDF circuit rendering stroke weight inconsistency by rendering SVG circuit vector assets at target high-DPI canvas resolution, preserving high-frequency resistor zigzags through JPEG DCT compression.
