@@ -507,6 +507,13 @@ export class InkView extends TextFileView {
       this.latestDrawingAt = Date.now();
       this.writeHold.penDown(t);
       this.pdfCache?.setHeld(true);
+      if (this.embedRefreshTimer) {
+        window.clearTimeout(this.embedRefreshTimer);
+        this.embedRefreshTimer = 0;
+        this.resolveEmbedRefreshDelay?.();
+        this.resolveEmbedRefreshDelay = null;
+      }
+      this.embedRefreshPending = true;
       // Should the lift never arrive, let go anyway.
       this.quietTimer = window.setTimeout(() => this.penQuiet(), this.writeHold.quietIn(t));
       return;
@@ -522,6 +529,7 @@ export class InkView extends TextFileView {
     this.quietTimer = 0;
     this.pdfCache?.setHeld(false);
     if (this.writeHold.savePending) void this.saveNow();
+    if (this.clipsDirty || this.embedRefreshPending) void this.updateClipsPng();
   }
 
   override async onClose(): Promise<void> {
@@ -2300,14 +2308,19 @@ export class InkView extends TextFileView {
   private readonly embedHashes=new Map<string,string>();
 
   async updateClipsPng(force = false): Promise<void> {
-    if (this.clipsDirty === false && !force) return;
+    if (this.clipsDirty === false && !this.embedRefreshPending && !force) return;
     const doc = this.surface?.document ?? this.doc;
     if(!doc?.pages.some(page=>page.pageEmbedPath || page.clips?.some(clip=>clip.imagePath))) return;
     this.embedRefreshPending=true;
+    if (!force && this.writeHold?.writing(performance.now())) return;
     if(this.embedRefreshRunning) return this.embedRefreshRunning;
     this.embedRefreshRunning=(async()=>{
       while(this.embedRefreshPending) {
         this.embedRefreshPending=false;
+        if (!force && this.writeHold?.writing(performance.now())) {
+          this.embedRefreshPending = true;
+          break;
+        }
         await new Promise<void>(resolve => {
           this.resolveEmbedRefreshDelay = resolve;
           this.embedRefreshTimer = window.setTimeout(() => {
@@ -2319,6 +2332,10 @@ export class InkView extends TextFileView {
         if(this.embedRefreshPending) continue;
         if (this.clipsDirty === false && !force) break;
         if (this.surface === null) break;
+        if (!force && this.writeHold?.writing(performance.now())) {
+          this.embedRefreshPending = true;
+          break;
+        }
         await this.refreshEmbedImages();
       }
     })().finally(()=>{this.embedRefreshRunning=null;});
@@ -2333,7 +2350,7 @@ export class InkView extends TextFileView {
     // strokes in the same writing burst, they would starve pointer events.
     // Older WebKit then delivers one position for the whole stall and a
     // handwritten curve becomes a straight segment.
-    if (this.writeHold.writing(performance.now())) {
+    if (this.writeHold?.writing(performance.now())) {
       this.embedRefreshPending = true;
       return;
     }
@@ -2349,6 +2366,10 @@ export class InkView extends TextFileView {
       if (page.clips && page.clips.length > 0) {
         for (const clip of page.clips) {
           if (!clip.imagePath) continue;
+          if (this.writeHold?.writing(performance.now())) {
+            this.embedRefreshPending = true;
+            return;
+          }
           const abstract = this.app.vault.getAbstractFileByPath(clip.imagePath);
           if (abstract instanceof TFile) {
             const currentBounds = clipCurrentBounds(page, clip);
@@ -2358,6 +2379,10 @@ export class InkView extends TextFileView {
             const hash=JSON.stringify([page,currentBounds,incBg,isDark,this.toolState.pressureEnabled,this.settings.highlighterAlpha]);
             if(this.embedHashes.get(clip.imagePath)===hash) continue;
             try {
+              if (this.writeHold?.writing(performance.now())) {
+                this.embedRefreshPending = true;
+                return;
+              }
               const buffer = await renderClipPng(page, currentBounds, {
                 images: this.images,
                 backdropPainter: this.backdrops,
@@ -2368,8 +2393,16 @@ export class InkView extends TextFileView {
                 themeMode: isDark ? "dark" : "light",
               });
               if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending || this.surface === null) continue;
+              if (this.writeHold?.writing(performance.now())) {
+                this.embedRefreshPending = true;
+                return;
+              }
               if (!buffer || buffer.byteLength < 8) continue;
               await this.app.vault.modifyBinary(abstract, buffer);
+              if (this.writeHold?.writing(performance.now())) {
+                this.embedRefreshPending = true;
+                return;
+              }
               this.embedHashes.set(clip.imagePath,hash);
               this.plugin.embedManager?.refreshEmbedImagesInDom(abstract);
             } catch (err) {
@@ -2382,11 +2415,19 @@ export class InkView extends TextFileView {
       if (page.pageEmbedPath) {
         const abstract = this.app.vault.getAbstractFileByPath(page.pageEmbedPath);
         if (abstract instanceof TFile) {
+          if (this.writeHold?.writing(performance.now())) {
+            this.embedRefreshPending = true;
+            return;
+          }
           const geom = page.geometry ?? { width: 1024, height: 1366 };
           const fullBounds: Bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
           const hash=JSON.stringify([page,fullBounds,incBg,isDark,this.toolState.pressureEnabled,this.settings.highlighterAlpha]);
           if(this.embedHashes.get(page.pageEmbedPath)===hash) continue;
           try {
+            if (this.writeHold?.writing(performance.now())) {
+              this.embedRefreshPending = true;
+              return;
+            }
             const buffer = await renderClipPng(page, fullBounds, {
               images: this.images,
               backdropPainter: this.backdrops,
@@ -2398,8 +2439,16 @@ export class InkView extends TextFileView {
               themeMode: isDark ? "dark" : "light",
             });
             if(this.file!==sourceFile || this.guard.locked || this.embedRefreshPending || this.surface === null) continue;
+            if (this.writeHold?.writing(performance.now())) {
+              this.embedRefreshPending = true;
+              return;
+            }
             if (!buffer || buffer.byteLength < 8) continue;
             await this.app.vault.modifyBinary(abstract, buffer);
+            if (this.writeHold?.writing(performance.now())) {
+              this.embedRefreshPending = true;
+              return;
+            }
             this.embedHashes.set(page.pageEmbedPath,hash);
             this.plugin.embedManager?.refreshEmbedImagesInDom(abstract);
           } catch (err) {

@@ -4,6 +4,7 @@ import type { PdfBackdropCache } from "./pdf-backdrop";
  */
 
 import type { Backdrop, Bounds, Page, PageGeometry, SyntheticBackdrop } from "../model/document";
+import { strokeBounds } from "../model/document";
 import {
   drawSynthetic,
   paperTheme,
@@ -119,7 +120,14 @@ export async function renderClipPng(
   const h = Math.max(1, maxY - minY);
 
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 2 : 2;
-  const scale = Math.min(options.scale ?? Math.max(2, Math.min(3, dpr)),4096/Math.max(w,h),Math.sqrt(8_000_000/(w*h)));
+  const targetDpr = Math.min(2, Math.max(1, dpr));
+  // Keep live embed image sizes bounded (up to 2 megapixels, max 2048px on an edge)
+  // so large expandable regions do not stall the main thread during PNG encoding.
+  const maxPixels = 2_000_000;
+  const scale = Math.min(
+    options.scale ?? Math.min(targetDpr, Math.sqrt(maxPixels / (w * h))),
+    2048 / Math.max(w, h),
+  );
 
   const canvas =
     typeof createEl === "function"
@@ -225,6 +233,8 @@ export async function renderClipPng(
 
   // 5. Draw ink strokes (intelligently converted between black/white when background is transparent)
   for (const stroke of page.strokes ?? []) {
+    const sb = strokeBounds(stroke);
+    if (sb && !boundsMeet(sb, cropBox)) continue;
     if (!includeBackground) {
       const adaptedColor = adaptColorForTheme(stroke.color, isDark);
       const adaptedStroke = adaptedColor === stroke.color ? stroke : { ...stroke, color: adaptedColor };
