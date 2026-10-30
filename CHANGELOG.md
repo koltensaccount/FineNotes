@@ -8,6 +8,14 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 88 — Handwrite Here Box Stability and Inline Notebook Creation
+
+- Fix Handwrite Here region jumping: anchor handwriting region position (minY, minX, maxX) to allocated origin and margins so boxes never randomly shift coordinates when writing.
+- Prevent region allocation from jumping pages: prioritize the active/preferred page when checking for empty reusable space and avoid jumping across pages.
+- Add inline notebook creation to Handwrite Here suggest modal: immediately create a new notebook matching the note title (`+ Create new notebook: "<Note Name>"`) or custom search query without failing or leaving the note.
+- Prioritize existing notebooks in the same folder as the Markdown note with clear indicators and subtext.
+- Retain complete compatibility with existing handwritten sections and embeds without modifying their saved content or cropping.
+
 ### Beta 87 — Smooth Handwriting in Large Embed Regions
 
 - Prevent lag and mangled Apple Pencil strokes when handwriting in large or expanding Handwrite Here embed regions.
