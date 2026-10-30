@@ -1875,7 +1875,8 @@ export class InkSurface {
     this.reportStatus();
     this.flashChrome();
     const handwriting = this.doc.pages[clamped]?.clips?.find(clip => clip.isExpandable &&
-      JSON.stringify(clipCurrentBounds(this.doc.pages[clamped], clip)) === JSON.stringify(bounds));
+      (JSON.stringify(clipCurrentBounds(this.doc.pages[clamped], clip)) === JSON.stringify(bounds) ||
+       (typeof clip.originY === "number" && Math.abs(clip.originY - bounds.minY) < 2)));
     this.activeHandwritingRegionId = handwriting?.id ?? null;
     this.scheduleHandwritingRegions();
     if (handwriting) { this.clipHighlightEl?.remove(); this.clipHighlightEl = null; }

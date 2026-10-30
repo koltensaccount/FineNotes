@@ -64,7 +64,9 @@ export function allocateHandwritingRegion(
   referencedImages?: ReadonlySet<string>,
 ): RegionAllocation {
   if (referencedImages) {
-    for (const [pageIndex, page] of doc.pages.entries()) {
+    const targetPageIdx = preferredPage >= 0 && preferredPage < doc.pages.length ? preferredPage : doc.pages.length - 1;
+    const page = doc.pages[targetPageIdx];
+    if (page) {
       const clip = page.clips
         ?.filter(
           (clip) =>
@@ -74,7 +76,7 @@ export function allocateHandwritingRegion(
         )
         .sort((a, b) => a.bounds.minY - b.bounds.minY)[0];
       if (clip)
-        return { page, pageIndex, bounds: { ...clip.bounds }, newPage: false, reusableClip: clip };
+        return { page, pageIndex: targetPageIdx, bounds: { ...clip.bounds }, newPage: false, reusableClip: clip };
     }
   }
   let pageIndex = doc.pages[preferredPage] ? preferredPage : doc.pages.length - 1;

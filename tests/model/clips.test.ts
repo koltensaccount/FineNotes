@@ -157,7 +157,7 @@ it("persists expandable regions and grows with ink, text, pictures, and circuits
   page.clips = [clip];
   expect(clipCurrentBounds(page, clip)).toEqual(clip.bounds);
   page.strokes.push(stroke("old", [0, 100, 1, 800, 200, 1]), stroke("new", [100, 310, 1, 500, 700, 1]));
-  expect(clipCurrentBounds(page, clip)).toEqual({minX: 40, minY: 294, maxX: 760, maxY: 724});
+  expect(clipCurrentBounds(page, clip)).toEqual({minX: 40, minY: 300, maxX: 760, maxY: 724});
   page.textBoxes.push({id: "text", x: 20, y: 750, w: 200, h: 80, text: "proof", color: "#000"} as never);
   expect(clipCurrentBounds(page, clip).maxY).toBe(854);
   page.images.push({id: "image", path: "picture.png", x: 60, y: 860, w: 40, h: 80});

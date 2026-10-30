@@ -254,8 +254,22 @@ export class PluginSettingTab extends Shell {
 }
 export class Setting extends Shell {}
 export class Menu extends Shell {}
-export class SuggestModal extends Modal {}
-export class FuzzySuggestModal extends Modal {}
+export class SuggestModal extends Modal {
+  setPlaceholder(_text: string): this {
+    return this;
+  }
+  setInstructions(_instructions: unknown[]): this {
+    return this;
+  }
+}
+export class FuzzySuggestModal extends Modal {
+  setPlaceholder(_text: string): this {
+    return this;
+  }
+  setInstructions(_instructions: unknown[]): this {
+    return this;
+  }
+}
 export class AbstractInputSuggest extends Shell {}
 export class ToggleComponent extends Shell {}
 export class MarkdownRenderer {

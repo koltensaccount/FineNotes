@@ -611,20 +611,45 @@ export function elementsBounds(
 export function clipCurrentBounds(page: Page, clip: NotebookClip): Bounds {
   if (clip.isExpandable && typeof clip.originY === "number" && Number.isFinite(clip.originY)) {
     const origin = clip.originY;
-    const nextOrigin = Math.min(...(page.clips ?? []).filter(other => other !== clip && other.isExpandable && !other.isUnreferenced && typeof other.originY === "number" && other.originY > origin).map(other => other.originY!));
+    const nextOrigin = Math.min(
+      ...(page.clips ?? [])
+        .filter(
+          (other) =>
+            other !== clip &&
+            other.isExpandable &&
+            !other.isUnreferenced &&
+            typeof other.originY === "number" &&
+            other.originY > origin,
+        )
+        .map((other) => other.originY!),
+    );
     const boxes: Bounds[] = [];
-    const include = (box: Bounds | null) => { if (box && box.minY >= origin - 20 && box.minY < nextOrigin - 20) boxes.push(box); };
+    const include = (box: Bounds | null) => {
+      if (box && box.minY >= origin - 20 && box.minY < nextOrigin - 20) boxes.push(box);
+    };
     for (const stroke of page.strokes) include(strokeBounds(stroke));
     for (const element of [...page.images, ...page.textBoxes, ...(page.circuits ?? [])]) {
-      include({minX: element.x, minY: element.y, maxX: element.x + element.w, maxY: element.y + (element.h ?? 100)});
+      include({
+        minX: element.x,
+        minY: element.y,
+        maxX: element.x + element.w,
+        maxY: element.y + (element.h ?? 100),
+      });
     }
-    if (!boxes.length) return {...clip.bounds};
-    return boxes.reduce((bounds, box) => ({
-      minX: Math.min(bounds.minX, box.minX - 16),
-      minY: Math.min(bounds.minY, box.minY - 16),
-      maxX: Math.max(bounds.maxX, box.maxX + 16),
-      maxY: Math.max(bounds.maxY, box.maxY + 24),
-    }), {minX: clip.bounds.minX, minY: origin, maxX: clip.bounds.maxX, maxY: origin + 120});
+    if (!boxes.length) return { ...clip.bounds };
+    const maxContentY = boxes.reduce(
+      (max, box) => Math.max(max, box.maxY + 24),
+      origin + 120,
+    );
+    const maxAllowedY = Number.isFinite(nextOrigin)
+      ? Math.min(page.geometry.height - 20, nextOrigin - 20)
+      : page.geometry.height - 20;
+    return {
+      minX: clip.bounds.minX,
+      minY: origin,
+      maxX: clip.bounds.maxX,
+      maxY: Math.min(maxContentY, Math.max(origin + 120, maxAllowedY)),
+    };
   }
   if (clip.elements && clip.elementBounds) {
     const currentElemBounds = elementsBounds(page, clip.elements);

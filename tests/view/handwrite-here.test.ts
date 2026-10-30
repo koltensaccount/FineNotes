@@ -20,6 +20,7 @@ import {
 } from "../../src/model/region-allocation";
 import { emptyDocument, blankPage, clipCurrentBounds } from "../../src/model/document";
 import {
+  NotebookSuggestModal,
   embedInsertionOffset,
   insertHandwritingEmbed,
   handwriteHere,
@@ -477,7 +478,7 @@ it("keeps a notebook-only writing guide aligned as the live region grows and rem
     pts: [100, 70, 1, 200, 800, 1],
   });
   surface.syncHandwritingRegions();
-  expect(guide.style.height).toBe("1540px");
+  expect(guide.style.height).toBe("1528px");
   page.clips = [];
   surface.syncHandwritingRegions();
   expect(guide.remove).toHaveBeenCalledOnce();
@@ -563,4 +564,142 @@ it("continues past a deleted region's invisible boundary and retains all source 
   // A genuinely linked next block continues to isolate its own section.
   updateHandwritingReferences(doc, new Set(["active.png", "deleted.png"]), "book.notebook.md");
   expect(clipCurrentBounds(page, active).maxY).toBe(224);
+});
+
+it("keeps expandable region bounds anchored at allocated origin and margins without jumping", () => {
+  const doc = emptyDocument(),
+    page = doc.pages[0];
+  const clip = {
+    id: "clip-fixed",
+    pageId: page.id,
+    bounds: { minX: 40, minY: 100, maxX: 760, maxY: 340 },
+    isExpandable: true,
+    originY: 100,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  page.clips = [clip];
+
+  // Empty bounds match allocated bounds
+  expect(clipCurrentBounds(page, clip)).toEqual(clip.bounds);
+
+  // Stroke near the top edge and left margin does NOT shift minY or minX
+  page.strokes.push({
+    id: "stroke-edge",
+    tool: "pen",
+    color: "#000",
+    size: 2,
+    pts: [42, 95, 1, 50, 110, 1],
+  });
+  const current = clipCurrentBounds(page, clip);
+  expect(current.minY).toBe(100);
+  expect(current.minX).toBe(40);
+  expect(current.maxX).toBe(760);
+});
+
+it("does not jump pages when allocating reusable handwriting regions", () => {
+  const doc = emptyDocument();
+  doc.pages.push(blankPage("p2"), blankPage("p3"));
+  const clipP0 = {
+    id: "clip-p0",
+    pageId: doc.pages[0].id,
+    bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
+    isExpandable: true,
+    originY: 60,
+    imagePath: "p0.png",
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  doc.pages[0].clips = [clipP0];
+
+  // When working on page 1 with no empty clips on page 1, it allocates on page 1 without jumping to page 0
+  const allocation = allocateHandwritingRegion(doc, 1, new Set());
+  expect(allocation.pageIndex).toBe(1);
+  expect(allocation.reusableClip).toBeUndefined();
+
+  // When an unreferenced empty clip exists on the preferred page, it reclaims on that page
+  const clipP1 = {
+    id: "clip-p1",
+    pageId: doc.pages[1].id,
+    bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
+    isExpandable: true,
+    originY: 60,
+    imagePath: "p1.png",
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  doc.pages[1].clips = [clipP1];
+  const p1Allocation = allocateHandwritingRegion(doc, 1, new Set());
+  expect(p1Allocation.pageIndex).toBe(1);
+  expect(p1Allocation.reusableClip).toBe(clipP1);
+});
+
+it("provides inline notebook creation and smart suggestions in NotebookSuggestModal", async () => {
+  const source = {
+    path: "Physics/Notes.md",
+    basename: "Notes",
+    parent: { path: "Physics", isRoot: () => false },
+  } as TFile;
+  const existingNear = {
+    path: "Physics/Mechanics.notebook.md",
+    basename: "Mechanics.notebook",
+    parent: { path: "Physics", isRoot: () => false },
+  } as TFile;
+  const existingFar = {
+    path: "Math/Calculus.notebook.md",
+    basename: "Calculus.notebook",
+    parent: { path: "Math", isRoot: () => false },
+  } as TFile;
+
+  const plugin = {
+    app: {
+      vault: {
+        getFolderByPath: () => ({ children: [] }),
+        getRoot: () => ({ children: [] }),
+        createFolder: vi.fn(async () => {}),
+        create: vi.fn(async (path: string) => ({ path, basename: "New.notebook" })),
+        getFileByPath: (p: string) => ({ path: p }),
+      },
+    },
+    settings: {
+      paperWidth: 800,
+    },
+  } as any;
+
+  let chosenFile: TFile | null = null;
+  const modal = new NotebookSuggestModal(
+    plugin.app,
+    plugin,
+    source,
+    [existingFar, existingNear],
+    (file) => {
+      chosenFile = file;
+    },
+  );
+
+  // Suggestions with empty query: offers "+ Create new notebook: 'Notes'" and prioritizes same-folder notebooks
+  const emptyQueryItems = modal.getSuggestions("");
+  expect(emptyQueryItems[0]).toEqual({
+    type: "create",
+    title: "Notes",
+    folder: "Physics",
+  });
+  expect(emptyQueryItems[1].type).toBe("existing");
+  expect((emptyQueryItems[1] as any).file.path).toBe("Physics/Mechanics.notebook.md");
+  expect((emptyQueryItems[1] as any).isSameFolder).toBe(true);
+
+  // Suggestions with query: creates title from query and filters existing
+  const queryItems = modal.getSuggestions("Calc");
+  expect(queryItems[0]).toEqual({
+    type: "create",
+    title: "Calc",
+    folder: "Physics",
+  });
+  expect(queryItems).toHaveLength(2);
+  expect((queryItems[1] as any).file.path).toBe("Math/Calculus.notebook.md");
+
+  // Choosing create creates a new notebook and resolves the file
+  await modal.onChooseSuggestion(emptyQueryItems[0]);
+  expect(plugin.app.vault.create).toHaveBeenCalled();
+  expect(chosenFile).not.toBeNull();
 });

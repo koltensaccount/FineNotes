@@ -7595,3 +7595,38 @@ img.finenotes-live-embed-image:hover {
 .goodobsidian-pen-card > .goodobsidian-stroke-preview { flex: 0 0 32px; width: min(88px, 100%); height: 32px; }
 .goodobsidian-pen-card .goodobsidian-pen-caption { flex: 0 1 auto; text-align: center; line-height: 1.35; }
 .goodobsidian-pen-dynamics-control { gap: 2px; padding: 8px 0 0; }
+
+/* Notebook selection and creation suggest modal */
+.finenotes-notebook-suggest-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  gap: 2px;
+}
+.finenotes-suggest-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--text-normal);
+}
+.finenotes-suggest-create .finenotes-suggest-title {
+  color: var(--interactive-accent);
+}
+.finenotes-suggest-icon {
+  font-size: 1.1em;
+  font-weight: 700;
+}
+.finenotes-suggest-badge {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-modifier-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: normal;
+}
+.finenotes-suggest-subtext {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+

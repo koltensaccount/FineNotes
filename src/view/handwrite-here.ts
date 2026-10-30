@@ -1,42 +1,187 @@
 import { referencedEmbedImages } from "./embed-references";
 export { referencedEmbedImages } from "./embed-references";
-import { type App, type Editor, MarkdownView, FuzzySuggestModal, Notice, TFile } from "obsidian";
+import {
+  type App,
+  type Editor,
+  MarkdownView,
+  SuggestModal,
+  Notice,
+  TFile,
+  normalizePath,
+} from "obsidian";
 import type GoodObsidianPlugin from "../main";
 import { VIEW_TYPE_INK } from "../constants";
 import {
   resolveNotebookAssociation,
   renameNotebookAssociations,
 } from "../model/notebook-association";
-import { parseInkFile } from "../model/serialize";
+import { buildInkFile, parseInkFile } from "../model/serialize";
+import {
+  buildNewDocument,
+  cleanTitle,
+  joinVaultPath,
+  newNoteBody,
+  normalizeFolder,
+  notebookPaths,
+  parseNotebookChoices,
+  stripInkSuffix,
+} from "../model/new-notebook";
 import { InkView } from "./ink-view";
 
-export class NotebookSuggestModal extends FuzzySuggestModal<TFile> {
+export type NotebookChoiceItem =
+  | {
+      type: "create";
+      title: string;
+      folder: string;
+    }
+  | {
+      type: "existing";
+      file: TFile;
+      isSameFolder: boolean;
+    };
+
+export class NotebookSuggestModal extends SuggestModal<NotebookChoiceItem> {
   private chosen = false;
+
   constructor(
     app: App,
+    private readonly plugin: GoodObsidianPlugin,
+    private readonly source: TFile,
     private readonly notebooks: TFile[],
     private readonly resolve: (file: TFile | null) => void,
   ) {
     super(app);
-    this.setPlaceholder("Choose a notebook for handwriting in this note");
+    this.setPlaceholder("Choose an existing notebook or create a new one...");
+    this.setInstructions([
+      { command: "↵", purpose: "to select or create notebook" },
+      { command: "esc", purpose: "to dismiss" },
+    ]);
   }
-  getItems(): TFile[] {
-    return this.notebooks;
+
+  getSuggestions(query: string): NotebookChoiceItem[] {
+    const trimmed = query.trim();
+    const sourceFolder =
+      this.source.parent && !this.source.parent.isRoot() ? this.source.parent.path : "";
+    const defaultFolder = sourceFolder || this.plugin.settings?.newNotebookFolder || "";
+    const defaultTitle = stripInkSuffix(this.source.basename) || "Notebook";
+    const createTitle = trimmed.length > 0 ? trimmed : defaultTitle;
+
+    const items: NotebookChoiceItem[] = [
+      {
+        type: "create",
+        title: createTitle,
+        folder: defaultFolder,
+      },
+    ];
+
+    const lower = trimmed.toLowerCase();
+    const matching = this.notebooks.filter((file) => {
+      if (!lower) return true;
+      const title = stripInkSuffix(file.basename).toLowerCase();
+      const path = file.path.toLowerCase();
+      return title.includes(lower) || path.includes(lower);
+    });
+
+    matching.sort((a, b) => {
+      const aSame = a.parent?.path === this.source.parent?.path;
+      const bSame = b.parent?.path === this.source.parent?.path;
+      if (aSame && !bSame) return -1;
+      if (!aSame && bSame) return 1;
+      return a.basename.localeCompare(b.basename);
+    });
+
+    for (const file of matching) {
+      items.push({
+        type: "existing",
+        file,
+        isSameFolder: file.parent?.path === this.source.parent?.path,
+      });
+    }
+
+    return items;
   }
-  getItemText(file: TFile): string {
-    return file.path;
+
+  renderSuggestion(item: NotebookChoiceItem, el: HTMLElement): void {
+    el.empty();
+    el.addClass("finenotes-notebook-suggest-item");
+    if (item.type === "create") {
+      el.addClass("finenotes-suggest-create");
+      const titleRow = el.createDiv({ cls: "finenotes-suggest-title" });
+      titleRow.createSpan({ cls: "finenotes-suggest-icon", text: "＋" });
+      titleRow.createSpan({ cls: "finenotes-suggest-action", text: "Create new notebook: " });
+      titleRow.createSpan({ cls: "finenotes-suggest-name", text: `"${item.title}"` });
+
+      const subRow = el.createDiv({ cls: "finenotes-suggest-subtext" });
+      const folderText = item.folder ? item.folder : "Vault root";
+      subRow.createSpan({ text: `Location: ${folderText}` });
+    } else {
+      el.addClass("finenotes-suggest-existing");
+      const titleRow = el.createDiv({ cls: "finenotes-suggest-title" });
+      titleRow.createSpan({ text: stripInkSuffix(item.file.basename) });
+      if (item.isSameFolder) {
+        titleRow.createSpan({ cls: "finenotes-suggest-badge", text: "same folder" });
+      }
+      const subRow = el.createDiv({ cls: "finenotes-suggest-subtext" });
+      const folderPath =
+        item.file.parent && !item.file.parent.isRoot() ? item.file.parent.path : "Vault root";
+      subRow.createSpan({ text: folderPath });
+    }
   }
-  onChooseItem(file: TFile): void {
+
+  async onChooseSuggestion(item: NotebookChoiceItem): Promise<void> {
     this.chosen = true;
-    this.resolve(file);
+    if (item.type === "existing") {
+      this.resolve(item.file);
+      return;
+    }
+    try {
+      const file = await createNotebookForNote(this.plugin, this.source, item.title, item.folder);
+      this.resolve(file);
+    } catch (err) {
+      new Notice(
+        `FineNotes: could not create notebook — ${err instanceof Error ? err.message : String(err)}`,
+      );
+      this.resolve(null);
+    }
   }
+
   override onClose(): void {
     super.onClose();
-    // Obsidian may close the modal before dispatching onChooseItem.
+    // Obsidian may close the modal before dispatching onChooseSuggestion.
     window.setTimeout(() => {
       if (!this.chosen) this.resolve(null);
     }, 0);
   }
+}
+
+export async function createNotebookForNote(
+  plugin: GoodObsidianPlugin,
+  source: TFile,
+  title: string,
+  folder?: string,
+): Promise<TFile> {
+  const dir = normalizeFolder(
+    folder ?? (source.parent && !source.parent.isRoot() ? source.parent.path : ""),
+  );
+  const parent = dir ? plugin.app.vault.getFolderByPath(dir) : plugin.app.vault.getRoot();
+  const taken = new Set(parent?.children?.map((child) => child.name) ?? []);
+  const choices = parseNotebookChoices(plugin.settings?.lastNotebookChoices);
+  choices.type = "notebook";
+  choices.cover = "none";
+
+  const paths = notebookPaths(dir, title, "notebook", choices.ownFolder, taken);
+  for (const path of paths.folders) {
+    if (!plugin.app.vault.getFolderByPath(path)) {
+      await plugin.app.vault.createFolder(path);
+    }
+  }
+  const name = paths.fileName;
+  const heading = cleanTitle(title) || stripInkSuffix(name);
+  const doc = buildNewDocument(choices, heading, paths.attachments);
+  const content = buildInkFile(newNoteBody(heading, new Date().toISOString()), doc);
+  const filePath = normalizePath(joinVaultPath(paths.folder, name));
+  const created = await plugin.app.vault.create(filePath, content);
+  return (created instanceof TFile ? created : plugin.app.vault.getFileByPath(filePath)) as TFile;
 }
 
 /** Never overwrite a selection or insert into a different document after awaiting UI. */
@@ -121,41 +266,42 @@ export async function handwriteHere(
     .getFiles()
     .filter((file) => /\.notebook\.md$/i.test(file.path))
     .sort((a, b) => a.path.localeCompare(b.path));
-  if (!notebooks.length)
-    throw new Error("Create a FineNotes notebook first, then run Handwrite Here again.");
   const resolveFile = (link: string) =>
     app.metadataCache.getFirstLinkpathDest(link, source.path) ?? app.vault.getFileByPath(link);
-  const path = await resolveNotebookAssociation({
-    markdownPath: source.path,
-    frontmatter: app.metadataCache.getFileCache(source)?.frontmatter,
-    stored: plugin.settings.notebookAssociations,
-    text: before,
-    notebooks: notebooks.map((file) => file.path),
-    resolveLink: (link) => resolveFile(link)?.path ?? null,
-    imageOwner: async (link) => {
-      const image = resolveFile(link);
-      if (!image) return null;
-      for (const notebook of notebooks) {
-        const doc = parseInkFile(
-          await app.vault.cachedRead(notebook),
-          plugin.settings.paperWidth,
-        ).doc;
-        if (
-          doc?.pages.some(
-            (page) =>
-              page.pageEmbedPath === image.path ||
-              page.clips?.some((clip) => clip.imagePath === image.path),
-          )
-        )
-          return notebook.path;
-      }
-      return null;
-    },
-  });
+  const path =
+    notebooks.length > 0
+      ? await resolveNotebookAssociation({
+          markdownPath: source.path,
+          frontmatter: app.metadataCache.getFileCache(source)?.frontmatter,
+          stored: plugin.settings.notebookAssociations,
+          text: before,
+          notebooks: notebooks.map((file) => file.path),
+          resolveLink: (link) => resolveFile(link)?.path ?? null,
+          imageOwner: async (link) => {
+            const image = resolveFile(link);
+            if (!image) return null;
+            for (const notebook of notebooks) {
+              const doc = parseInkFile(
+                await app.vault.cachedRead(notebook),
+                plugin.settings.paperWidth,
+              ).doc;
+              if (
+                doc?.pages.some(
+                  (page) =>
+                    page.pageEmbedPath === image.path ||
+                    page.clips?.some((clip) => clip.imagePath === image.path),
+                )
+              )
+                return notebook.path;
+            }
+            return null;
+          },
+        })
+      : null;
   const notebook = path
     ? app.vault.getFileByPath(path)
     : await new Promise<TFile | null>((resolve) =>
-        new NotebookSuggestModal(app, notebooks, resolve).open(),
+        new NotebookSuggestModal(app, plugin, source, notebooks, resolve).open(),
       );
   if (!notebook) return;
   if (
