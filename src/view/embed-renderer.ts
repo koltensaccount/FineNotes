@@ -185,25 +185,58 @@ export class FineNotesEmbedManager {
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes", codeBlockHandler);
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes-embed", codeBlockHandler);
 
-    const markImages=(root:Element)=>{
-      const images=root instanceof HTMLImageElement ? [root] : [...root.querySelectorAll<HTMLImageElement>("img")];
-      for(const image of images) {
-        void this.imageSource(image).then(source=>{
-          if(image.isConnected) image.classList.toggle("finenotes-live-embed-image",Boolean(source));
-        });
-      }
+    const isPrintContext = (img: HTMLImageElement): boolean => {
+      const doc = img.ownerDocument;
+      return Boolean(
+        img.closest(".print") ||
+        (doc && typeof document !== "undefined" && doc !== document) ||
+        (doc?.defaultView && typeof window !== "undefined" && doc.defaultView !== window) ||
+        (typeof window !== "undefined" && window.matchMedia && window.matchMedia("print").matches) ||
+        (doc?.defaultView?.matchMedia && doc.defaultView.matchMedia("print").matches)
+      );
     };
-    this.plugin.registerMarkdownPostProcessor(el=>markImages(el));
+
+    const isMainAppDark = (): boolean => {
+      return typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+    };
+
+    const markImages = (root: Element): Promise<void> => {
+      const images = root instanceof HTMLImageElement ? [root] : [...root.querySelectorAll<HTMLImageElement>("img")];
+      if (images.length === 0) return Promise.resolve();
+      const appDark = isMainAppDark();
+
+      return Promise.all(
+        images.map(async (image) => {
+          const source = await this.imageSource(image);
+          if (!source) return;
+          if (image.isConnected) {
+            image.classList.add("finenotes-live-embed-image");
+            if (appDark) {
+              image.dataset.finenotesTheme = "dark";
+            }
+          }
+
+          // If printing or exporting to PDF, and the main app is in dark mode:
+          // The image on disk has white strokes on transparent background.
+          // Adapt the image so it renders with high-contrast dark strokes on the white PDF page.
+          if (isPrintContext(image) && appDark) {
+            await this.adaptImageElementForPrint(image, source);
+          }
+        })
+      ).then(() => {});
+    };
+
+    this.plugin.registerMarkdownPostProcessor((el) => markImages(el));
     if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
       const observer = new MutationObserver(records => {
         for (const record of records) {
-          if (record.type === "attributes" && record.target instanceof Element) markImages(record.target);
-          else for (const node of record.addedNodes) if (node instanceof Element) markImages(node);
+          if (record.type === "attributes" && record.target instanceof Element) void markImages(record.target);
+          else for (const node of record.addedNodes) if (node instanceof Element) void markImages(node);
         }
       });
       observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
       this.plugin.register(() => observer.disconnect());
-      this.app.workspace.onLayoutReady(() => { if (!this.disposed) markImages(document.body); });
+      this.app.workspace.onLayoutReady(() => { if (!this.disposed) void markImages(document.body); });
     }
     if (typeof document !== "undefined") {
       this.plugin.registerDomEvent(document,"click",(event:MouseEvent)=>{
@@ -333,6 +366,135 @@ export class FineNotesEmbedManager {
         const cleanBase = (img.src || srcAttr).split("?")[0];
         img.src = `${cleanBase}?t=${now}`;
       }
+    }
+  }
+
+  /**
+   * When Obsidian exports to PDF or prints, the document is rendered on white paper.
+   * If Obsidian is in dark mode, live clip PNGs on disk contain white strokes.
+   * Render or adapt the clip to light mode so handwriting and text are clearly visible.
+   */
+  async adaptImageElementForPrint(image: HTMLImageElement, source: string): Promise<void> {
+    if (image.dataset.finenotesAdapted === "true") return;
+
+    // Apply immediate CSS filter so the image is never blank while async render finishes
+    image.style.filter = "invert(1) hue-rotate(180deg)";
+
+    try {
+      const [notebookPath, subpath] = source.split("#");
+      const targetFile = this.app.vault.getAbstractFileByPath(notebookPath);
+      if (targetFile instanceof TFile) {
+        const doc = await this.loadDocument(targetFile);
+        if (doc && doc.pages) {
+          let page: Page | null = null;
+          let cropBounds: Bounds | null = null;
+          const sub = (subpath || "").trim();
+          const clipIdMatch = /^#?\^?(?:clip=)?([a-zA-Z0-9_-]+)/i.exec(sub);
+          if (clipIdMatch) {
+            const found = findClip(doc, clipIdMatch[1]);
+            if (found) {
+              page = found.page;
+              cropBounds = clipCurrentBounds(page, found.clip);
+            }
+          }
+          if (!page) {
+            const pageMatch = /page=(\d+)/i.exec(sub);
+            if (pageMatch) {
+              const pageIndex = parseInt(pageMatch[1], 10) - 1;
+              page = doc.pages[pageIndex] ?? null;
+              if (page) {
+                const geom = page.geometry ?? { width: 1024, height: 1366 };
+                cropBounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
+              }
+            }
+          }
+
+          if (page && cropBounds) {
+            const buffer = await renderClipPng(page, cropBounds, {
+              images: this.imageCache,
+              backdropPainter: this.backdropPainter,
+              pdf: this.pdfCache,
+              includeBackground: this.plugin.settings.embedBackground === true,
+              themeMode: "light",
+              padding: 8,
+              usePressure: this.plugin.settings.pressureWidth,
+              highlighterAlpha: this.plugin.settings.highlighterAlpha,
+            });
+            if (buffer && buffer.byteLength > 8) {
+              const blob = new Blob([buffer], { type: "image/png" });
+              image.src = URL.createObjectURL(blob);
+              image.dataset.finenotesAdapted = "true";
+              image.style.filter = "";
+              return;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[FineNotes] Error rendering light-mode embed for print:", err);
+    }
+
+    // Fallback: in-memory canvas pixel adaptation for print when source notebook is unavailable
+    try {
+      await this.adaptImagePixelsForPrint(image);
+    } catch (err) {
+      console.warn("[FineNotes] Error adapting image pixels for print:", err);
+    }
+  }
+
+  /** Fallback: in-memory canvas pixel adaptation for print when source notebook is unavailable. */
+  private async adaptImagePixelsForPrint(image: HTMLImageElement): Promise<void> {
+    if (image.dataset.finenotesAdapted === "true") return;
+
+    if (!image.complete || image.naturalWidth === 0) {
+      await new Promise<void>((resolve) => {
+        const onDone = () => {
+          image.removeEventListener("load", onDone);
+          image.removeEventListener("error", onDone);
+          resolve();
+        };
+        image.addEventListener("load", onDone);
+        image.addEventListener("error", onDone);
+      });
+    }
+
+    const w = image.naturalWidth || image.width;
+    const h = image.naturalHeight || image.height;
+    if (w <= 0 || h <= 0) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.drawImage(image, 0, 0);
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+
+    let modified = false;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3];
+      if (a < 10) continue; // transparent
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const maxVal = Math.max(r, g, b);
+      const minVal = Math.min(r, g, b);
+      const isMonochrome = (maxVal - minVal) <= 35;
+
+      // In dark mode PNG: white or very light text/strokes become #1a1a1a (charcoal black)
+      if (isMonochrome && minVal >= 180) {
+        d[i] = 26;
+        d[i + 1] = 26;
+        d[i + 2] = 26;
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      ctx.putImageData(imgData, 0, 0);
+      image.src = canvas.toDataURL("image/png");
+      image.dataset.finenotesAdapted = "true";
+      image.style.filter = "";
     }
   }
 

@@ -45,11 +45,12 @@ export function parseColorToRgb(color: string): { r: number; g: number; b: numbe
   if (c === "white") return { r: 255, g: 255, b: 255 };
   if (c.startsWith("#")) {
     const hex = c.slice(1);
-    if (hex.length === 3) {
+    if (hex.length === 3 || hex.length === 4) {
       return {
         r: parseInt(hex[0] + hex[0], 16),
         g: parseInt(hex[1] + hex[1], 16),
         b: parseInt(hex[2] + hex[2], 16),
+        a: hex.length === 4 ? parseInt(hex[3] + hex[3], 16) / 255 : 1,
       };
     }
     if (hex.length === 6 || hex.length === 8) {
@@ -85,12 +86,12 @@ export function adaptColorForTheme(color: string, isDark: boolean): string {
 
   if (isDark) {
     // In dark mode: black or very dark text/strokes become white
-    if (isMonochrome && maxVal <= 80) {
+    if (isMonochrome && maxVal <= 90) {
       return "#ffffff";
     }
   } else {
     // In light mode: white or very light text/strokes become black
-    if (isMonochrome && minVal >= 195) {
+    if (isMonochrome && minVal >= 180) {
       return "#1a1a1a";
     }
   }
