@@ -7630,3 +7630,18 @@ img.finenotes-live-embed-image:hover {
   color: var(--text-muted);
 }
 
+/* Print & PDF Export Handling: adapt dark mode ink clips to white paper */
+@media print {
+  .print img.finenotes-dark-clip,
+  .print img[data-finenotes-theme="dark"],
+  .theme-light .print img.finenotes-dark-clip,
+  .theme-light .print img[data-finenotes-theme="dark"],
+  .print img[src*="-clip-"],
+  .print img[src*="-page-"],
+  .print img[alt*="-clip-"],
+  .print img[alt*="-page-"] {
+    filter: invert(1) hue-rotate(180deg) !important;
+    -webkit-filter: invert(1) hue-rotate(180deg) !important;
+  }
+}
+
