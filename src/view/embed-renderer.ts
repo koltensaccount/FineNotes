@@ -20,6 +20,7 @@ import {
   TFile,
   setIcon,
   MarkdownRenderChild,
+  Notice,
 } from "obsidian";
 import {
   type Bounds,
@@ -289,35 +290,62 @@ export class FineNotesEmbedManager {
   }
 
   private hookExportPdf(): void {
-    const onExportTriggered = () => {
-      void this.logHq("Export PDF triggered via command/button");
-      const active = this.getActiveMarkdownFile();
-      void this.logHq(`Active note: ${active?.path}`);
-      if (active) void this.prepareHighQualityClipsForFile(active);
-    };
-
     const installHook = () => {
       const commands = (this.app as any).commands?.commands;
       if (!commands) return;
-      void this.logHq(`Installing export hooks across ${Object.keys(commands).length} commands`);
       for (const cmdId of Object.keys(commands)) {
         if (/export.*pdf|pdf.*export/i.test(cmdId)) {
-          void this.logHq(`Hooking PDF command: ${cmdId}`);
           const exportCmd = commands[cmdId];
           if (exportCmd && !exportCmd._finenotesHooked) {
             exportCmd._finenotesHooked = true;
             const origCallback = exportCmd.callback;
             const origCheckCallback = exportCmd.checkCallback;
-            if (origCallback) {
-              exportCmd.callback = () => {
-                onExportTriggered();
-                origCallback();
-              };
-            }
             if (origCheckCallback) {
               exportCmd.checkCallback = (checking: boolean) => {
-                if (!checking) onExportTriggered();
-                return origCheckCallback(checking);
+                if (checking) return origCheckCallback(checking);
+                const active = this.getActiveMarkdownFile();
+                if (active) {
+                  void (async () => {
+                    let notice: Notice | null = null;
+                    const timer = setTimeout(() => {
+                      notice = new Notice("Preparing high-quality handwriting for PDF export…", 3000);
+                    }, 300);
+                    try {
+                      await this.prepareHighQualityClipsForFile(active);
+                    } catch (e) {
+                      console.warn("[FineNotes] Failed to prepare high-quality clips:", e);
+                    } finally {
+                      clearTimeout(timer);
+                      if (notice) (notice as any).hide?.();
+                      origCheckCallback(false);
+                    }
+                  })();
+                  return true;
+                }
+                return origCheckCallback(false);
+              };
+            } else if (origCallback) {
+              exportCmd.callback = () => {
+                const active = this.getActiveMarkdownFile();
+                if (active) {
+                  void (async () => {
+                    let notice: Notice | null = null;
+                    const timer = setTimeout(() => {
+                      notice = new Notice("Preparing high-quality handwriting for PDF export…", 3000);
+                    }, 300);
+                    try {
+                      await this.prepareHighQualityClipsForFile(active);
+                    } catch (e) {
+                      console.warn("[FineNotes] Failed to prepare high-quality clips:", e);
+                    } finally {
+                      clearTimeout(timer);
+                      if (notice) (notice as any).hide?.();
+                      origCallback();
+                    }
+                  })();
+                } else {
+                  origCallback();
+                }
               };
             }
           }
@@ -325,11 +353,14 @@ export class FineNotesEmbedManager {
       }
     };
 
+    installHook();
     if (this.app.workspace.layoutReady) {
       installHook();
     } else {
       this.app.workspace.onLayoutReady(() => { if (!this.disposed) installHook(); });
     }
+    setTimeout(installHook, 1000);
+    setTimeout(installHook, 3000);
 
     if (typeof document !== "undefined") {
       this.plugin.registerDomEvent(document, "click", (event: MouseEvent) => {
@@ -338,8 +369,8 @@ export class FineNotesEmbedManager {
         if (btn && btn.textContent?.trim() === "Export") {
           const modal = btn.closest(".modal");
           if (modal && modal.querySelector(".modal-title")?.textContent?.includes("Export to PDF")) {
-            void this.logHq("Export button clicked in PDF modal");
-            onExportTriggered();
+            const active = this.getActiveMarkdownFile();
+            if (active) void this.prepareHighQualityClipsForFile(active);
           }
         }
       });

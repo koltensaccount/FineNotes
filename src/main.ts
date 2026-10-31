@@ -333,21 +333,6 @@ export default class GoodObsidianPlugin extends Plugin {
       view.copyPageLink(),
     );
     this.notebookCommand("export-pdf", "Export as PDF…", (view) => view.exportPdf());
-    this.addCommand({
-      id: "export-pdf-high-quality",
-      name: "Export note to PDF (high quality handwriting)",
-      checkCallback: (checking) => {
-        const active = this.embedManager?.getActiveMarkdownFile() ?? this.app.workspace.getActiveFile();
-        if (!active || active.extension !== "md") return false;
-        if (checking) return true;
-        void (async () => {
-          new Notice("Preparing high-quality handwriting renders for PDF export...");
-          await this.embedManager?.prepareHighQualityClipsForFile(active);
-          (this.app as any).commands?.executeCommandById?.("workspace:export-pdf");
-        })();
-        return true;
-      },
-    });
     this.notebookCommand(
       "update-companion-pdf",
       "Update companion PDF now",
