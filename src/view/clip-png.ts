@@ -37,6 +37,7 @@ export interface RenderClipPngOptions {
       target?: { deviceScale: number; region?: Bounds },
     ) => void;
   } | null;
+  highQuality?: boolean;
 }
 
 export function parseColorToRgb(color: string): { r: number; g: number; b: number; a?: number } | null {
@@ -123,12 +124,19 @@ export async function renderClipPng(
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 2 : 2;
   const targetDpr = Math.min(2, Math.max(1, dpr));
   // Keep live embed image sizes bounded (up to 2 megapixels, max 2048px on an edge)
-  // so large expandable regions do not stall the main thread during PNG encoding.
-  const maxPixels = 2_000_000;
-  const scale = Math.min(
-    options.scale ?? Math.min(targetDpr, Math.sqrt(maxPixels / (w * h))),
-    2048 / Math.max(w, h),
-  );
+  // so large expandable regions do not stall the main thread during live PNG encoding.
+  // When highQuality is requested (for PDF export or publishing), scale at 3x / 300 DPI (up to 6000px).
+  let scale: number;
+  if (options.highQuality) {
+    const exportScale = options.scale ?? 3.0;
+    scale = Math.min(exportScale, 6000 / Math.max(w, h));
+  } else {
+    const maxPixels = 2_000_000;
+    scale = Math.min(
+      options.scale ?? Math.min(targetDpr, Math.sqrt(maxPixels / (w * h))),
+      2048 / Math.max(w, h),
+    );
+  }
 
   const canvas =
     typeof createEl === "function"

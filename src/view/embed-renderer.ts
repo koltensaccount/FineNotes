@@ -168,6 +168,8 @@ export class FineNotesEmbedManager {
       }),
     );
 
+    this.hookExportPdf();
+
     // Register markdown post processor for ![[Notebook#...]] embeds
     this.plugin.registerMarkdownPostProcessor?.((el, ctx) => {
       this.processMarkdownEmbeds(el, ctx);
@@ -227,6 +229,9 @@ export class FineNotesEmbedManager {
             image.dataset.finenotesTheme = "light";
             image.classList.remove("finenotes-dark-clip");
           }
+          if (isPrint && image.dataset.finenotesHq !== "true") {
+            void this.upgradeImageForPrint(image);
+          }
         }
       }
     };
@@ -265,6 +270,262 @@ export class FineNotesEmbedManager {
           }
         });
       });
+    }
+  }
+
+  private logHq(_msg: string): void {
+    // Disabled in production
+  }
+
+  getActiveMarkdownFile(): TFile | null {
+    const direct = this.app.workspace.getActiveFile();
+    if (direct && direct.extension === "md") return direct;
+    const leaves = this.app.workspace.getLeavesOfType("markdown");
+    for (const leaf of leaves) {
+      const file = (leaf.view as any)?.file;
+      if (file instanceof TFile && file.extension === "md") return file;
+    }
+    return direct;
+  }
+
+  private hookExportPdf(): void {
+    const onExportTriggered = () => {
+      void this.logHq("Export PDF triggered via command/button");
+      const active = this.getActiveMarkdownFile();
+      void this.logHq(`Active note: ${active?.path}`);
+      if (active) void this.prepareHighQualityClipsForFile(active);
+    };
+
+    const installHook = () => {
+      const commands = (this.app as any).commands?.commands;
+      if (!commands) return;
+      void this.logHq(`Installing export hooks across ${Object.keys(commands).length} commands`);
+      for (const cmdId of Object.keys(commands)) {
+        if (/export.*pdf|pdf.*export/i.test(cmdId)) {
+          void this.logHq(`Hooking PDF command: ${cmdId}`);
+          const exportCmd = commands[cmdId];
+          if (exportCmd && !exportCmd._finenotesHooked) {
+            exportCmd._finenotesHooked = true;
+            const origCallback = exportCmd.callback;
+            const origCheckCallback = exportCmd.checkCallback;
+            if (origCallback) {
+              exportCmd.callback = () => {
+                onExportTriggered();
+                origCallback();
+              };
+            }
+            if (origCheckCallback) {
+              exportCmd.checkCallback = (checking: boolean) => {
+                if (!checking) onExportTriggered();
+                return origCheckCallback(checking);
+              };
+            }
+          }
+        }
+      }
+    };
+
+    if (this.app.workspace.layoutReady) {
+      installHook();
+    } else {
+      this.app.workspace.onLayoutReady(() => { if (!this.disposed) installHook(); });
+    }
+
+    if (typeof document !== "undefined") {
+      this.plugin.registerDomEvent(document, "click", (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        const btn = target?.closest?.("button.mod-cta, button");
+        if (btn && btn.textContent?.trim() === "Export") {
+          const modal = btn.closest(".modal");
+          if (modal && modal.querySelector(".modal-title")?.textContent?.includes("Export to PDF")) {
+            void this.logHq("Export button clicked in PDF modal");
+            onExportTriggered();
+          }
+        }
+      });
+    }
+  }
+
+  private async upgradeImageForPrint(image: HTMLImageElement): Promise<void> {
+    if (image.dataset.finenotesHq === "true") return;
+    const src = (image.getAttribute("src") || "").split("?")[0];
+    const alt = image.getAttribute("alt") || "";
+    const cleanSrc = decodeURIComponent(src);
+    void this.logHq(`upgradeImageForPrint: src=${src}, alt=${alt}`);
+
+    const asset = this.app.vault.getFiles().find(file => {
+      if (file.extension !== "png") return false;
+      if (file.name === alt || file.path === alt) return true;
+      if (cleanSrc.includes(file.path) || cleanSrc.endsWith("/" + file.name)) return true;
+      try {
+        const resPath = this.app.vault.getResourcePath(file).split("?")[0];
+        if (decodeURIComponent(resPath) === cleanSrc) return true;
+      } catch {}
+      return false;
+    });
+    if (!asset) {
+      void this.logHq(`upgradeImageForPrint: no asset found for ${src}`);
+      return;
+    }
+    image.dataset.finenotesHq = "true";
+    void this.logHq(`upgradeImageForPrint: calling prepareHighQualityClip for ${asset.path}`);
+    const ok = await this.prepareHighQualityClip(asset);
+    void this.logHq(`upgradeImageForPrint: prepareHighQualityClip result=${ok}`);
+    if (ok && image.isConnected) {
+      const resPath = this.app.vault.getResourcePath(asset).split("?")[0];
+      image.src = `${resPath}?t=${Date.now()}`;
+    }
+  }
+
+  /**
+   * Render a specific notebook clip or page PNG at high resolution (3x / 300 DPI vector crispness)
+   * strictly on export/publish, keeping live editing lightweight and fast.
+   */
+  async prepareHighQualityClip(imageFile: TFile): Promise<boolean> {
+    void this.logHq(`prepareHighQualityClip started for ${imageFile.path}`);
+    if (imageFile.extension !== "png") return false;
+    let page: Page | null = null;
+    let bounds: Bounds | null = null;
+    let isClip = false;
+
+    const clipMatch = /^(.*?)-(?:clip)-([a-zA-Z0-9_-]+)\.png$/i.exec(imageFile.name);
+    const pageMatch = /^(.*?)-(?:page)-(\d+)\.png$/i.exec(imageFile.name);
+    const prefix = clipMatch ? clipMatch[1] : pageMatch ? pageMatch[1] : null;
+
+    let notebookFile: TFile | null = null;
+    if (prefix) {
+      notebookFile = this.app.vault.getFiles().find(f =>
+        this.plugin.isInkFile(f) &&
+        (f.name.startsWith(prefix) || f.basename === prefix || stripInkSuffix(f.basename) === prefix || f.path.includes(prefix))
+      ) ?? null;
+    }
+    void this.logHq(`prefix=${prefix}, notebookFile=${notebookFile?.path}`);
+
+    if (!notebookFile) {
+      const sources = await this.imageSources();
+      for (const [imgPath, srcRef] of sources) {
+        if (imgPath === imageFile.path || imgPath.endsWith("/" + imageFile.name) || imgPath === imageFile.name) {
+          const [nPath] = srcRef.split("#");
+          const nb = this.app.vault.getAbstractFileByPath(nPath);
+          if (nb instanceof TFile && this.plugin.isInkFile(nb)) {
+            notebookFile = nb;
+            break;
+          }
+        }
+      }
+      void this.logHq(`fallback imageSources notebookFile=${notebookFile?.path}`);
+    }
+
+    if (!notebookFile) {
+      for (const f of this.app.vault.getFiles()) {
+        if (!this.plugin.isInkFile(f)) continue;
+        const d = await this.loadDocument(f);
+        if (d?.pages.some(p => p.clips?.some(c => c.imagePath === imageFile.path || c.imagePath?.endsWith("/" + imageFile.name)) || p.pageEmbedPath === imageFile.path || p.pageEmbedPath?.endsWith("/" + imageFile.name))) {
+          notebookFile = f;
+          break;
+        }
+      }
+      void this.logHq(`fallback doc scan notebookFile=${notebookFile?.path}`);
+    }
+
+    if (notebookFile) {
+      const doc = await this.loadDocument(notebookFile);
+      if (doc) {
+        for (let i = 0; i < doc.pages.length; i++) {
+          const p = doc.pages[i];
+          const clip = p.clips?.find(c =>
+            c.imagePath === imageFile.path ||
+            c.imagePath?.endsWith("/" + imageFile.name) ||
+            c.imagePath === imageFile.name ||
+            (clipMatch && (c.id === clipMatch[2] || c.id === `clip-${clipMatch[2]}`))
+          );
+          if (clip) {
+            isClip = true;
+            page = p;
+            bounds = clipCurrentBounds(p, clip);
+            break;
+          }
+          if (p.pageEmbedPath === imageFile.path || p.pageEmbedPath?.endsWith("/" + imageFile.name) || (pageMatch && i === parseInt(pageMatch[2], 10) - 1)) {
+            page = p;
+            const geom = p.geometry ?? { width: 1024, height: 1366 };
+            bounds = { minX: 0, minY: 0, maxX: geom.width, maxY: geom.height };
+            break;
+          }
+        }
+      }
+    }
+
+    void this.logHq(`Found page=${Boolean(page)}, bounds=${JSON.stringify(bounds)}`);
+    if (!page || !bounds) return false;
+
+    try {
+      const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+      const incBg = this.plugin.settings.embedBackground === true;
+      const buffer = await renderClipPng(page, bounds, {
+        images: this.imageCache,
+        backdropPainter: this.backdropPainter,
+        pdf: this.pdfCache,
+        includeBackground: incBg,
+        usePressure: this.plugin.settings.pressureWidth,
+        highlighterAlpha: this.plugin.settings.highlighterAlpha,
+        themeMode: isDark ? "dark" : "light",
+        padding: isClip ? 8 : 0,
+        highQuality: true,
+        scale: 3.0,
+      });
+
+      void this.logHq(`Rendered buffer size: ${buffer?.byteLength}`);
+      if (buffer && buffer.byteLength > 8) {
+        await this.app.vault.modifyBinary(imageFile, buffer);
+        this.refreshEmbedImagesInDom(imageFile);
+        void this.logHq(`Successfully modified binary for ${imageFile.path}!`);
+        return true;
+      }
+    } catch (err) {
+      void this.logHq(`Error in renderClipPng: ${err}`);
+      console.warn("[FineNotes] Failed to generate high-quality clip:", imageFile.path, err);
+    }
+    return false;
+  }
+
+  /**
+   * Scan a Markdown note for all embedded FineNotes clip/page references and render them
+   * at high quality for PDF export or digital garden publishing.
+   */
+  async prepareHighQualityClipsForFile(markdownFile: TFile): Promise<number> {
+    void this.logHq(`prepareHighQualityClipsForFile: note=${markdownFile.path}`);
+    if (markdownFile.extension !== "md") return 0;
+    try {
+      const content = await this.app.vault.read(markdownFile);
+      const regex = /!\[\[([^\]]+)\]\]|!\[[^\]]*\]\(([^)]+)\)/g;
+      const targets = new Set<string>();
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        const raw = match[1] || match[2] || "";
+        const pathOrName = raw.split("|")[0].split("#")[0].trim();
+        if (/-clip-|-page-/i.test(pathOrName)) {
+          targets.add(pathOrName);
+        }
+      }
+      void this.logHq(`Targets found in note: ${[...targets].join(", ")}`);
+      let count = 0;
+      for (const name of targets) {
+        const file = this.app.metadataCache.getFirstLinkpathDest(name, markdownFile.path) ||
+                     this.app.vault.getFiles().find(f => f.name === name || f.path === name || f.path.endsWith("/" + name));
+        if (file instanceof TFile && file.extension === "png") {
+          void this.logHq(`Found file for target ${name}: ${file.path}`);
+          const ok = await this.prepareHighQualityClip(file);
+          if (ok) count++;
+        } else {
+          void this.logHq(`Target ${name} did not resolve to a PNG TFile`);
+        }
+      }
+      void this.logHq(`Upgraded ${count}/${targets.size} clips to high quality`);
+      return count;
+    } catch (err) {
+      void this.logHq(`Error in prepareHighQualityClipsForFile: ${err}`);
+      console.warn("[FineNotes] Failed to prepare high-quality clips for note:", markdownFile.path, err);
+      return 0;
     }
   }
 

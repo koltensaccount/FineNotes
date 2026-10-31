@@ -333,6 +333,21 @@ export default class GoodObsidianPlugin extends Plugin {
       view.copyPageLink(),
     );
     this.notebookCommand("export-pdf", "Export as PDF…", (view) => view.exportPdf());
+    this.addCommand({
+      id: "export-pdf-high-quality",
+      name: "Export note to PDF (high quality handwriting)",
+      checkCallback: (checking) => {
+        const active = this.embedManager?.getActiveMarkdownFile() ?? this.app.workspace.getActiveFile();
+        if (!active || active.extension !== "md") return false;
+        if (checking) return true;
+        void (async () => {
+          new Notice("Preparing high-quality handwriting renders for PDF export...");
+          await this.embedManager?.prepareHighQualityClipsForFile(active);
+          (this.app as any).commands?.executeCommandById?.("workspace:export-pdf");
+        })();
+        return true;
+      },
+    });
     this.notebookCommand(
       "update-companion-pdf",
       "Update companion PDF now",
@@ -407,6 +422,14 @@ export default class GoodObsidianPlugin extends Plugin {
 
   private showChangelog(markdown: string): void {
     new WhatsNewModal(this.app, markdown, this).open();
+  }
+
+  async prepareHighQualityClip(file: TFile): Promise<boolean> {
+    return this.embedManager ? await this.embedManager.prepareHighQualityClip(file) : false;
+  }
+
+  async prepareHighQualityClipsForFile(file: TFile): Promise<number> {
+    return this.embedManager ? await this.embedManager.prepareHighQualityClipsForFile(file) : 0;
   }
 
   // --- Settings ---------------------------------------------------------------
