@@ -57,7 +57,6 @@ export class IconReviewModal extends Modal {
   }
 
   private render(): void {
-    this.statuses.clear();
     const root = this.contentEl;
     root.empty();
     root.addClass("finenotes-icon-review");
