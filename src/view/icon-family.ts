@@ -1,17 +1,13 @@
 /**
  * FineNotes Icon Studio — Concept #2, refinement pass.
  *
- * ONLY the three writing-instrument candidates intentionally remain.
- * The original 28-icon experiment was rejected as visually inconsistent;
- * standard utility icons and stateful Lasso/Shapes glyphs remain unchanged.
- *
- * This module registers review-only SVGs. It does not replace any production
- * icon until the user approves individual candidates in a separate stage.
+ * Review-only candidates, grouped by the batch in which they were proposed.
  */
 import { addIcon } from "obsidian";
+import { ICON_NEW_NOTEBOOK } from "../constants";
 
 export type IconReviewDecision = "approved" | "rejected";
-export type IconFamilyGroup = "Writing tools";
+export type IconFamilyGroup = "Writing tools" | "Notebook and pages";
 
 export interface IconFamilyCandidate {
   readonly id: string;
@@ -70,6 +66,42 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
       ${seam("M8.25 14.1H15.75")}
     `,
   },
+  {
+    id: "new-notebook-concept2",
+    title: "New notebook",
+    category: "Notebook and pages",
+    original: ICON_NEW_NOTEBOOK,
+    usage: "Ribbon and file actions — a bound notebook with a small plus.",
+    svg: `
+      <path d="M7 3.5H17A2 2 0 0 1 19 5.5V18.5A2 2 0 0 1 17 20.5H7A2 2 0 0 1 5 18.5V5.5A2 2 0 0 1 7 3.5Z"/>
+      ${seam("M8.5 3.5V20.5")}
+      <path d="M11.5 12H16M13.75 9.75V14.25"/>
+    `,
+  },
+  {
+    id: "page-thumbnails-concept2",
+    title: "Page thumbnails",
+    category: "Notebook and pages",
+    original: "panel-left",
+    usage: "Notebook toolbar — a strip of page thumbnails beside the open page.",
+    svg: `
+      <path d="M5.5 4H18.5A2 2 0 0 1 20.5 6V18A2 2 0 0 1 18.5 20H5.5A2 2 0 0 1 3.5 18V6A2 2 0 0 1 5.5 4Z"/>
+      ${seam("M9.5 4V20")}
+      <path d="M6.5 8V10M6.5 14V16M13 9H17M13 13H16"/>
+    `,
+  },
+  {
+    id: "add-page-concept2",
+    title: "Add page",
+    category: "Notebook and pages",
+    original: "plus",
+    usage: "Notebook toolbar — a loose sheet with a folded corner and a plus.",
+    svg: `
+      <path d="M7 3.5H14L19 8.5V18.5A2 2 0 0 1 17 20.5H7A2 2 0 0 1 5 18.5V5.5A2 2 0 0 1 7 3.5Z"/>
+      ${seam("M14 3.5V8.5H19")}
+      <path d="M9.5 14H14.5M12 11.5V16.5"/>
+    `,
+  },
 ];
 
 export function candidateIconName(id: string): string {
@@ -78,11 +110,14 @@ export function candidateIconName(id: string): string {
 
 export function registerIconFamilyCandidates(): void {
   for (const candidate of ICON_FAMILY_CANDIDATES) {
+    const artwork = candidate.category === "Writing tools"
+      ? `<g transform="rotate(45 12 12)">${candidate.svg}</g>`
+      : candidate.svg;
     try {
       addIcon(
         candidateIconName(candidate.id),
         `<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <g transform="rotate(45 12 12)">${candidate.svg}</g>
+          ${artwork}
         </g>`,
       );
     } catch {

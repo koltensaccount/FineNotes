@@ -20,7 +20,7 @@ export interface IconReviewHost {
   saveDecision: (id: string, value: IconReviewDecision | null) => Promise<void>;
 }
 
-const GROUPS: readonly IconFamilyGroup[] = ["Writing tools"];
+const GROUPS: readonly IconFamilyGroup[] = ["Notebook and pages", "Writing tools"];
 
 const INK_CHOICES = [
   { value: "#4184df", label: "Blue" },
@@ -101,8 +101,7 @@ export class IconReviewModal extends Modal {
     root.createDiv({
       cls: "finenotes-icon-review-intro",
       text:
-        "Three redesigned writing tools based on the second mockup. Compare the actual old glyph " +
-        "with its new 24 px vector, then approve or reject. The other FineNotes icons stay unchanged. " +
+        "Next batch: notebook and page icons. Compare Current and New, then approve or reject each icon. " +
         "Add comments under each icon, then choose Save feedback to keep your comments and decisions.",
     });
 
