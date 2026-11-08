@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 94 — Toolbar and tool menu polish
+
+- Keep tool menu labels and checkmarks aligned as selections change.
+- Show a broken or continuous ink sample for the two eraser modes.
+- Balance the visual size of the writing, thumbnails, and add-page icons.
+
 ### Beta 93 — Handwrite Here in Live Preview
 
 - Render newly inserted Handwrite Here blocks through FineNotes in Live Preview and Reading view.

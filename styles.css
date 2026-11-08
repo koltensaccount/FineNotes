@@ -773,6 +773,10 @@ body,
   display: inline-flex;
 }
 
+.goodobsidian-erasermode-icon .goodobsidian-eraser-mode-glyph {
+  width: 18px;
+  height: 18px;
+}
 .goodobsidian-erasermode-caret {
   color: var(--text-muted);
 }
@@ -7591,21 +7595,32 @@ img.finenotes-live-embed-image:hover {
 }
 .goodobsidian-popover .goodobsidian-tool-menu-choice {
   display: flex;
+  height: auto;
+  padding-block: 4px;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   text-align: start;
+  white-space: normal;
 }
 .goodobsidian-tool-menu-choice > svg {
   flex: 0 0 52px;
   width: 52px;
   height: 24px;
 }
-.goodobsidian-popover.is-lasso-popover .goodobsidian-tool-menu-choice > svg {
+.goodobsidian-popover.is-lasso-popover .goodobsidian-tool-menu-choice > svg,
+.goodobsidian-tool-menu-choice > .goodobsidian-eraser-mode-glyph {
   flex-basis: 24px;
   width: 24px;
 }
-.goodobsidian-tool-menu-caption { flex: 1 1 auto; min-width: 0; }
-.goodobsidian-tool-menu-check { display: flex; margin-inline-start: auto; color: var(--interactive-accent); }
+.goodobsidian-tool-menu-caption { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.goodobsidian-tool-menu-check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  color: var(--interactive-accent);
+}
+.goodobsidian-tool-menu-check svg { width: 16px; height: 16px; }
 .goodobsidian-tool-menu .goodobsidian-switch { width: 36px; height: 22px; }
 .goodobsidian-tool-menu .goodobsidian-switch-thumb { width: 18px; height: 18px; }
 .goodobsidian-tool-menu .goodobsidian-switch-row.is-on .goodobsidian-switch-thumb { transform: translateX(14px); }

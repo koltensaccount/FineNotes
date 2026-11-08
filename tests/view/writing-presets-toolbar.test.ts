@@ -166,8 +166,8 @@ describe("popover anchors and eraser resizing", () => {
 
 it("eraser filter choices expose All ink/Highlighter/Pen without resetting mode or diameter", () => {
   const entries: Array<{ label: string; click?: () => void }> = [];
-  const body = { createDiv: () => ({}), createEl: (_tag: string, options: { text: string }) => {
-    const entry = { label: options.text, click: undefined as undefined | (() => void) }; entries.push(entry);
+  const body = { createDiv: () => ({}), createEl: (_tag: string, options: { attr: Record<string, string> }) => {
+    const entry = { label: options.attr["aria-label"], click: undefined as undefined | (() => void) }; entries.push(entry);
     return { setAttribute: () => {}, toggleClass: () => {}, createSpan: () => ({ querySelector: () => ({ childElementCount: 1 }) }), addEventListener: (_type: string, click: () => void) => { entry.click = click; } };
   } };
   const state = { eraserMode: "stroke", eraserSize: 17.5, eraserFilter: "all" };

@@ -18,6 +18,8 @@ export interface IconFamilyCandidate {
   readonly usage: string;
   /** Original 24×24 SVG fragments, drawn from one shared design grammar. */
   readonly svg: string;
+  /** Optical correction for artwork with more internal padding than its peers. */
+  readonly opticalScale?: number;
   /** Optional note explaining preserved live behavior. */
   readonly preserveState?: string;
 }
@@ -33,6 +35,7 @@ const seam = (d: string): string => `<path d="${d}" stroke-linecap="butt"/>`;
 export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
   {
     id: "pen-concept2",
+    opticalScale: 1.16,
     title: "Pen",
     category: "Writing tools",
     original: "fn-original-pen",
@@ -45,6 +48,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
   },
   {
     id: "highlighter-concept2",
+    opticalScale: 1.1,
     title: "Highlighter",
     category: "Writing tools",
     original: "fn-original-highlighter",
@@ -57,6 +61,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
   },
   {
     id: "eraser-concept2",
+    opticalScale: 1.1,
     title: "Eraser",
     category: "Writing tools",
     original: "eraser",
@@ -80,6 +85,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
   },
   {
     id: "page-thumbnails-concept2",
+    opticalScale: 1.08,
     title: "Page thumbnails",
     category: "Notebook and pages",
     original: "panel-left",
@@ -92,6 +98,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
   },
   {
     id: "add-page-concept2",
+    opticalScale: 1.1,
     title: "Add page",
     category: "Notebook and pages",
     original: "plus",
@@ -186,12 +193,16 @@ export function registerIconFamilyCandidates(): void {
     const artwork = candidate.category === "Writing tools"
       ? `<g transform="rotate(45 12 12)">${candidate.svg}</g>`
       : candidate.svg;
+    const scale = candidate.opticalScale;
+    const centeredArtwork = scale
+      ? `<g transform="translate(12 12) scale(${scale}) translate(-12 -12)">${artwork}</g>`
+      : artwork;
     // Obsidian gives registered custom icons a 100-unit viewport.
     try {
       addIcon(
         candidateIconName(candidate.id),
         `<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" transform="scale(${100 / 24})">
-          ${artwork}
+          ${centeredArtwork}
         </g>`,
       );
     } catch {

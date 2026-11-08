@@ -231,9 +231,9 @@ export function penTypeFor(state: ToolbarState): PenTypeSpec {
  */
 export type EraserMode = "standard" | "stroke";
 
-const ERASER_MODES: ReadonlyArray<{ id: EraserMode; label: string; icon: string }> = [
-  { id: "standard", label: "Standard", icon: "eraser" },
-  { id: "stroke", label: "Whole stroke", icon: "spline" },
+const ERASER_MODES: ReadonlyArray<{ id: EraserMode; label: string }> = [
+  { id: "standard", label: "Standard" },
+  { id: "stroke", label: "Whole stroke" },
 ];
 
 /** The eraser mode a toolbar state implies. `undefined` counts as standard. */
@@ -1694,7 +1694,7 @@ export class Toolbar {
     const mode = ERASER_MODES.find((m) => m.id === eraserModeFor(this.state)) ?? ERASER_MODES[0];
     const modeButton = this.optionsEl.createEl("button", { cls: "goodobsidian-erasermode" });
     const modeIcon = modeButton.createSpan({ cls: "goodobsidian-erasermode-icon" });
-    iconOrText(modeIcon, mode.icon, mode.label);
+    modeIcon.append(eraserModeGlyph(mode.id));
     modeButton.createSpan({ text: mode.label });
     const modeCaret = modeButton.createSpan({ cls: "goodobsidian-erasermode-caret" });
     iconOrText(modeCaret, "chevron-down", "");
@@ -1900,10 +1900,7 @@ export class Toolbar {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Lasso type" });
     const mode = lassoModeFor(this.state);
     for (const option of [...LASSO_MODES].reverse()) {
-      const button = body.createEl("button", { cls: "goodobsidian-tool-menu-choice clickable-icon" });
-      button.append(lassoGlyph(option));
-      button.createSpan({ cls: "goodobsidian-tool-menu-caption", text: LASSO_MODE_LABELS[option] });
-      this.markToolMenuChoice(button, option === mode);
+      const button = this.toolMenuChoice(body, LASSO_MODE_LABELS[option], option === mode, lassoGlyph(option));
       button.addEventListener("click", () => {
         this.state.lassoMode = option;
         this.saveLasso();
@@ -1928,12 +1925,22 @@ export class Toolbar {
     }
   }
 
-  private markToolMenuChoice(button: HTMLButtonElement, selected: boolean): void {
-    button.setAttribute("aria-pressed", String(selected));
+  private toolMenuChoice(
+    parent: HTMLElement,
+    label: string,
+    selected: boolean,
+    graphic?: Node,
+  ): HTMLButtonElement {
+    const button = parent.createEl("button", {
+      cls: "goodobsidian-tool-menu-choice clickable-icon",
+      attr: { "aria-label": label, "aria-pressed": String(selected) },
+    });
+    if (graphic) button.append(graphic);
+    button.createSpan({ cls: "goodobsidian-tool-menu-caption", text: label });
+    const check = button.createSpan({ cls: "goodobsidian-tool-menu-check", attr: { "aria-hidden": "true" } });
     button.toggleClass("is-active", selected);
-    if (selected) {
-      iconOrText(button.createSpan({ cls: "goodobsidian-tool-menu-check", attr: { "aria-hidden": "true" } }), "check", "✓");
-    }
+    if (selected) iconOrText(check, "check", "✓");
+    return button;
   }
 
   private saveLasso(): void {
@@ -2206,11 +2213,9 @@ export class Toolbar {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Font" });
     const current = fontOf(this.shownTextStyle());
     for (const font of TEXT_FONTS) {
-      const button = this.textOption(body, "goodobsidian-tool-menu-choice", TEXT_FONT_LABELS[font], () =>
-        this.pickText({ font }),
-      );
+      const button = this.toolMenuChoice(body, TEXT_FONT_LABELS[font], font === current);
       button.setCssStyles({ fontFamily: TEXT_FONT_STACKS[font] });
-      this.markToolMenuChoice(button, font === current);
+      button.addEventListener("click", () => this.pickText({ font }));
     }
   }
 
@@ -2260,8 +2265,8 @@ export class Toolbar {
         lineHeight === DEFAULT_LINE_HEIGHT
           ? `${formatLineHeight(lineHeight)} (default)`
           : formatLineHeight(lineHeight);
-      const button = this.textOption(body, "goodobsidian-tool-menu-choice", label, () => this.pickText({ lineHeight }));
-      this.markToolMenuChoice(button, Math.abs(lineHeight - current) < 1e-9);
+      const button = this.toolMenuChoice(body, label, Math.abs(lineHeight - current) < 1e-9);
+      button.addEventListener("click", () => this.pickText({ lineHeight }));
     }
   }
 
@@ -2566,8 +2571,7 @@ export class Toolbar {
     body.addClass("goodobsidian-tool-menu");
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Eraser mode" });
     for (const mode of ERASER_MODES) {
-      const button = body.createEl("button", { cls: "goodobsidian-tool-menu-choice clickable-icon", text: mode.label });
-      this.markToolMenuChoice(button, mode.id === eraserModeFor(this.state));
+      const button = this.toolMenuChoice(body, mode.label, mode.id === eraserModeFor(this.state), eraserModeGlyph(mode.id));
       button.addEventListener("click", () => {
         this.closePopover();
         this.state.eraserMode = mode.id;
@@ -2582,8 +2586,7 @@ export class Toolbar {
   private renderEraserFilters(body: HTMLElement): void {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "What to erase" });
     for (const filter of ["all", "highlighter", "pen"] as const) {
-      const button = body.createEl("button", { cls: "goodobsidian-tool-menu-choice clickable-icon", text: ERASER_FILTER_LABELS[filter] });
-      this.markToolMenuChoice(button, filter === eraserFilterFor(this.state));
+      const button = this.toolMenuChoice(body, ERASER_FILTER_LABELS[filter], filter === eraserFilterFor(this.state));
       button.addEventListener("click", () => {
         this.state.eraserFilter = filter;
         this.callbacks.onEraserFilterChange?.(filter);
@@ -2635,13 +2638,8 @@ export class Toolbar {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
     for (const spec of PEN_MENU_TYPES) {
       if (spec.pressure && this.callbacks.pressureAllowed?.() !== true) continue;
-      const button = body.createEl("button", {
-        cls: "goodobsidian-tool-menu-choice clickable-icon",
-        attr: { "aria-label": spec.label, title: `${spec.label} — ${TOOL_HINTS[spec.id]}` },
-      });
-      button.append(this.penTypeGraphic(spec));
-      button.createSpan({ cls: "goodobsidian-tool-menu-caption", text: spec.label });
-      this.markToolMenuChoice(button, spec.id === this.activePenType().id);
+      const button = this.toolMenuChoice(body, spec.label, spec.id === this.activePenType().id, this.penTypeGraphic(spec));
+      button.title = `${spec.label} — ${TOOL_HINTS[spec.id]}`;
       button.addEventListener("click", () => {
         this.closePopover();
         this.choosePenType(spec);
@@ -3671,8 +3669,18 @@ function eraserSizeGlyph(size: number, doc: Document = activeDocument, minimumRa
  * A preset pen width, in the pill or in the widths popover: the stroke
  * itself, named in millimetres for screen readers and on hover.
  */
-/** An outlined 24 × 24 glyph in the pill's own colour, for the text controls. */
-function textGlyph(
+/** A sample stroke with either an erased gap or its full length intact. */
+function eraserModeGlyph(mode: EraserMode): SVGElement {
+  const bridge = mode === "standard" ? "M14.5 13" : "C11.6 9 12.7 10.2 14.5 13";
+  const svg = outlineGlyph((add) =>
+    add("path", { d: `M3 15C5 15 7 9 9.5 9${bridge}C17 17 19 15 21 9` }),
+  );
+  svg.setAttribute("class", "goodobsidian-eraser-mode-glyph");
+  return svg;
+}
+
+/** An outlined 24 × 24 glyph in the current text colour. */
+function outlineGlyph(
   draw: (add: (tag: string, attrs: Record<string, string>) => void) => void,
 ): SVGElement {
   const svg = activeDocument.createElementNS(SVG_NS, "svg");
@@ -3700,7 +3708,7 @@ function textGlyph(
  */
 function alignGlyph(align: TextAlign): SVGElement {
   const widths = align === "justify" ? [16, 16, 16, 9] : [16, 10, 16, 12];
-  return textGlyph((add) => {
+  return outlineGlyph((add) => {
     widths.forEach((w, i) => {
       const x = align === "right" ? 20 - w : align === "center" ? 12 - w / 2 : 4;
       add("path", { d: `M${x} ${6 + i * 4}h${w}` });
@@ -3710,7 +3718,7 @@ function alignGlyph(align: TextAlign): SVGElement {
 
 /** Line spacing: a double arrow beside three lines. */
 function lineSpacingGlyph(): SVGElement {
-  return textGlyph((add) => {
+  return outlineGlyph((add) => {
     add("path", { d: "M6 4v16M3.5 6.5 6 4l2.5 2.5M3.5 17.5 6 20l2.5-2.5" });
     add("path", { d: "M11 6h9M11 12h9M11 18h9" });
   });
@@ -3718,7 +3726,7 @@ function lineSpacingGlyph(): SVGElement {
 
 /** Box fill: a square, filled with the fill, or struck through for none (GoodNotes' glyph). */
 function fillGlyph(fill: string | undefined): SVGElement {
-  return textGlyph((add) => {
+  return outlineGlyph((add) => {
     add("rect", {
       x: "4",
       y: "4",
@@ -3733,7 +3741,7 @@ function fillGlyph(fill: string | undefined): SVGElement {
 
 /** A list: three lines, each led by a dot or a number. */
 function listGlyph(kind: ListKind): SVGElement {
-  return textGlyph((add) => {
+  return outlineGlyph((add) => {
     add("path", { d: "M10 6h10M10 12h10M10 18h10" });
     if (kind === "bullet") {
       for (const y of [6, 12, 18]) {

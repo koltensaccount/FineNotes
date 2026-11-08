@@ -412,6 +412,33 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
     expect(toolbar.getHiddenTools()).toEqual([]);
   });
 
+  it("keeps the eraser filter caption and check slot in every row when selection changes", () => {
+    const onEraserFilterChange = vi.fn();
+    const { state } = createTestToolbar({}, { onEraserFilterChange });
+    host.querySelector('[data-tool-id="eraser"]')!.dispatchEvent("click");
+    const openFilter = () => {
+      host.querySelector(".goodobsidian-eraserfilter")!.dispatchEvent("click");
+      return host.querySelectorAll(".goodobsidian-tool-menu-choice");
+    };
+    const checkRows = (rows: MockEl[], selected: number) => {
+      expect(rows).toHaveLength(3);
+      rows.forEach((row, index) => {
+        expect(row.children.map((child) => child.className.split(" ")[0])).toEqual([
+          "goodobsidian-tool-menu-caption",
+          "goodobsidian-tool-menu-check",
+        ]);
+        expect(row.getAttribute("aria-pressed")).toBe(String(index === selected));
+        expect(Boolean(row.children[1].textContent || row.children[1].children.length)).toBe(index === selected);
+      });
+    };
+    const rows = openFilter();
+    checkRows(rows, 0);
+    rows[1].dispatchEvent("click");
+    expect(state.eraserFilter).toBe("highlighter");
+    expect(onEraserFilterChange).toHaveBeenCalledWith("highlighter");
+    checkRows(openFilter(), 1);
+  });
+
   it("respects customized toolbarToolOrder and hiddenToolbarTools options", () => {
     const customOrder = ["pen", "eraser", "select", "text", "shape", "image", "record"];
     const customHidden = ["select", "record"];
