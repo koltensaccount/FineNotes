@@ -1912,6 +1912,7 @@ body.is-mobile .goodobsidian-scrollthumb {
   padding: 6px;
   border: none;
   border-radius: 50%;
+  corner-shape: round;
   background-clip: content-box;
 }
 
