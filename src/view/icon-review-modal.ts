@@ -20,18 +20,13 @@ export interface IconReviewHost {
   saveDecision: (id: string, value: IconReviewDecision | null) => Promise<void>;
 }
 
-const GROUPS: readonly IconFamilyGroup[] = [
-  "Writing tools",
-  "Selection and editing",
-  "Notebooks and embeds",
-  "Media and PDF",
-  "Circuit editor",
-];
+const GROUPS: readonly IconFamilyGroup[] = ["Writing tools"];
 
 const INK_CHOICES = [
   { value: "#4184df", label: "Blue" },
   { value: "#d94e50", label: "Red" },
   { value: "#288a65", label: "Green" },
+  { value: "#e2b32d", label: "Yellow" },
   { value: "#161616", label: "Black" },
   { value: "#ffffff", label: "White" },
 ] as const;
@@ -47,7 +42,7 @@ export class IconReviewModal extends Modal {
 
   override onOpen(): void {
     this.modalEl.addClass("finenotes-icon-review-modal");
-    this.titleEl.setText("FineNotes Icon Studio");
+    this.titleEl.setText("FineNotes Icon Studio — Concept #2");
     this.render();
   }
 
@@ -57,7 +52,6 @@ export class IconReviewModal extends Modal {
   }
 
   private render(): void {
-    this.statuses.clear();
     const root = this.contentEl;
     root.empty();
     root.addClass("finenotes-icon-review");
@@ -67,8 +61,9 @@ export class IconReviewModal extends Modal {
     root.createDiv({
       cls: "finenotes-icon-review-intro",
       text:
-        "Compare each original icon with a proposed replacement. Approve or reject each one independently. " +
-        "Your decisions are saved in this vault; no approved icon is installed into the toolbar yet.",
+        "Three redesigned writing tools based on the second mockup. Compare the actual old glyph " +
+        "with its new 24 px vector, then approve or reject. The other FineNotes icons stay unchanged. " +
+        "These are fresh decisions; old approvals from the rejected 28-icon experiment do not carry over.",
     });
 
     const controls = root.createDiv({ cls: "finenotes-icon-review-controls" });
@@ -137,7 +132,7 @@ export class IconReviewModal extends Modal {
     }
     const footer = root.createDiv({ cls: "finenotes-icon-review-footer" });
     footer.createSpan({
-      text: "Current icons and behavior are unchanged. Standard Obsidian utility icons (Undo, Redo, Search, Close, Settings, etc.) are intentionally not replacement candidates.",
+      text: "Preview only: approvals do not replace live icons. Actual pen and highlighter stroke previews, Lasso modes, Shape outlines, and normal Obsidian UI controls remain unchanged.",
     });
   }
 
