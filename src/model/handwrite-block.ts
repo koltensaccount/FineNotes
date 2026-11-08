@@ -31,7 +31,12 @@ export function contentBoundsOnPage(page: Page): Bounds | null {
     const b = strokeBounds(s);
     if (b) boxes.push(b);
   }
-  for (const el of [...page.images, ...page.textBoxes, ...(page.circuits ?? [])]) {
+  for (const el of [
+    ...page.images,
+    ...page.textBoxes,
+    ...(page.circuits ?? []),
+    ...(page.equations ?? []),
+  ]) {
     boxes.push({
       minX: el.x,
       minY: el.y,

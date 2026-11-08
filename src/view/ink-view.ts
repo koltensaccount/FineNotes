@@ -516,6 +516,9 @@ export class InkView extends TextFileView {
   /** The pen touched the page or left it: hold, or let go of, what would stall it. */
   private latestDrawingAt = 0;
   get lastDrawingAt(): number { return this.latestDrawingAt; }
+  get document(): InkDocument { return this.surface?.document ?? this.doc; }
+  get bodyText(): string { return this.noteBody; }
+  relayoutSurface(): void { this.surface?.layout(); }
   private penActivity(down: boolean): void {
     window.clearTimeout(this.quietTimer);
     this.quietTimer = 0;
