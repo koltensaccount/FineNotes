@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { History } from "../../src/model/history";
 import { StrokeIndex } from "../../src/view/stroke-index";
-import { blankPage } from "../../src/model/document";
+import { blankPage, emptyDocument } from "../../src/model/document";
 import { polygonOf } from "../../src/canvas/lasso";
 import { shapeFrame } from "../../src/ink/shape-edit";
 import { presetGeometry } from "../../src/ink/shape-geometry";
@@ -15,7 +15,7 @@ function call<T = unknown>(s: State, name: string, ...args: unknown[]): T {
 function fixture() {
   const page = blankPage("p");
   page.geometry = { width: 800, height: 1000 };
-  const doc = { pages: [page], schema: 3 },
+  const doc = { ...emptyDocument(), pages: [page] },
     history = new History(),
     strokeIndex = new StrokeIndex();
   let seq = 0;
@@ -362,4 +362,17 @@ describe("cross-page selection drag integration", () => {
     y=100;f.s.selectionDragPointer={x:100,y:590};expect(call(f.s,"stepSelectionDragScroll",132)).toBe(false);
     f.drag.lifted=false;expect(call(f.s,"stepSelectionDragScroll",148)).toBe(false);
   });
+});
+
+it("selects an equation from the page, deletes it, and restores it with undo", () => {
+  const { s, page, doc, history } = fixture();
+  const equation = { id: "q1", x: 60, y: 80, w: 100, h: 30, tex: "x^2", color: "#000", size: 22 };
+  page.equations = [equation];
+  expect(call(s, "tapSelectOn", page, { x: 70, y: 90 }, 0, { textBoxes: true })).toBe(true);
+  expect(call(s, "liveSelection")).toMatchObject({ equations: [equation] });
+  expect(call(s, "groupBounds", s.selection)).toEqual({ minX: 60, minY: 80, maxX: 160, maxY: 110 });
+  expect(call(s, "removeSelection", "Delete selection")).toBe(true);
+  expect(page.equations).toEqual([]);
+  history.undo(doc);
+  expect(page.equations).toEqual([equation]);
 });

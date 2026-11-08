@@ -1,5 +1,9 @@
+import { equationBounds } from "../model/equation";
+import { paintEquation } from "../canvas/equation-paint";
 import { relinkDocument } from "../model/moved-files";
 import { renderClipPng } from "./clip-png";
+import { findBlockInDocument, resolveBlockBounds } from "../model/handwrite-block";
+import { startInlineHandwriteSession, getActiveInlineSession } from "./inline-handwrite";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkView } from "./ink-view";
 import { PdfBackdropCache } from "./pdf-backdrop";
@@ -117,8 +121,30 @@ export class FineNotesEmbedManager {
     return this.pngRefreshRunning;
   }
 
+  private pendingActivation: { filePath: string; blockId: string } | null = null;
+
+  queuePendingActivation(filePath: string, blockId: string): void {
+    this.pendingActivation = { filePath, blockId };
+  }
+
+  checkAndClearPendingActivation(filePath: string, subpath: string): boolean {
+    if (!this.pendingActivation) return false;
+    const cleanSub = subpath.replace(/^#?\^?/, "").trim();
+    const cleanTarget = this.pendingActivation.blockId.replace(/^#?\^?/, "").trim();
+    if (
+      this.pendingActivation.filePath === filePath &&
+      (cleanSub === cleanTarget ||
+        cleanSub === `block-${cleanTarget}` ||
+        `block-${cleanSub}` === cleanTarget)
+    ) {
+      this.pendingActivation = null;
+      return true;
+    }
+    return false;
+  }
+
   constructor(
-    private readonly plugin: GoodObsidianPlugin,
+    readonly plugin: GoodObsidianPlugin,
     private readonly app: App,
   ) {
     this.pdfCache = new PdfBackdropCache(app);
@@ -818,6 +844,9 @@ export class FineNotesEmbedView {
   private canvas: HTMLCanvasElement | null = null;
   private containerEl: HTMLElement | null = null;
   private isDestroyed = false;
+  private resolvedPageIndex = 0;
+  private resolvedCropBounds: Bounds | null = null;
+  private resolvedClip: NotebookClip | null = null;
 
   constructor(
     private readonly manager: FineNotesEmbedManager,
@@ -849,23 +878,47 @@ export class FineNotesEmbedView {
       },
     });
 
-    // Clicking anywhere on the embed navigates directly to the source notebook & region
+    // Clicking anywhere on the embed activates inline editing; Alt/Meta-click opens full notebook
     this.containerEl.addEventListener("click", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
-      const linkText = `${this.file.path}${this.subpath}`;
-      void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
+      if (evt.altKey || evt.metaKey || evt.ctrlKey) {
+        const linkText = `${this.file.path}${this.subpath}`;
+        void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
+        return;
+      }
+      this.activateInlineEditing();
     });
 
     this.containerEl.addEventListener("keydown", (evt) => {
       if (evt.key === "Enter" || evt.key === " ") {
         evt.preventDefault();
-        const linkText = `${this.file.path}${this.subpath}`;
-        void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
+        this.activateInlineEditing();
       }
     });
 
     await this.paintContent();
+
+    if (this.manager.checkAndClearPendingActivation(this.file.path, this.subpath)) {
+      this.activateInlineEditing();
+    }
+  }
+
+  private activateInlineEditing(): void {
+    if (this.isDestroyed || !this.containerEl) return;
+    startInlineHandwriteSession({
+      plugin: this.manager.plugin,
+      app: this.app,
+      containerEl: this.containerEl,
+      notebookFile: this.file,
+      pageIndex: this.resolvedPageIndex,
+      clip: this.resolvedClip,
+      cropBounds: this.resolvedCropBounds ?? { minX: 0, minY: 0, maxX: 800, maxY: 360 },
+      sourcePath: this.sourcePath,
+      onClosed: () => {
+        void this.paintContent();
+      },
+    });
   }
 
   async refresh(): Promise<void> {
@@ -875,9 +928,14 @@ export class FineNotesEmbedView {
 
   destroy(): void {
     this.isDestroyed = true;
+    const session = getActiveInlineSession();
+    if (session && session.hostContainer === this.containerEl) {
+      void session.close();
+    }
     this.manager.unregisterActiveView(this);
     if(this.canvas) {this.canvas.width=0;this.canvas.height=0;}
     this.canvas=null;
+    this.containerEl = null;
   }
 
   private async paintContent(): Promise<void> {
@@ -901,15 +959,26 @@ export class FineNotesEmbedView {
 
     const sub = this.subpath.trim();
     if (sub.length > 0) {
-      // Check if it's a clip reference: #^clip-..., #clip=..., or #^...
-      const clipIdMatch = /^#?\^?(?:clip=)?([a-zA-Z0-9_-]+)/i.exec(sub);
-      if (clipIdMatch) {
-        const found = findClip(doc, clipIdMatch[1]);
-        if (found) {
-          clip = found.clip;
-          page = found.page;
-          pageIndex = found.pageIndex;
-          cropBounds = clipCurrentBounds(page, clip);
+      // First check if it's a dedicated block:
+      const blockFound = findBlockInDocument(doc, sub);
+      if (blockFound) {
+        clip = blockFound.clip;
+        page = blockFound.page;
+        pageIndex = blockFound.pageIndex;
+        cropBounds = resolveBlockBounds(page, clip);
+      }
+
+      if (!page) {
+        // Check if it's a legacy clip reference: #^clip-..., #clip=..., or #^...
+        const clipIdMatch = /^#?\^?(?:clip=)?([a-zA-Z0-9_-]+)/i.exec(sub);
+        if (clipIdMatch) {
+          const found = findClip(doc, clipIdMatch[1]);
+          if (found) {
+            clip = found.clip;
+            page = found.page;
+            pageIndex = found.pageIndex;
+            cropBounds = resolveBlockBounds(page, clip);
+          }
         }
       }
 
@@ -932,6 +1001,10 @@ export class FineNotesEmbedView {
       pageIndex = 0;
       page = doc.pages[0];
     }
+
+    this.resolvedPageIndex = pageIndex;
+    this.resolvedCropBounds = cropBounds;
+    this.resolvedClip = clip;
 
     // Default to whole page if no clip bounds
     const pW = page.geometry.width;
@@ -1028,6 +1101,10 @@ export class FineNotesEmbedView {
           drawPlacedCircuit(ctx, circuit);
         }
       }
+    }
+
+    for (const equation of page.equations ?? []) {
+      if (boundsIntersect(equationBounds(equation), cropBounds)) paintEquation(ctx, equation);
     }
 
     // 4. Text boxes

@@ -89,6 +89,10 @@ export interface GoodObsidianSettings {
   // The "New notebook" dialog (0.5).
   /** Where new notebooks and pages go; empty for the folder of the open note. */
   newNotebookFolder: string;
+  /** Whether FineNotes routes generated embeds and backing files into managed storage. */
+  useManagedStorage: boolean;
+  /** The vault folder path for managed FineNotes storage (default: "FineNotes"). */
+  managedStorageRoot: string;
   /** Show New notebook in the file explorer context menu. */
   showNewNotebookInContextMenu: boolean;
   /** Show New notebook beside the file explorer creation buttons. */
@@ -196,6 +200,8 @@ export const DEFAULT_SETTINGS: GoodObsidianSettings = {
   highlighterAlpha: DEFAULT_HIGHLIGHTER_ALPHA,
   paperWidth: DEFAULT_PAPER_WIDTH,
   newNotebookFolder: "",
+  useManagedStorage: true,
+  managedStorageRoot: "FineNotes",
   lastNotebookChoices: null,
   recognitionProviderId: MANUAL_PROVIDER_ID,
   desynchronizedCanvas: true,

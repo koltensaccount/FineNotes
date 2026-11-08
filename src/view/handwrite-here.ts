@@ -1,4 +1,3 @@
-import { referencedEmbedImages } from "./embed-references";
 export { referencedEmbedImages } from "./embed-references";
 import {
   type App,
@@ -26,6 +25,16 @@ import {
   parseNotebookChoices,
   stripInkSuffix,
 } from "../model/new-notebook";
+import {
+  isManagedStorageEnabled,
+  getManagedSubdirectory,
+  ensureFolderExists,
+  resolveManagedFilePath,
+  ensureManagedDirectory,
+} from "../model/storage-resolver";
+import { type InkDocument, emptyDocument } from "../model/document";
+import { createBlockPage, resolveBlockBounds } from "../model/handwrite-block";
+import { renderClipPng } from "./clip-png";
 import { InkView } from "./ink-view";
 
 export type NotebookChoiceItem =
@@ -62,7 +71,9 @@ export class NotebookSuggestModal extends SuggestModal<NotebookChoiceItem> {
     const trimmed = query.trim();
     const sourceFolder =
       this.source.parent && !this.source.parent.isRoot() ? this.source.parent.path : "";
-    const defaultFolder = sourceFolder || this.plugin.settings?.newNotebookFolder || "";
+    const defaultFolder = isManagedStorageEnabled(this.plugin.settings)
+      ? getManagedSubdirectory("handwriting", this.plugin.settings)
+      : sourceFolder || this.plugin.settings?.newNotebookFolder || "";
     const defaultTitle = stripInkSuffix(this.source.basename) || "Notebook";
     const createTitle = trimmed.length > 0 ? trimmed : defaultTitle;
 
@@ -160,9 +171,11 @@ export async function createNotebookForNote(
   title: string,
   folder?: string,
 ): Promise<TFile> {
-  const dir = normalizeFolder(
-    folder ?? (source.parent && !source.parent.isRoot() ? source.parent.path : ""),
-  );
+  const defaultDir = isManagedStorageEnabled(plugin.settings)
+    ? getManagedSubdirectory("handwriting", plugin.settings)
+    : (source.parent && !source.parent.isRoot() ? source.parent.path : "");
+  const dir = normalizeFolder(folder ?? defaultDir);
+  await ensureFolderExists(plugin.app, dir);
   const parent = dir ? plugin.app.vault.getFolderByPath(dir) : plugin.app.vault.getRoot();
   const taken = new Set(parent?.children?.map((child) => child.name) ?? []);
   const choices = parseNotebookChoices(plugin.settings?.lastNotebookChoices);
@@ -312,23 +325,85 @@ export async function handwriteHere(
     throw new Error("The source note changed. Run Handwrite Here again.");
   (plugin.settings.notebookAssociations ??= {})[source.path] = notebook.path;
   await plugin.saveSettings();
-  let leaf = app.workspace
+
+  // Check if notebook is currently open in an InkView leaf
+  const openLeaf = app.workspace
     .getLeavesOfType(VIEW_TYPE_INK)
-    .find((leaf) => (leaf.view as InkView).file === notebook);
-  const wasOpen = Boolean(leaf);
-  leaf ??= app.workspace.getLeaf("split");
-  if (!wasOpen)
-    await leaf.setViewState({ type: VIEW_TYPE_INK, active: true, state: { file: notebook.path } });
-  await app.workspace.revealLeaf(leaf);
-  if (!(leaf.view instanceof InkView)) throw new Error("The notebook could not be opened.");
-  const referencedImages = referencedEmbedImages(app, source, editor.getValue());
-  const image = await leaf.view.createHandwritingRegion(wasOpen, referencedImages);
-  if (sourceView.file !== source || sourceView.leaf.view !== sourceView)
-    throw new Error("The source note changed; the handwriting region is saved in the notebook.");
+    .find((leaf) => (leaf.view as InkView).file?.path === notebook.path);
+  const openInkView = openLeaf?.view as InkView | undefined;
+
+  let doc: InkDocument;
+  let noteBody: string;
+
+  if (openInkView?.document) {
+    doc = openInkView.document;
+    noteBody = openInkView.bodyText;
+  } else {
+    const vault = app.vault as any;
+    const rawContent =
+      typeof vault.read === "function"
+        ? await vault.read(notebook)
+        : typeof vault.cachedRead === "function"
+          ? await vault.cachedRead(notebook)
+          : "";
+    const parsed = parseInkFile(rawContent, plugin.settings?.paperWidth);
+    doc = parsed.doc ?? emptyDocument();
+    noteBody = parsed.body;
+  }
+
+  // Create dedicated block page with stable identity
+  const blockId = `block-${crypto.randomUUID()}`;
+  const { page, clip } = createBlockPage(
+    doc,
+    blockId,
+    plugin.settings.paperWidth ?? 800,
+  );
+
+  // Allocate preview PNG in managed storage or attachment folder
+  let imagePath: string;
+  if (isManagedStorageEnabled(plugin.settings)) {
+    await ensureManagedDirectory(app, "embeds", plugin.settings);
+    imagePath = resolveManagedFilePath("embeds", `${notebook.basename}-${blockId}.png`, plugin.settings);
+  } else {
+    imagePath = await app.fileManager.getAvailablePathForAttachment(`${notebook.basename}-${blockId}.png`, source.path);
+  }
+  clip.imagePath = imagePath;
+
+  // Create initial preview PNG so the file exists immediately on disk
+  try {
+    const bounds = resolveBlockBounds(page, clip);
+    const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+    const buffer = await renderClipPng(page, bounds, {
+      images: plugin.embedManager?.pdfCache as never,
+      backdropPainter: undefined as never,
+      pdf: plugin.embedManager?.pdfCache,
+      includeBackground: plugin.settings.embedBackground === true,
+      themeMode: isDark ? "dark" : "light",
+    });
+    if (buffer && buffer.byteLength > 8 && typeof (app.vault as any).createBinary === "function") {
+      await (app.vault as any).createBinary(imagePath, buffer);
+    }
+  } catch (err) {
+    console.warn("[FineNotes] Failed to generate initial clip PNG:", err);
+  }
+
+  // Save notebook: canonical buildInkFile ensuring exactly one data block
+  if (openInkView) {
+    openInkView.requestSave();
+  } else if (typeof (app.vault as any).modify === "function") {
+    const canonical = buildInkFile(noteBody, doc);
+    await (app.vault as any).modify(notebook, canonical);
+  }
+
+  // Queue inline activation for when the embed mounts in the DOM
+  plugin.embedManager?.queuePendingActivation(notebook.path, blockId);
+
+  // Insert embed link into the source markdown note
+  const embedLink = app.fileManager.generateMarkdownLink(notebook, source.path, `#^${blockId}`);
   insertHandwritingEmbed(
     editor,
     before,
     offset,
-    "!" + app.fileManager.generateMarkdownLink(image, source.path),
+    `!${embedLink}`,
   );
 }

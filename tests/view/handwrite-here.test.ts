@@ -179,13 +179,12 @@ describe("safe Markdown insertion and command", () => {
       insertHandwritingEmbed({ ...editor, getValue: () => "changed" } as never, before, 7, "x"),
     ).toThrow();
   });
-  it("persists an association, opens adjacent notebook, and inserts a clean native embed", async () => {
+  it("persists an association, creates dedicated block page, and inserts native embed", async () => {
     const note = Object.assign(Object.create(TFile.prototype), { path: "class/note.md" });
-    const book = Object.assign(Object.create(TFile.prototype), { path: "class/a.notebook.md" });
-    const image = Object.assign(Object.create(TFile.prototype), { path: "assets/a-clip-test.png" });
-    const ink = Object.create(InkView.prototype);
-    ink.createHandwritingRegion = vi.fn(async () => image);
-    const leaf = { view: ink, setViewState: vi.fn(async () => {}) };
+    const book = Object.assign(Object.create(TFile.prototype), {
+      path: "class/a.notebook.md",
+      basename: "a.notebook",
+    });
     const source = { file: note, leaf: {} as any };
     source.leaf.view = source;
     const editor = {
@@ -193,11 +192,18 @@ describe("safe Markdown insertion and command", () => {
       replaceRange: vi.fn(),
       offsetToPos: (n: number) => n,
     };
+    const queuedActivation = vi.fn();
     const plugin = {
       settings: {},
       saveSettings: vi.fn(async () => {}),
+      embedManager: {
+        queuePendingActivation: queuedActivation,
+      },
       app: {
         vault: {
+          read: vi.fn(async () => ""),
+          modify: vi.fn(async () => {}),
+          createBinary: vi.fn(async () => {}),
           getFiles: () => [book],
           getFileByPath: (p: string) => (p === book.path ? book : null),
         },
@@ -207,17 +213,20 @@ describe("safe Markdown insertion and command", () => {
         },
         workspace: {
           getLeavesOfType: () => [],
-          getLeaf: () => leaf,
-          revealLeaf: vi.fn(async () => {}),
         },
-        fileManager: { generateMarkdownLink: () => "[[assets/a-clip-test.png]]" },
+        fileManager: {
+          generateMarkdownLink: vi.fn((file, _src, sub) => `[[${file.path}${sub}]]`),
+          getAvailablePathForAttachment: vi.fn(async (name) => `assets/${name}`),
+        },
       },
     };
     await handwriteHere(plugin as never, source as never, editor as never, note, "Proof", 5);
     expect(plugin.settings).toEqual({ notebookAssociations: { [note.path]: book.path } });
-    expect(leaf.setViewState).toHaveBeenCalled();
-    expect(ink.createHandwritingRegion).toHaveBeenCalledWith(false, expect.any(Set));
-    expect(editor.replaceRange).toHaveBeenCalledWith("\n![[assets/a-clip-test.png]]\n", 5);
+    expect(queuedActivation).toHaveBeenCalledWith(book.path, expect.stringMatching(/^block-/));
+    expect(editor.replaceRange).toHaveBeenCalledWith(
+      expect.stringMatching(/^\n!\[\[class\/a\.notebook\.md#\^block-[a-f0-9-]+\]\]\n$/),
+      5,
+    );
   });
   it("captures the editor cursor synchronously and disables the command inside notebooks", () => {
     let command: any;
@@ -663,6 +672,7 @@ it("provides inline notebook creation and smart suggestions in NotebookSuggestMo
     },
     settings: {
       paperWidth: 800,
+      useManagedStorage: false,
     },
   } as any;
 

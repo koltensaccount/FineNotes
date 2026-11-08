@@ -24,7 +24,7 @@
  * result always keeps the pasted group's centre on the page.
  */
 
-import type { Bounds, CircuitElement, ImageElement, PageGeometry, Stroke, TextBoxElement } from "./document";
+import type { Bounds, CircuitElement, EquationElement, ImageElement, PageGeometry, Stroke, TextBoxElement } from "./document";
 import { DUPLICATE_OFFSET } from "./images";
 import {
   type ElementLists,
@@ -79,6 +79,7 @@ export class InkClipboard {
         images: elements.images.map((image) => structuredClone(image)),
         textBoxes: elements.textBoxes.map((textBox) => structuredClone(textBox)),
         circuits: (elements.circuits ?? []).map((circuit) => structuredClone(circuit)),
+        equations: (elements.equations ?? []).map((equation) => structuredClone(equation)),
       },
       bounds: { ...bounds },
     };
@@ -106,7 +107,8 @@ export class InkClipboard {
       e.strokes.length > 0 ||
       e.textBoxes.length > 0 ||
       (withImages && e.images.length > 0) ||
-      (e.circuits !== undefined && e.circuits.length > 0)
+      (e.circuits !== undefined && e.circuits.length > 0) ||
+      (e.equations !== undefined && e.equations.length > 0)
     );
   }
 
@@ -145,9 +147,9 @@ export function pasteCopies(
   dy: number,
   withImages = true,
 ): ElementLists {
-  const { strokes, images, textBoxes, circuits } = entry.elements;
+  const { strokes, images, textBoxes, circuits, equations } = entry.elements;
   const copies = copyElements(
-    { strokes, images: withImages ? images : [], textBoxes, circuits },
+    { strokes, images: withImages ? images : [], textBoxes, circuits, equations },
     ids,
     dx,
     dy,
@@ -238,11 +240,16 @@ export function sameSpotTaken(
         near(e.w, c.w) &&
         near(e.h, c.h),
     );
+  const equationTaken = (c: EquationElement): boolean =>
+    (page.equations ?? []).some(
+      (e) => e.tex === c.tex && near(e.x, c.x + dx) && near(e.y, c.y + dy),
+    );
   return (
     copies.images.some(imageTaken) ||
     copies.textBoxes.some(textTaken) ||
     copies.strokes.some(strokeTaken) ||
-    (copies.circuits ?? []).some(circuitTaken)
+    (copies.circuits ?? []).some(circuitTaken) ||
+    (copies.equations ?? []).some(equationTaken)
   );
 }
 

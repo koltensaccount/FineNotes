@@ -15,6 +15,7 @@ import { CompositeCommand } from "./page-commands";
 import type { Command } from "./commands";
 import {
   type CircuitElement,
+  type EquationElement,
   type ImageElement,
   type InkDocument,
   type Page,
@@ -23,6 +24,7 @@ import {
   POINT_STRIDE,
   pageById,
 } from "./document";
+import { scaleEquation } from "./equation";
 
 /** The elements a selection holds on one page. */
 export interface PageElements {
@@ -30,6 +32,7 @@ export interface PageElements {
   images: readonly ImageElement[];
   textBoxes: readonly TextBoxElement[];
   circuits?: readonly CircuitElement[];
+  equations?: readonly EquationElement[];
 }
 
 /** The same elements as fresh, mutable lists. */
@@ -38,6 +41,7 @@ export interface ElementLists {
   images: ImageElement[];
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
+  equations?: EquationElement[];
 }
 
 /** Which of `elements` are on `page` right now, in page order. */
@@ -47,6 +51,7 @@ export function elementsOnPage(page: Page, elements: PageElements): ElementLists
     images: present(page.images, elements.images),
     textBoxes: present(page.textBoxes, elements.textBoxes),
     circuits: present(page.circuits ?? [], elements.circuits ?? []),
+    equations: present(page.equations ?? [], elements.equations ?? []),
   };
 }
 
@@ -56,7 +61,8 @@ export function isEmptySelection(elements: PageElements): boolean {
     elements.strokes.length === 0 &&
     elements.images.length === 0 &&
     elements.textBoxes.length === 0 &&
-    (!elements.circuits || elements.circuits.length === 0)
+    (!elements.circuits || elements.circuits.length === 0) &&
+    (!elements.equations || elements.equations.length === 0)
   );
 }
 
@@ -83,6 +89,7 @@ export class TranslateElements implements Command {
     images: Array<{ image: ImageElement; x: number; y: number }>;
     textBoxes: Array<{ textBox: TextBoxElement; x: number; y: number }>;
     circuits?: Array<{ circuit: CircuitElement; x: number; y: number }>;
+    equations?: Array<{ equation: EquationElement; x: number; y: number }>;
   } | null = null;
 
   constructor(
@@ -122,6 +129,12 @@ export class TranslateElements implements Command {
         circuit.y += dy;
         return saved;
       }),
+      equations: (on.equations ?? []).map((equation) => {
+        const saved = { equation, x: equation.x, y: equation.y };
+        equation.x += dx;
+        equation.y += dy;
+        return saved;
+      }),
     };
   }
 
@@ -141,6 +154,10 @@ export class TranslateElements implements Command {
       circuit.x = x;
       circuit.y = y;
     }
+    for (const { equation, x, y } of moved.equations ?? []) {
+      equation.x = x;
+      equation.y = y;
+    }
     this.moved = null;
   }
 }
@@ -155,6 +172,7 @@ export class RemoveElements implements Command {
     images: Array<Removed<ImageElement>>;
     textBoxes: Array<Removed<TextBoxElement>>;
     circuits: Array<Removed<CircuitElement>>;
+    equations: Array<Removed<EquationElement>>;
   } | null = null;
 
   constructor(
@@ -172,6 +190,7 @@ export class RemoveElements implements Command {
       images: removeFrom(page.images, this.elements.images),
       textBoxes: removeFrom(page.textBoxes, this.elements.textBoxes),
       circuits: removeFrom(page.circuits ?? [], this.elements.circuits ?? []),
+      equations: removeFrom(page.equations ?? [], this.elements.equations ?? []),
     };
   }
 
@@ -185,6 +204,9 @@ export class RemoveElements implements Command {
     if (page.circuits && removed.circuits) {
       restoreTo(page.circuits, removed.circuits);
     }
+    if (page.equations && removed.equations) {
+      restoreTo(page.equations, removed.equations);
+    }
     this.removed = null;
   }
 }
@@ -194,6 +216,9 @@ export class RemoveElements implements Command {
  * duplicated selection. Undo takes exactly those objects away again.
  */
 export class AddElements implements Command {
+  private createdCircuits = false;
+  private createdEquations = false;
+
   constructor(
     readonly pageId: string,
     private readonly elements: PageElements,
@@ -207,8 +232,12 @@ export class AddElements implements Command {
     page.images.push(...this.elements.images);
     page.textBoxes.push(...this.elements.textBoxes);
     if (this.elements.circuits && this.elements.circuits.length > 0) {
-      if (!page.circuits) page.circuits = [];
-      page.circuits.push(...this.elements.circuits);
+      this.createdCircuits = page.circuits === undefined;
+      (page.circuits ??= []).push(...this.elements.circuits);
+    }
+    if (this.elements.equations && this.elements.equations.length > 0) {
+      this.createdEquations = page.equations === undefined;
+      (page.equations ??= []).push(...this.elements.equations);
     }
   }
 
@@ -220,7 +249,14 @@ export class AddElements implements Command {
     removeFrom(page.textBoxes, this.elements.textBoxes);
     if (page.circuits && this.elements.circuits) {
       removeFrom(page.circuits, this.elements.circuits);
+      if (this.createdCircuits && page.circuits.length === 0) delete page.circuits;
     }
+    if (page.equations && this.elements.equations) {
+      removeFrom(page.equations, this.elements.equations);
+      if (this.createdEquations && page.equations.length === 0) delete page.equations;
+    }
+    this.createdCircuits = false;
+    this.createdEquations = false;
   }
 }
 
@@ -284,6 +320,7 @@ export interface IdSource {
   image: () => string;
   textBox: () => string;
   circuit?: () => string;
+  equation?: () => string;
 }
 
 /**
@@ -299,14 +336,18 @@ export function copyElements(
   dy: number,
 ): ElementLists {
   let circuitCounter = 1;
+  let equationCounter = 1;
+  const strokeIds = new Map<string, string>();
+  const strokes = elements.strokes.map((stroke) => {
+    const copy = structuredClone(stroke);
+    copy.id = ids.stroke();
+    strokeIds.set(stroke.id, copy.id);
+    copy.pts = translatePoints(stroke.pts, dx, dy);
+    delete copy.t0;
+    return copy;
+  });
   return {
-    strokes: elements.strokes.map((stroke) => {
-      const copy = structuredClone(stroke);
-      copy.id = ids.stroke();
-      copy.pts = translatePoints(stroke.pts, dx, dy);
-      delete copy.t0;
-      return copy;
-    }),
+    strokes,
     images: elements.images.map((image) => {
       const copy = structuredClone(image);
       copy.id = ids.image();
@@ -317,6 +358,11 @@ export function copyElements(
     textBoxes: elements.textBoxes.map((textBox) => {
       const copy = structuredClone(textBox);
       copy.id = ids.textBox();
+      if (copy.onShape) {
+        const copiedShapeId = strokeIds.get(copy.onShape);
+        if (copiedShapeId) copy.onShape = copiedShapeId;
+        else delete copy.onShape;
+      }
       copy.x += dx;
       copy.y += dy;
       return copy;
@@ -324,6 +370,13 @@ export function copyElements(
     circuits: (elements.circuits ?? []).map((circuit) => {
       const copy = structuredClone(circuit);
       copy.id = ids.circuit ? ids.circuit() : `c_dup_${Date.now()}_${circuitCounter++}`;
+      copy.x += dx;
+      copy.y += dy;
+      return copy;
+    }),
+    equations: (elements.equations ?? []).map((equation) => {
+      const copy = structuredClone(equation);
+      copy.id = ids.equation ? ids.equation() : `q_dup_${Date.now()}_${equationCounter++}`;
       copy.x += dx;
       copy.y += dy;
       return copy;
@@ -408,4 +461,226 @@ export class MoveElementsToPage implements Command {
     this.command.apply(doc);
   }
   invert(doc: InkDocument): void { this.command?.invert(doc); this.command = null; }
+}
+
+/** A copy of `pts` scaled by `k` about (ax, ay); pressure, and any ragged tail, copied as is. */
+export function scalePoints(pts: readonly number[], ax: number, ay: number, k: number): number[] {
+  const out = pts.slice();
+  const usable = out.length - (out.length % POINT_STRIDE);
+  for (let i = 0; i < usable; i += POINT_STRIDE) {
+    out[i] = ax + (out[i] - ax) * k;
+    out[i + 1] = ay + (out[i + 1] - ay) * k;
+  }
+  return out;
+}
+
+export class ScaleElements implements Command {
+  readonly label = "Resize selection";
+  private scaled: {
+    strokes: Array<{ stroke: Stroke; pts: number[]; size: number }>;
+    images: Array<{ image: ImageElement; x: number; y: number; w: number; h: number }>;
+    textBoxes: Array<{
+      textBox: TextBoxElement;
+      x: number;
+      y: number;
+      w: number;
+      h: number | undefined;
+      fontSize: number;
+    }>;
+    circuits?: Array<{ circuit: CircuitElement; saved: CircuitElement }>;
+    equations?: Array<{ equation: EquationElement; saved: EquationElement }>;
+  } | null = null;
+
+  constructor(
+    readonly pageId: string,
+    private readonly elements: PageElements,
+    private readonly ax: number,
+    private readonly ay: number,
+    private readonly k: number,
+  ) {}
+
+  apply(doc: InkDocument): void {
+    this.scaled = null;
+    const { ax, ay, k } = this;
+    if (!(k > 0) || !Number.isFinite(k) || !Number.isFinite(ax) || !Number.isFinite(ay)) return;
+    const page = pageById(doc, this.pageId);
+    if (!page) return;
+    const on = elementsOnPage(page, this.elements);
+    const sx = (x: number): number => ax + (x - ax) * k;
+    const sy = (y: number): number => ay + (y - ay) * k;
+    this.scaled = {
+      strokes: on.strokes.map((stroke) => {
+        const saved = { stroke, pts: stroke.pts, size: stroke.size };
+        stroke.pts = scalePoints(stroke.pts, ax, ay, k);
+        stroke.size *= k;
+        return saved;
+      }),
+      images: on.images.map((image) => {
+        const { x, y, w, h } = image;
+        image.x = sx(x);
+        image.y = sy(y);
+        image.w = w * k;
+        image.h = h * k;
+        return { image, x, y, w, h };
+      }),
+      textBoxes: on.textBoxes.map((textBox) => {
+        const { x, y, w, h, fontSize } = textBox;
+        textBox.x = sx(x);
+        textBox.y = sy(y);
+        textBox.w = w * k;
+        if (h !== undefined) textBox.h = h * k;
+        textBox.fontSize = Math.round(fontSize * k * 10) / 10;
+        return { textBox, x, y, w, h, fontSize };
+      }),
+      circuits: (on.circuits ?? []).map((circuit) => {
+        const saved = structuredClone(circuit);
+        circuit.x = sx(circuit.x);
+        circuit.y = sy(circuit.y);
+        circuit.w *= k;
+        circuit.h *= k;
+        return { circuit, saved };
+      }),
+      equations: (on.equations ?? []).map((equation) => {
+        const saved = structuredClone(equation);
+        scaleEquation(equation, ax, ay, k);
+        return { equation, saved };
+      }),
+    };
+  }
+
+  invert(doc: InkDocument): void {
+    const scaled = this.scaled;
+    if (!scaled || !pageById(doc, this.pageId)) return;
+    for (const { stroke, pts, size } of scaled.strokes) {
+      stroke.pts = pts;
+      stroke.size = size;
+    }
+    for (const { image, x, y, w, h } of scaled.images) {
+      image.x = x;
+      image.y = y;
+      image.w = w;
+      image.h = h;
+    }
+    for (const { textBox, x, y, w, h, fontSize } of scaled.textBoxes) {
+      textBox.x = x;
+      textBox.y = y;
+      textBox.w = w;
+      if (h !== undefined) textBox.h = h;
+      textBox.fontSize = fontSize;
+    }
+    for (const { circuit, saved } of scaled.circuits ?? []) Object.assign(circuit, saved);
+    for (const { equation, saved } of scaled.equations ?? []) Object.assign(equation, saved);
+    this.scaled = null;
+  }
+}
+
+export type Reorientation = { kind: "rotate"; angle: number } | { kind: "flip"; axis: "x" | "y" };
+
+export function reorientPoint(
+  motion: Reorientation,
+  cx: number,
+  cy: number,
+  x: number,
+  y: number,
+): { x: number; y: number } {
+  const dx = x - cx;
+  const dy = y - cy;
+  if (motion.kind === "flip") {
+    return motion.axis === "x" ? { x: cx - dx, y } : { x, y: cy - dy };
+  }
+  const c = Math.cos(motion.angle);
+  const s = Math.sin(motion.angle);
+  return { x: cx + dx * c - dy * s, y: cy + dx * s + dy * c };
+}
+
+export function reorientPoints(
+  pts: readonly number[],
+  motion: Reorientation,
+  cx: number,
+  cy: number,
+): number[] {
+  const out = pts.slice();
+  const usable = out.length - (out.length % POINT_STRIDE);
+  for (let i = 0; i < usable; i += POINT_STRIDE) {
+    const p = reorientPoint(motion, cx, cy, out[i], out[i + 1]);
+    out[i] = p.x;
+    out[i + 1] = p.y;
+  }
+  return out;
+}
+
+export class ReorientElements implements Command {
+  readonly label: string;
+  private saved: {
+    strokes: Array<{ stroke: Stroke; pts: number[] }>;
+    images: Array<{ image: ImageElement; saved: ImageElement }>;
+    textBoxes: Array<{ textBox: TextBoxElement; saved: TextBoxElement }>;
+    equations?: Array<{ equation: EquationElement; x: number; y: number }>;
+  } | null = null;
+
+  constructor(
+    readonly pageId: string,
+    private readonly elements: PageElements,
+    private readonly motion: Reorientation,
+    private readonly cx: number,
+    private readonly cy: number,
+  ) {
+    this.label =
+      motion.kind === "rotate"
+        ? "Rotate selection"
+        : motion.axis === "x"
+          ? "Flip horizontal"
+          : "Flip vertical";
+  }
+
+  apply(doc: InkDocument): void {
+    this.saved = null;
+    const { motion, cx, cy } = this;
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+    if (motion.kind === "rotate" && !Number.isFinite(motion.angle)) return;
+    const page = pageById(doc, this.pageId);
+    if (!page) return;
+    const on = elementsOnPage(page, this.elements);
+    this.saved = {
+      strokes: on.strokes.map((stroke) => {
+        const pts = stroke.pts;
+        stroke.pts = reorientPoints(pts, motion, cx, cy);
+        return { stroke, pts };
+      }),
+      images: on.images.map((image) => {
+        const saved = { ...image };
+        const c = reorientPoint(motion, cx, cy, image.x + image.w / 2, image.y + image.h / 2);
+        image.x = c.x - image.w / 2;
+        image.y = c.y - image.h / 2;
+        return { image, saved };
+      }),
+      textBoxes: on.textBoxes.map((textBox) => {
+        const saved = { ...textBox };
+        const c = reorientPoint(motion, cx, cy, textBox.x + textBox.w / 2, textBox.y + (textBox.h ?? 0) / 2);
+        textBox.x = c.x - textBox.w / 2;
+        textBox.y = c.y - (textBox.h ?? 0) / 2;
+        return { textBox, saved };
+      }),
+      equations: (on.equations ?? []).map((equation) => {
+        const { x, y } = equation;
+        const c = reorientPoint(motion, cx, cy, x + equation.w / 2, y + equation.h / 2);
+        equation.x = c.x - equation.w / 2;
+        equation.y = c.y - equation.h / 2;
+        return { equation, x, y };
+      }),
+    };
+  }
+
+  invert(doc: InkDocument): void {
+    const saved = this.saved;
+    if (!saved || !pageById(doc, this.pageId)) return;
+    for (const { stroke, pts } of saved.strokes) stroke.pts = pts;
+    for (const { image, saved: was } of saved.images) Object.assign(image, was);
+    for (const { textBox, saved: was } of saved.textBoxes) Object.assign(textBox, was);
+    for (const { equation, x, y } of saved.equations ?? []) {
+      equation.x = x;
+      equation.y = y;
+    }
+    this.saved = null;
+  }
 }

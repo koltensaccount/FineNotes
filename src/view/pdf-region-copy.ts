@@ -1,3 +1,4 @@
+import { paintEquation } from "../canvas/equation-paint";
 import { strokeBounds, type Page } from "../model/document";
 import { boundsMeet } from "../canvas/pdf-raster";
 import { imageBounds } from "../canvas/image-geometry";
@@ -94,6 +95,7 @@ async function renderRegion(
       )
         fillStroke(ctx, stroke.pts, styleOf(stroke, pressure), alpha);
     }
+    for (const equation of page.equations ?? []) paintEquation(ctx, equation);
     for (const text of page.textBoxes) paintTextBox(ctx, text);
     ctx.restore();
     if (!region.rectangular) {

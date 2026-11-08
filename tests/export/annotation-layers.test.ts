@@ -53,3 +53,15 @@ describe("PDF annotation layers", () => {
     expect([...annotationLayers(page)].map((layer) => layer.multiply)).toEqual([true]);
   });
 });
+
+it("paints equations once and outside the highlighter layer", () => {
+  const page = blankPage("p");
+  const equation = { id: "q1", x: 20, y: 40, w: 100, h: 30, tex: "x^2", color: "#000", size: 22 };
+  page.equations = [equation];
+  expect([...annotationLayers(page)].map((layer) => layer.page.equations)).toEqual([[equation]]);
+  page.strokes.push({ id: "s1", tool: "highlighter", color: "#ff0", size: 10, pts: [20, 40, 0.5] });
+  const [base, ink] = annotationLayers(page);
+  expect(base.page.equations).toEqual([equation]);
+  expect(ink.multiply).toBe(true);
+  expect(ink.page.equations).toBeUndefined();
+});

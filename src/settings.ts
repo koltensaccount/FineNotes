@@ -370,6 +370,18 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
         ["folder", "location", "new notebook", "new page"],
       ),
       toggle(
+        "useManagedStorage",
+        "Use managed FineNotes storage",
+        "Store newly created Handwrite Here backing notebooks and region previews in a shared vault folder.",
+        ["storage", "managed", "attachments", "handwriting", "embeds"],
+      ),
+      drawnRow(
+        "Managed storage data root",
+        "Vault-relative folder path for managed FineNotes storage (default: FineNotes).",
+        (s) => this.drawManagedStorageFolder(s),
+        ["storage", "managed", "folder", "root"],
+      ),
+      toggle(
         "showNewNotebookInContextMenu",
         "Show New notebook in right-click menu",
         "Add New notebook to the file explorer menu. New notebooks start in the selected folder.",
@@ -573,6 +585,23 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
         });
       new FolderInputSuggest(this.app, text.inputEl, (path) => {
         this.plugin.settings.newNotebookFolder = path;
+        void this.plugin.saveSettings();
+      });
+    });
+  }
+
+  /** Managed FineNotes data root folder. */
+  private drawManagedStorageFolder(setting: Setting): void {
+    setting.addText((text) => {
+      text
+        .setPlaceholder("FineNotes")
+        .setValue(this.plugin.settings.managedStorageRoot || "FineNotes")
+        .onChange(async (value) => {
+          this.plugin.settings.managedStorageRoot = normalizeFolder(value) || "FineNotes";
+          await this.plugin.saveSettings();
+        });
+      new FolderInputSuggest(this.app, text.inputEl, (path) => {
+        this.plugin.settings.managedStorageRoot = path || "FineNotes";
         void this.plugin.saveSettings();
       });
     });

@@ -7645,3 +7645,236 @@ img.finenotes-live-embed-image:hover {
   }
 }
 
+/* ------------------------------------------------------- Floating Window & Equation Editor */
+
+.goodobsidian-graph-window,
+.goodobsidian-eq-window,
+.goodobsidian-calc-window,
+.goodobsidian-zoombox-window {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--gob-line);
+  border-radius: var(--gob-pop-radius);
+  background: var(--gob-pop-bg);
+  box-shadow: var(--gob-shadow-sheet);
+  color: var(--text-normal);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: transform 120ms ease-out;
+}
+
+.goodobsidian-graph-window.is-raised,
+.goodobsidian-calc-window.is-raised,
+.goodobsidian-zoombox-window.is-raised,
+.goodobsidian-eq-window.is-raised {
+  transform: scale(1.02);
+}
+
+.goodobsidian-graph-window-bar,
+.goodobsidian-eq-window-bar,
+.goodobsidian-calc-window-bar,
+.goodobsidian-zoombox-window-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px 0 14px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.goodobsidian-graph-window-title,
+.goodobsidian-eq-window-title,
+.goodobsidian-calc-window-title,
+.goodobsidian-zoombox-window-title {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold, 600);
+}
+
+button.clickable-icon.goodobsidian-graph-window-button,
+button.clickable-icon.goodobsidian-eq-window-button,
+button.clickable-icon.goodobsidian-calc-window-button,
+button.clickable-icon.goodobsidian-zoombox-window-button {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--gob-radius-m);
+  color: var(--gob-icon);
+}
+
+.goodobsidian-graph-window-body,
+.goodobsidian-eq-window-body,
+.goodobsidian-calc-window-body,
+.goodobsidian-zoombox-window-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 8px 8px;
+}
+
+.goodobsidian-graph-window-grip,
+.goodobsidian-eq-window-grip,
+.goodobsidian-calc-window-grip,
+.goodobsidian-zoombox-window-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-faint);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.goodobsidian-graph-window-grip svg,
+.goodobsidian-eq-window-grip svg,
+.goodobsidian-calc-window-grip svg,
+.goodobsidian-zoombox-window-grip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.goodobsidian-graph-window.is-minimised {
+  border-radius: var(--gob-radius-pill);
+}
+
+.goodobsidian-graph-window.is-minimised .goodobsidian-graph-window-body,
+.goodobsidian-graph-window.is-minimised .goodobsidian-graph-window-grip,
+.goodobsidian-graph-window.is-minimised
+  button.clickable-icon.goodobsidian-graph-window-button:not(.is-close) {
+  display: none;
+}
+
+.goodobsidian-graph-window.is-front,
+.goodobsidian-eq-window.is-front,
+.goodobsidian-calc-window.is-front,
+.goodobsidian-zoombox-window.is-front {
+  z-index: 21;
+}
+
+.goodobsidian-eq {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.goodobsidian-eq-window textarea.goodobsidian-eq-source {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 52px;
+  resize: none;
+  padding: 8px 10px;
+  border-radius: var(--gob-radius-m);
+  font-family: var(--font-monospace);
+  font-size: 15px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.goodobsidian-eq-preview {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 60px;
+  border-radius: var(--gob-radius-m);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.goodobsidian-eq-bar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding-right: 22px;
+}
+
+.goodobsidian-eq-window button.clickable-icon.goodobsidian-eq-place {
+  width: 40px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--gob-radius-m);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.goodobsidian-eq-window button.clickable-icon.goodobsidian-eq-place:disabled {
+  opacity: 0.4;
+}
+
+.goodobsidian-text-sigma {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* ------------------------------------------------------- Inline Handwrite Here editing */
+
+.finenotes-inline-active {
+  position: relative;
+  border: 1px solid var(--interactive-accent) !important;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  background: var(--background-primary);
+}
+.finenotes-inline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  z-index: 10;
+  position: sticky;
+  top: 0;
+}
+.finenotes-inline-tool-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: var(--font-ui-smaller);
+}
+.finenotes-inline-tool-button:hover {
+  background: var(--background-modifier-hover);
+}
+.finenotes-inline-tool-button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.finenotes-inline-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--background-modifier-border);
+  margin: 0 2px;
+}
+.finenotes-inline-done {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--interactive-accent);
+}
+.finenotes-inline-surface-host {
+  min-height: 240px;
+  position: relative;
+}
+

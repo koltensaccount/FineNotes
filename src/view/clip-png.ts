@@ -1,3 +1,5 @@
+import { equationBounds } from "../model/equation";
+import { paintEquation } from "../canvas/equation-paint";
 import type { PdfBackdropCache } from "./pdf-backdrop";
 /**
  * Render FineNotes notebook clips and pages to high-DPI PNGs with full page background.
@@ -220,6 +222,12 @@ export async function renderClipPng(
         drawPlacedCircuit(ctx, circuit);
       }
     }
+  }
+
+  for (const equation of page.equations ?? []) {
+    if (!boundsMeet(equationBounds(equation), cropBox)) continue;
+    const color = includeBackground ? equation.color : adaptColorForTheme(equation.color, isDark);
+    paintEquation(ctx, color === equation.color ? equation : { ...equation, color });
   }
 
   // 4. Draw text boxes (intelligently adapted for theme contrast when background is transparent)

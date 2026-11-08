@@ -239,3 +239,15 @@ describe("per-stroke t0 timestamp", () => {
     expect(decodeDocument(payload).pages[0].strokes[0].t0).toBe(900);
   });
 });
+
+it("keeps a text box linked to its shape after saving and reopening", () => {
+  const doc = emptyDocument();
+  doc.pages[0].strokes.push({
+    id: "s1", tool: "pen", size: 2, color: "#000", shape: "rect",
+    pts: [0, 0, 0.5, 160, 0, 0.5, 160, 120, 0.5, 0, 120, 0.5, 0, 0, 0.5],
+  });
+  doc.pages[0].textBoxes.push({
+    id: "t1", x: 20, y: 30, w: 120, color: "#000", fontSize: 18, text: "Label", onShape: "s1",
+  });
+  expect(decodeDocument(encodeDocument(doc)).pages[0].textBoxes[0].onShape).toBe("s1");
+});

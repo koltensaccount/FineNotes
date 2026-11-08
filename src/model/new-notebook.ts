@@ -230,10 +230,20 @@ export function joinVaultPath(folder: string, name: string): string {
   return dir ? `${dir}/${name}` : name;
 }
 
-/** The folders inside a notebook's own folder, for its pictures, recordings and PDF exports. */
+/** The folders inside a notebook's own folder, for its pictures, recordings, transcripts, AI chats and PDF exports. */
 export const OWN_FOLDER_IMAGES = "Images";
 export const OWN_FOLDER_AUDIO = "Recordings";
+export const OWN_FOLDER_TRANSCRIPTS = "Transcripts";
+export const OWN_FOLDER_CHATS = "AI chats";
 export const OWN_FOLDER_EXPORTS = "Exports";
+
+export const OWN_FOLDERS: readonly string[] = [
+  OWN_FOLDER_IMAGES,
+  OWN_FOLDER_AUDIO,
+  OWN_FOLDER_TRANSCRIPTS,
+  OWN_FOLDER_CHATS,
+  OWN_FOLDER_EXPORTS,
+];
 
 /** Where a new notebook goes on disk. */
 export interface NotebookPaths {

@@ -1,4 +1,9 @@
 import { referencedEmbedImages } from "./embed-references";
+import {
+  isManagedStorageEnabled,
+  ensureManagedDirectory,
+  resolveManagedFilePath,
+} from "../model/storage-resolver";
 import { AddHandwritingRegion, allocateHandwritingRegion, updateHandwritingReferences } from "../model/region-allocation";
 import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
 import { writingGuidesOf, type WritingGuideStyle } from "../model/writing-guides";
@@ -185,6 +190,16 @@ import {
 import { NoteAudio } from "./note-audio";
 import { LoadGuard } from "./load-guard";
 import { TextPanel } from "./text-panel";
+import { EquationEditor } from "./equation-editor";
+import { measureEquation } from "../canvas/equation-paint";
+import {
+  AddEquation,
+  EditEquation,
+  makeEquation,
+  nextEquationId,
+  type EquationElement,
+} from "../model/equation";
+import { textStyleOf } from "../model/text-style";
 import type GoodObsidianPlugin from "../main";
 import type { GoodObsidianSettings } from "../settings";
 import { errorMessage } from "../util/errors";
@@ -252,6 +267,8 @@ export class InkView extends TextFileView {
   private nativePasteModal: NativePasteModal | null = null;
   /** De-duplicate the unload and close hooks, including failed exports. */
   private companionUnloadedFile: TFile | null = null;
+  private equationEditor: EquationEditor | null = null;
+  private measureCtx: CanvasRenderingContext2D | null = null;
   private surface: InkSurface | null = null;
   private toolbar: Toolbar | null = null;
   private sidebar: PageSidebar | null = null;
@@ -499,6 +516,9 @@ export class InkView extends TextFileView {
   /** The pen touched the page or left it: hold, or let go of, what would stall it. */
   private latestDrawingAt = 0;
   get lastDrawingAt(): number { return this.latestDrawingAt; }
+  get document(): InkDocument { return this.surface?.document ?? this.doc; }
+  get bodyText(): string { return this.noteBody; }
+  relayoutSurface(): void { this.surface?.layout(); }
   private penActivity(down: boolean): void {
     window.clearTimeout(this.quietTimer);
     this.quietTimer = 0;
@@ -561,6 +581,8 @@ export class InkView extends TextFileView {
     this.guidePopover?.close();
     this.morePanel?.close();
     this.morePanel = null;
+    this.equationEditor?.close();
+    this.equationEditor = null;
     this.addPagePopover?.popover.close();
     this.addPagePopover = null;
     this.coverPopover?.popover.close();
@@ -1249,6 +1271,7 @@ export class InkView extends TextFileView {
           ),
         returnToPenOnReselect: () => this.settings.returnToPenOnReselect === true,
         returnToPenAfterUse: () => this.settings.returnToPenAfterUse === true,
+        onEquation: (pageId, at, equation) => this.openEquation(pageId, at, equation),
         onToolChange: (tool) => {
           this.toolbar?.setState(this.toolState);
           if (tool === "text" && this.surface) this.plugin.offerTextHint(this.surface);
@@ -2121,7 +2144,15 @@ export class InkView extends TextFileView {
     const allocation = allocateHandwritingRegion(doc, preferredPage, reusableReferences);
     if (allocation.newPage && this.isSinglePage) throw new Error("This single-page note has no room for another region.");
     const clipId = allocation.reusableClip?.id ?? `clip-${crypto.randomUUID()}`;
-    const targetPath = allocation.reusableClip?.imagePath ?? await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
+    let targetPath = allocation.reusableClip?.imagePath;
+    if (!targetPath) {
+      if (isManagedStorageEnabled(this.settings)) {
+        await ensureManagedDirectory(this.app, "embeds", this.settings);
+        targetPath = resolveManagedFilePath("embeds", `${file.basename}-${clipId}.png`, this.settings);
+      } else {
+        targetPath = await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
+      }
+    }
     this.clipsDirty = true;
     const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
     const buffer = await renderClipPng(allocation.page, allocation.bounds, {
@@ -2220,6 +2251,71 @@ export class InkView extends TextFileView {
       () => new Notice(`Page ${pageNum} embed copied to clipboard.`),
       () => new Notice("FineNotes could not use the clipboard here."),
     );
+  }
+
+  /**
+   * The equation window: the LaTeX source in a field, the formula below it
+   * as the page will draw it, and ✓ to place it.
+   */
+  private openEquation(
+    pageId: string,
+    at: { x: number; y: number },
+    equation: EquationElement | null,
+  ): void {
+    if (this.isProtected()) return;
+    this.equationEditor?.close();
+    const style = textStyleOf(sanitizeTextStyle(this.settings.textStyle));
+    const color = equation?.color ?? style.color;
+    const size = equation?.size ?? style.fontSize;
+    this.equationEditor = new EquationEditor({
+      container: this.contentEl,
+      tex: equation?.tex ?? "",
+      color,
+      size,
+      done: (tex) => {
+        this.equationEditor = null;
+        this.placeEquation(pageId, at, equation, tex, color, size);
+      },
+      cancel: () => {
+        this.equationEditor = null;
+      },
+    });
+  }
+
+  /** Commit what the equation window gave back: a new equation, or the edited one. One undo step. */
+  private placeEquation(
+    pageId: string,
+    at: { x: number; y: number },
+    equation: EquationElement | null,
+    tex: string,
+    color: string,
+    size: number,
+  ): void {
+    const surface = this.surface;
+    if (!surface || this.isProtected()) return;
+    const page = surface.document.pages.find((candidate) => candidate.id === pageId);
+    this.measureCtx ??= createEl("canvas").getContext("2d");
+    if (!page || !this.measureCtx) return;
+    const frame = measureEquation(this.measureCtx, tex, size);
+    if (equation) {
+      if (equation.tex === tex) return;
+      surface.applyCommand(new EditEquation(pageId, equation, { tex, ...frame }));
+    } else {
+      const { width, height } = page.geometry;
+      const x = Math.max(0, Math.min(at.x, width - frame.w));
+      const y = Math.max(0, Math.min(at.y - frame.h / 2, height - frame.h));
+      const placed = makeEquation({
+        id: nextEquationId(surface.document),
+        x,
+        y,
+        tex,
+        color,
+        size,
+        ...frame,
+      });
+      surface.applyCommand(new AddEquation(pageId, placed));
+    }
+    this.requestSave();
   }
 
   /**
