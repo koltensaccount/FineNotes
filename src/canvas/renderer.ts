@@ -46,6 +46,7 @@ import {
   type Backdrop,
   type Bounds,
   type CircuitElement,
+  type EquationElement,
   type ImageCrop,
   type ImageElement,
   type InkDocument,
@@ -57,6 +58,8 @@ import {
   strokeBounds,
 } from "../model/document";
 import { drawPlacedCircuit } from "../circuit/circuit-render";
+import { paintEquation } from "./equation-paint";
+import { equationBounds } from "../model/equation";
 import { imageBounds, rotationOf } from "./image-geometry";
 import type { DocumentLayout, PageBox } from "./page-layout";
 import { baselineOffset, canvasFont, decorationMetrics, layoutTextBox } from "./text-layout";
@@ -362,6 +365,8 @@ export class Renderer {
   private hiddenImages: ReadonlySet<ImageElement> = new Set();
   /** Circuits left out of tiles and previews: a lasso selection being dragged. */
   private hiddenCircuits: ReadonlySet<CircuitElement> = new Set();
+  /** Equations left out of tiles and previews: a lasso selection being dragged. */
+  private hiddenEquations: ReadonlySet<EquationElement> = new Set();
   /** Strokes (by id) left out of tiles and previews: a lasso selection being dragged. */
   private hiddenStrokes: ReadonlySet<string> = new Set();
 
@@ -458,6 +463,10 @@ export class Renderer {
 
   setHiddenCircuits(circuits: ReadonlySet<CircuitElement>): void {
     this.hiddenCircuits = circuits;
+  }
+
+  setHiddenEquations(equations: ReadonlySet<EquationElement>): void {
+    this.hiddenEquations = equations;
   }
 
   /**
@@ -979,6 +988,7 @@ export class Renderer {
     if (this.writingGuides) paintWritingGuides(ctx, page, region, this.writingGuides, paperColorOf(page, this.paper), this.view.scale, level);
     this.paintImages(ctx, page, region, level);
     this.paintCircuits(ctx, page, region, level);
+    this.paintEquations(ctx, page, region);
     // Inset by half a device pixel so the hairline lies inside the clip.
     const hair = 1 / level;
     ctx.strokeStyle = this.paper.edge;
@@ -1014,6 +1024,20 @@ export class Renderer {
       if (this.hiddenCircuits.has(circuit)) continue;
       if (!overlaps(imageBounds(circuit), region)) continue;
       drawPlacedCircuit(ctx, circuit, () => this.invalidateAll(), level);
+    }
+  }
+
+  /** The page's typed equations that overlap `region`. */
+  private paintEquations(
+    ctx: CanvasRenderingContext2D,
+    page: Page,
+    region: Bounds,
+  ): void {
+    if (!page.equations || page.equations.length === 0) return;
+    for (const equation of page.equations) {
+      if (this.hiddenEquations.has(equation)) continue;
+      if (!overlaps(equationBounds(equation), region)) continue;
+      paintEquation(ctx, equation);
     }
   }
 
@@ -1129,6 +1153,11 @@ export class Renderer {
     dy: number,
     usePressure: boolean,
     circuits?: readonly CircuitElement[],
+    turn?: { x: number; y: number; angle: number },
+    _tables?: unknown,
+    _graphs?: unknown,
+    _night?: boolean,
+    equations?: readonly EquationElement[],
   ): void {
     const box = this.layout.boxes[pageIndex];
     const ctx = this.wet.ctx;
@@ -1136,6 +1165,11 @@ export class Renderer {
     if (!box) return;
     this.toLayoutSpace(ctx);
     this.enterPage(ctx, box);
+    if (turn) {
+      ctx.translate(turn.x, turn.y);
+      ctx.rotate(turn.angle);
+      ctx.translate(-turn.x, -turn.y);
+    }
     ctx.translate(dx, dy);
     if (this.imagePainter) {
       for (const image of images) {
@@ -1145,6 +1179,11 @@ export class Renderer {
     if (circuits) {
       for (const circuit of circuits) {
         drawPlacedCircuit(ctx, circuit);
+      }
+    }
+    if (equations) {
+      for (const equation of equations) {
+        paintEquation(ctx, equation);
       }
     }
     for (const stroke of strokes) {
@@ -1418,6 +1457,10 @@ export function renderPageThumbnail(
 
   if (page.circuits) {
     for (const circuit of page.circuits) drawPlacedCircuit(ctx, circuit, undefined, k);
+  }
+
+  if (page.equations) {
+    for (const equation of page.equations) paintEquation(ctx, equation);
   }
 
   for (const box of page.textBoxes) paintTextBox(ctx, box);

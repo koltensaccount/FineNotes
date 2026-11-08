@@ -325,6 +325,25 @@ export interface NotebookClip {
   updatedAt: number;
 }
 
+export interface EquationElement {
+  /** `q<N>`, unique on the page. */
+  id: string;
+  /**
+   * The frame's top-left and size, page px, as the editor measured the
+   * formula: every reader fits its drawing into this box.
+   */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** The LaTeX source, without `$`. */
+  tex: string;
+  /** Hex, as a text box's colour. */
+  color: string;
+  /** The font size it is set at, page px at a 1:1 scale; a resize scales it. */
+  size: number;
+}
+
 export type PageKind = "ink";
 
 export interface Page {
@@ -336,6 +355,7 @@ export interface Page {
   images: ImageElement[];
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
+  equations?: EquationElement[];
   clips?: NotebookClip[];
   /** Vault-relative path to the rendered full-page embed PNG */
   pageEmbedPath?: string;

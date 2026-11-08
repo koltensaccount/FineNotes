@@ -34,11 +34,13 @@ import { normalizeAttachmentFolders } from "./attachment-folders";
 import { normalizePageTitle } from "./contents";
 import { SAVE_LEVEL, deflateToBase64, inflateFromBase64 } from "./compress";
 import { validateAndNormalizeCircuit } from "../circuit/ir";
+import { normalizeEquation } from "./equation";
 import {
   type AttachmentFolders,
   type Backdrop,
   type Bounds,
   type CircuitElement,
+  type EquationElement,
   type ImageElement,
   type InkDocument,
   type NotebookClip,
@@ -152,6 +154,7 @@ interface StoredPage {
   images: ImageElement[];
   textBoxes: TextBoxElement[];
   circuits?: CircuitElement[];
+  equations?: EquationElement[];
   clips?: NotebookClip[];
   pageEmbedPath?: string;
   strokes: StoredStroke[];
@@ -223,6 +226,7 @@ function storePage(page: Page): StoredPage {
     images: page.images,
     textBoxes: page.textBoxes,
     circuits: page.circuits && page.circuits.length > 0 ? page.circuits : undefined,
+    equations: page.equations && page.equations.length > 0 ? page.equations : undefined,
     clips: page.clips && page.clips.length > 0 ? page.clips : undefined,
     pageEmbedPath: page.pageEmbedPath || undefined,
     strokes: page.strokes.map(storeStroke),
@@ -646,6 +650,13 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     const norm = normalizeCircuit(c, () => `c${++lastCircuitId}`);
     if (norm) circuits.push(norm);
   });
+  const equations: EquationElement[] = [];
+  const equationsRaw = Array.isArray(page.equations) ? page.equations : [];
+  let lastEquationId = maxNumericId(equationsRaw, "q");
+  equationsRaw.forEach((equation) => {
+    const norm = normalizeEquation(equation, () => `q${++lastEquationId}`);
+    if (norm) equations.push(norm);
+  });
   const clips: NotebookClip[] = [];
   const clipsRaw = Array.isArray(page.clips) ? page.clips : [];
   clipsRaw.forEach((c) => {
@@ -661,6 +672,7 @@ function normalizePage(raw: unknown, index: number, fallbackWidth: number): Page
     images,
     textBoxes,
     circuits: circuits.length > 0 ? circuits : undefined,
+    equations: equations.length > 0 ? equations : undefined,
     clips: clips.length > 0 ? clips : undefined,
     ...(typeof page.pageEmbedPath === "string" ? { pageEmbedPath: page.pageEmbedPath } : {}),
     ...(isEpoch(page.epoch) ? { epoch: Math.round(page.epoch) } : {}),

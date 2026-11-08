@@ -1,12 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Page } from "../../src/model/document";
 import {
   collectPageText,
+  holdsPhrase,
+  matchText,
   fold,
   hasTranscripts,
   pageFromSubpath,
+  pageInThisNotebook,
   queryTerms,
   searchPages,
+  folderNotebookSidecarPath,
   transcriptSidecarPath,
   transcriptsByKey,
 } from "../../src/search/notebook-search";
@@ -92,8 +96,12 @@ describe("searchPages", () => {
   it("finds typed text boxes, ignoring case, accents and ligatures", () => {
     const hits = searchPages(index, "eclair FIGURES");
     expect(hits.map((h) => h.pageIndex)).toEqual([2]);
-    // Snippets show the original spelling.
-    expect(hits[0].snippets.map((s) => s.match)).toEqual(["Éclair", "ﬁgures"]);
+    // Snippets show the original spelling; typed in order, the words are one phrase.
+    expect(hits[0].snippets.map((s) => s.match)).toEqual(["Éclair ﬁgures"]);
+    expect(searchPages(index, "figures eclair")[0].snippets.map((s) => s.match)).toEqual([
+      "Éclair",
+      "ﬁgures",
+    ]);
     expect(hits[0].snippets[0].kind).toBe("text");
   });
 
@@ -113,6 +121,69 @@ describe("searchPages", () => {
     const [hit] = searchPages(busy, "a");
     expect(hit.count).toBe(5);
     expect(hit.snippets).toHaveLength(3);
+  });
+
+  it("folds each page's text once, not again at every keystroke (research/SCALE.md)", () => {
+    const fresh = collectPageText(pages, null, SIDECAR);
+    const first = searchPages(fresh, "dec");
+    const normalize = vi.spyOn(String.prototype, "normalize");
+    try {
+      expect(searchPages(fresh, "decy")).toEqual(searchPages(index, "decy"));
+      expect(searchPages(fresh, "dec")).toEqual(first);
+      // Only the queries' own characters are folded, once a query: "decy", then "dec".
+      expect(normalize.mock.calls.length).toBe(7);
+    } finally {
+      normalize.mockRestore();
+    }
+  });
+
+  it("searches a PDF page's printed text, after the page's own (#112)", () => {
+    const pages = [page("p1", ["typed note"]), page("p2")];
+    const printed = new Map([[pages[1], ["Fourier transform", "of a Gaussian"].join("\n")]]);
+    const withPdf = collectPageText(pages, null, null, (p) => printed.get(p));
+    const [hit] = searchPages(withPdf, "gaussian");
+    expect(hit.pageIndex).toBe(1);
+    expect(hit.snippets[0]).toMatchObject({ kind: "pdf", match: "Gaussian" });
+    // Words on the page may come from the PDF and a text box together.
+    printed.set(pages[0], "Lecture 4");
+    const both = collectPageText(pages, null, null, (p) => printed.get(p));
+    expect(searchPages(both, "lecture typed").map((h) => h.pageIndex)).toEqual([0]);
+    expect(both[0].sources.map((s) => s.kind)).toEqual(["text", "pdf"]);
+  });
+
+  it("puts pages holding the words as typed first, and matches the phrase there", () => {
+    const pages = [
+      page("p1", ["defining a recipe for cake"]),
+      page("p2", ["Recipe for\ndefining subnets: detach each interface"]),
+    ];
+    const phrased = collectPageText(pages, null, null);
+    const hits = searchPages(phrased, "recipe for definin");
+    expect(hits.map((h) => [h.pageIndex, h.phrase, h.count])).toEqual([
+      [1, true, 1],
+      [0, false, 3],
+    ]);
+    // One snippet for the phrase, the line break read as a space.
+    expect(hits[0].snippets.map((s) => s.match)).toEqual(["Recipe for definin"]);
+  });
+
+  it("finds a phrase across punctuation, and names where it is in the original", () => {
+    expect(matchText("Skin-signs, and SKIN signs", "skin signs", true)).toEqual([
+      { start: 0, end: 10 },
+      { start: 16, end: 26 },
+    ]);
+    expect(
+      holdsPhrase(collectPageText([page("x", ["signs skin"])], null, null)[0], "skin signs"),
+    ).toBe(false);
+    // One word is never a phrase.
+    expect(holdsPhrase(collectPageText([page("x", ["skin"])], null, null)[0], "skin")).toBe(false);
+  });
+
+  it("searches a source's new text if it changes", () => {
+    const changing = collectPageText([page("x", ["first draft"])], null, null);
+    expect(searchPages(changing, "draft")).toHaveLength(1);
+    changing[0].sources[0].text = "final copy";
+    expect(searchPages(changing, "draft")).toEqual([]);
+    expect(searchPages(changing, "copy")[0].snippets[0].match).toBe("copy");
   });
 
   it("returns nothing for a blank query", () => {
@@ -162,6 +233,21 @@ describe("transcriptSidecarPath", () => {
   });
 });
 
+describe("folderNotebookSidecarPath", () => {
+  it("sits in the Transcripts of the notebook's own folder", () => {
+    expect(folderNotebookSidecarPath("School/Bio/Bio.notebook.md")).toBe(
+      "School/Bio/Transcripts/Bio.transcript.md",
+    );
+    expect(folderNotebookSidecarPath("Q/Q.page.md")).toBe("Q/Transcripts/Q.transcript.md");
+  });
+
+  it("is null for a note without a folder of its own", () => {
+    expect(folderNotebookSidecarPath("School/Bio.notebook.md")).toBeNull();
+    expect(folderNotebookSidecarPath("Bio/_notebook.md")).toBeNull();
+    expect(folderNotebookSidecarPath("notes/plain.md")).toBeNull();
+  });
+});
+
 describe("pageFromSubpath", () => {
   it("reads the forms a link may use", () => {
     expect(pageFromSubpath("#Page 3", 5)).toBe(2);
@@ -175,6 +261,23 @@ describe("pageFromSubpath", () => {
     expect(pageFromSubpath("#Page 6", 5)).toBeNull();
     expect(pageFromSubpath("#Page 0", 5)).toBeNull();
     expect(pageFromSubpath("", 5)).toBeNull();
+  });
+});
+
+describe("pageInThisNotebook", () => {
+  const here = (path: string) => path === "Lectures.notebook";
+
+  it("reads a link inside the same note, and one naming this notebook", () => {
+    expect(pageInThisNotebook("#page=3", 5, here)).toBe(2);
+    expect(pageInThisNotebook("Lectures.notebook#page=3", 5, here)).toBe(2);
+    expect(pageInThisNotebook("Lectures.notebook#Page 1", 5, here)).toBe(0);
+  });
+
+  it("leaves links elsewhere, without a page, or past the end to open as usual", () => {
+    expect(pageInThisNotebook("Other#page=3", 5, here)).toBeNull();
+    expect(pageInThisNotebook("Lectures.notebook", 5, here)).toBeNull();
+    expect(pageInThisNotebook("#Introduction", 5, here)).toBeNull();
+    expect(pageInThisNotebook("#page=9", 5, here)).toBeNull();
   });
 });
 

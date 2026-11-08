@@ -376,6 +376,7 @@ export function duplicatePageAfter(
   let strokeSeq = maxNumericId(doc, (page) => page.strokes, "s");
   let textSeq = maxNumericId(doc, (page) => page.textBoxes, "t");
   let imageSeq = maxNumericId(doc, (page) => page.images, "i");
+  let equationSeq = maxNumericId(doc, (page) => page.equations ?? [], "q");
   const copy = structuredClone(source);
   copy.id = nextPageId(doc);
   // A bookmark marks that page, not its content: the copy starts without one.
@@ -385,6 +386,7 @@ export function duplicatePageAfter(
   for (const stroke of copy.strokes) stroke.id = `s${++strokeSeq}`;
   for (const textBox of copy.textBoxes) textBox.id = `t${++textSeq}`;
   for (const image of copy.images) image.id = `i${++imageSeq}`;
+  for (const equation of copy.equations ?? []) equation.id = `q${++equationSeq}`;
   return { index: index + 1, page: copy };
 }
 
