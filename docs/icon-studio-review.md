@@ -22,7 +22,7 @@ All three use one 24×24 grid, a 1.6-unit neutral outline, rounded joins and cap
 
 Open **FineNotes settings → Support and diagnostics → FineNotes Icon Studio → Review icons…**, or command palette **FineNotes: Review proposed icons side by side…** on a build of this branch.
 
-For each of the **three** proposed replacements, the gallery shows **Current** and **New** side by side, at native toolbar size. **Approve**, **Reject** and **Clear decision** persist review choices per icon. Test pen ink colors blue, red, green, yellow, black, and white. Switch theme previews between Obsidian, Light, and Dark. **Copy decisions** exports the three choices as a JSON list; it does not include vault content.
+For each of the **three** proposed replacements, the gallery shows **Current** and **New** side by side, at native toolbar size. **Approve**, **Reject** and **Clear decision** persist review choices per icon. Test pen ink colors blue, red, green, yellow, black, and white. Switch theme previews between Obsidian, Light, and Dark. **Save feedback** writes the three choices and comments to `icon-studio-feedback.json` in the FineNotes plugin folder. Reopening the gallery restores saved comments. **Copy feedback** copies the current choices and comments.
 
 ## Rollout and verification gates
 

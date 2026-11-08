@@ -7840,6 +7840,18 @@ img.finenotes-live-embed-image:hover {
   min-height: 20px;
 }
 .finenotes-icon-review-clear.is-hidden { visibility: hidden; }
+.finenotes-icon-review-feedback {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.finenotes-icon-review-feedback textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+  resize: vertical;
+}
 .finenotes-icon-review-footer {
   padding: 16px 4px 8px;
   line-height: 1.45;

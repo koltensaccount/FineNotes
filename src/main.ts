@@ -416,6 +416,8 @@ export default class GoodObsidianPlugin extends Plugin {
 
   /** Opens the non-destructive candidate gallery; approvals only store feedback. */
   openIconReview(): void {
+    const pluginDir = this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+    const feedbackPath = normalizePath(`${pluginDir}/icon-studio-feedback.json`);
     new IconReviewModal(this.app, {
       decisions: () => this.settings.iconReviewDecisions ?? {},
       currentPen: () => ({ type: this.settings.penType ?? "fountain", width: this.settings.defaultSize }),
@@ -426,7 +428,7 @@ export default class GoodObsidianPlugin extends Plugin {
         this.settings.iconReviewDecisions = next;
         await this.saveSettings();
       },
-    }).open();
+    }, feedbackPath).open();
   }
 
   private showChangelog(markdown: string): void {

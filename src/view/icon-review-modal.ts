@@ -35,15 +35,55 @@ export class IconReviewModal extends Modal {
   private inkColor: string = INK_CHOICES[0].value;
   private previewTheme: "auto" | "light" | "dark" = "auto";
   private countEl: HTMLElement | null = null;
+  private readonly comments = new Map<string, string>();
+  private feedbackReadable = true;
 
-  constructor(app: App, private readonly host: IconReviewHost) {
+  constructor(
+    app: App,
+    private readonly host: IconReviewHost,
+    private readonly feedbackPath: string,
+  ) {
     super(app);
   }
 
   override onOpen(): void {
     this.modalEl.addClass("finenotes-icon-review-modal");
     this.titleEl.setText("FineNotes Icon Studio — Concept #2");
-    this.render();
+    this.contentEl.setText("Loading icon feedback…");
+    void this.loadFeedback();
+  }
+
+  private async loadFeedback(): Promise<void> {
+    try {
+      const adapter = this.app.vault.adapter;
+      if (await adapter.exists(this.feedbackPath)) {
+        const entries: unknown = JSON.parse(await adapter.read(this.feedbackPath));
+        if (!Array.isArray(entries)) throw new Error("Expected a feedback list");
+        for (const entry of entries as unknown[]) {
+          if (
+            entry && typeof entry === "object" &&
+            "id" in entry && typeof entry.id === "string" &&
+            "comment" in entry && typeof entry.comment === "string"
+          ) {
+            this.comments.set(entry.id, entry.comment);
+          }
+        }
+      }
+    } catch {
+      this.feedbackReadable = false;
+      new Notice("FineNotes: saved icon feedback could not be read. You can still copy new feedback.");
+    }
+    if (this.contentEl.isConnected) this.render();
+  }
+
+  private feedbackJson(): string {
+    const decisions = this.host.decisions();
+    return JSON.stringify(ICON_FAMILY_CANDIDATES.map(({ id, title }) => ({
+      id,
+      title,
+      decision: decisions[id] ?? "undecided",
+      comment: this.comments.get(id) ?? "",
+    })), null, 2);
   }
 
   override onClose(): void {
@@ -63,7 +103,7 @@ export class IconReviewModal extends Modal {
       text:
         "Three redesigned writing tools based on the second mockup. Compare the actual old glyph " +
         "with its new 24 px vector, then approve or reject. The other FineNotes icons stay unchanged. " +
-        "These are fresh decisions; old approvals from the rejected 28-icon experiment do not carry over.",
+        "Add comments under each icon, then choose Save feedback to keep your comments and decisions.",
     });
 
     const controls = root.createDiv({ cls: "finenotes-icon-review-controls" });
@@ -106,21 +146,30 @@ export class IconReviewModal extends Modal {
 
     const copy = controls.createEl("button", {
       cls: "finenotes-icon-review-copy",
-      text: "Copy decisions",
+      text: "Copy feedback",
       attr: { type: "button" },
     });
     copy.addEventListener("click", () => {
-      const saved = this.host.decisions();
-      const summary = ICON_FAMILY_CANDIDATES.map(({ id, title }) => ({
-        id, title, decision: saved[id] ?? "undecided",
-      }));
       if (!navigator.clipboard?.writeText) {
         new Notice("FineNotes: clipboard unavailable on this device.");
         return;
       }
-      void navigator.clipboard.writeText(JSON.stringify(summary, null, 2))
-        .then(() => new Notice("FineNotes icon decisions copied."))
+      void navigator.clipboard.writeText(this.feedbackJson())
+        .then(() => new Notice("FineNotes icon feedback copied."))
         .catch(() => new Notice("FineNotes: clipboard unavailable on this device."));
+    });
+
+    const save = controls.createEl("button", {
+      text: "Save feedback",
+      attr: { type: "button", title: "Save decisions and comments in the local FineNotes plugin folder" },
+    });
+    save.disabled = !this.feedbackReadable;
+    save.addEventListener("click", () => {
+      save.disabled = true;
+      void this.app.vault.adapter.write(this.feedbackPath, this.feedbackJson())
+        .then(() => new Notice("FineNotes icon feedback saved."))
+        .catch(() => new Notice("FineNotes: could not save icon feedback."))
+        .finally(() => { save.disabled = false; });
     });
 
     for (const groupName of GROUPS) {
@@ -208,6 +257,14 @@ export class IconReviewModal extends Modal {
         approve.disabled = reject.disabled = clear.disabled = false;
       }
     };
+    const feedback = card.createDiv({ cls: "finenotes-icon-review-feedback" });
+    const label = feedback.createEl("label", { text: `Comment on ${candidate.title}` });
+    const comment = label.createEl("textarea", {
+      attr: { rows: "2", placeholder: "What works, or what should change?" },
+    });
+    comment.value = this.comments.get(candidate.id) ?? "";
+    comment.addEventListener("input", () => this.comments.set(candidate.id, comment.value));
+
     approve.addEventListener("click", () => void commit("approved"));
     reject.addEventListener("click", () => void commit("rejected"));
     clear.addEventListener("click", () => void commit(null));
