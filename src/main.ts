@@ -418,6 +418,7 @@ export default class GoodObsidianPlugin extends Plugin {
   openIconReview(): void {
     new IconReviewModal(this.app, {
       decisions: () => this.settings.iconReviewDecisions ?? {},
+      currentPen: () => ({ type: this.settings.penType ?? "fountain", width: this.settings.defaultSize }),
       saveDecision: async (id, value) => {
         const next = { ...(this.settings.iconReviewDecisions ?? {}) };
         if (value === null) delete next[id];
