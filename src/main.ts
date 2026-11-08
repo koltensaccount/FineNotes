@@ -1,4 +1,6 @@
 import { registerHandwriteHere } from "./view/handwrite-here";
+import { registerIconFamilyCandidates } from "./view/icon-family";
+import { IconReviewModal } from "./view/icon-review-modal";
 import { PdfImportModal } from "./view/pdf-import-modal";
 import { FineNotesEmbedManager } from "./view/embed-renderer";
 import { renderPdfSlides } from "./view/pdf-slides";
@@ -176,6 +178,7 @@ export default class GoodObsidianPlugin extends Plugin {
     this.providers.set(cloud.id, cloud);
 
     await this.loadSettings();
+    registerIconFamilyCandidates();
     await this.setUpKeyStore();
     this.companionPdfs.load(this.settings.companionPdfs);
     await this.companionPdfs.recoverAll();
@@ -294,6 +297,12 @@ export default class GoodObsidianPlugin extends Plugin {
    * so an id never changes once shipped, even where its name has.
    */
   private addCommands(): void {
+    this.addCommand({
+      id: "review-finenotes-icon-candidates",
+      name: "Review proposed icons side by side…",
+      callback: () => this.openIconReview(),
+    });
+
     // The id predates the dialog; kept so existing hotkeys still work.
     this.addCommand({
       id: "create-handwriting-note",
@@ -403,6 +412,20 @@ export default class GoodObsidianPlugin extends Plugin {
         return true;
       },
     });
+  }
+
+  /** Opens the non-destructive candidate gallery; approvals only store feedback. */
+  openIconReview(): void {
+    new IconReviewModal(this.app, {
+      decisions: () => this.settings.iconReviewDecisions ?? {},
+      saveDecision: async (id, value) => {
+        const next = { ...(this.settings.iconReviewDecisions ?? {}) };
+        if (value === null) delete next[id];
+        else next[id] = value;
+        this.settings.iconReviewDecisions = next;
+        await this.saveSettings();
+      },
+    }).open();
   }
 
   private showChangelog(markdown: string): void {
