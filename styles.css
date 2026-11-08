@@ -7784,12 +7784,6 @@ img.finenotes-live-embed-image:hover {
   height: 25px;
   stroke-width: 1.8px;
 }
-.finenotes-icon-review-svg svg .fnv2-ink {
-  fill: var(--fn-review-ink);
-  stroke: currentColor;
-  stroke-width: .75px;
-  paint-order: stroke fill;
-}
 .finenotes-icon-review-actions {
   display: flex;
   flex-direction: column;

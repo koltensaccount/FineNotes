@@ -33,12 +33,12 @@ describe("FineNotes Concept #2 icon review", () => {
   });
 
   it("limits selected ink to the two instrument tips, never the eraser body", () => {
-    expect(ICON_FAMILY_CANDIDATES[0].svg).toContain("fnv2-ink");
-    expect(ICON_FAMILY_CANDIDATES[1].svg).toContain("fnv2-ink");
+    for (const candidate of ICON_FAMILY_CANDIDATES.slice(0, 2)) {
+      expect(candidate.svg).toMatch(/class="fnv2-ink"[^>]+stroke="none"/);
+    }
     expect(ICON_FAMILY_CANDIDATES[2].svg).not.toContain("fnv2-ink");
     for (const candidate of ICON_FAMILY_CANDIDATES) {
       expect(candidate.svg).not.toMatch(/stroke-width="(?:3|4|5)"/);
-      expect(candidate.svg).not.toContain("transform=");
       expect(candidate.svg).not.toContain("<text");
     }
   });
@@ -50,7 +50,7 @@ describe("FineNotes Concept #2 icon review", () => {
     for (const [name, markup] of vi.mocked(addIcon).mock.calls) {
       expect(name).toMatch(/^finenotes-concept2-/);
       expect(markup).toContain('stroke-width="1.6"');
-      expect(markup).toContain("<g ");
+      expect(markup).toContain('<g transform="rotate(45 12 12)">');
       expect(markup).toContain("</g>");
     }
     expect(candidateIconName(expectedIds[0])).toBe("finenotes-concept2-pen-concept2");
