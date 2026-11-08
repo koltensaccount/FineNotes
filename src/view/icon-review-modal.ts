@@ -165,6 +165,9 @@ export class IconReviewModal extends Modal {
     const nextIcon = proposedStage.createSpan({ cls: "finenotes-icon-review-svg" });
     try {
       setIcon(nextIcon, candidateIconName(candidate.id));
+      // Obsidian's addIcon wrapper may not use Lucide's 24-unit box by default.
+      // Match the existing fork's rectangular-lasso fix for all custom candidates.
+      nextIcon.querySelector("svg")?.setAttribute("viewBox", "0 0 24 24");
     } catch {
       nextIcon.setText("?");
     }
@@ -248,6 +251,9 @@ export class IconReviewModal extends Modal {
     }
     try {
       setIcon(slot, candidate.original);
+      if (candidate.original === "finenotes-rectangular-lasso") {
+        slot.querySelector("svg")?.setAttribute("viewBox", "0 0 24 24");
+      }
     } catch {
       slot.setText("?");
     }
