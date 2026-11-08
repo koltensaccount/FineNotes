@@ -218,6 +218,12 @@ export class IconReviewModal extends Modal {
   private renderOriginal(stage: HTMLElement, candidate: IconFamilyCandidate): void {
     const slot = stage.createSpan({ cls: "finenotes-icon-review-svg" });
     const doc = stage.ownerDocument;
+    if (candidate.original === "fn-original-none") {
+      slot.setText("—");
+      slot.setAttribute("aria-label", "No existing dedicated icon");
+      stage.setAttribute("title", "No dedicated icon exists in the current interface");
+      return;
+    }
     if (candidate.original.startsWith("fn-original-")) {
       const current = this.host.currentPen();
       const type = candidate.original === "fn-original-pen"
