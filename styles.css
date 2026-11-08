@@ -7645,64 +7645,6 @@ img.finenotes-live-embed-image:hover {
   }
 }
 
-/* Inline Handwrite Here editing inside Markdown */
-.finenotes-inline-active {
-  position: relative;
-  border: 1px solid var(--interactive-accent) !important;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  background: var(--background-primary);
-}
-.finenotes-inline-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: var(--background-secondary);
-  border-bottom: 1px solid var(--background-modifier-border);
-  z-index: 10;
-  position: sticky;
-  top: 0;
-}
-.finenotes-inline-tool-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-normal);
-  cursor: pointer;
-  font-size: var(--font-ui-smaller);
-}
-.finenotes-inline-tool-button:hover {
-  background: var(--background-modifier-hover);
-}
-.finenotes-inline-tool-button.is-active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-}
-.finenotes-inline-toolbar-sep {
-  width: 1px;
-  height: 18px;
-  background: var(--background-modifier-border);
-  margin: 0 2px;
-}
-.finenotes-inline-done {
-  margin-left: auto;
-  font-weight: 600;
-  color: var(--interactive-accent);
-}
-.finenotes-inline-surface-host {
-  min-height: 240px;
-  position: relative;
-}
-
-
-
 /* ------------------------------------------------------- Floating Window & Equation Editor */
 
 .goodobsidian-graph-window,

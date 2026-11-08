@@ -134,9 +134,6 @@ describe("an equation on a page", () => {
       false,
       undefined,
       { x: 200, y: 200, angle: 0.5 },
-      [],
-      [],
-      true,
       e,
     );
     expect(log.lines.some((l) => l.startsWith("wet fillText"))).toBe(true);

@@ -479,6 +479,7 @@ function normalizeTextBox(raw: unknown, mintId: () => string): TextBoxElement | 
       : {}),
     ...(raw.fit === true ? { fit: true as const } : {}),
     text: raw.text,
+    ...(typeof raw.onShape === "string" && raw.onShape ? { onShape: raw.onShape } : {}),
     color: str(raw.color, DEFAULT_INK),
     fontSize: Math.max(12, num(raw.fontSize, 22)),
     ...normalizeTextStyle(raw),

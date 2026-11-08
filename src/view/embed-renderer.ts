@@ -1,6 +1,7 @@
+import { equationBounds } from "../model/equation";
+import { paintEquation } from "../canvas/equation-paint";
 import { relinkDocument } from "../model/moved-files";
 import { renderClipPng } from "./clip-png";
-import { startInlineHandwriteSession } from "./inline-handwrite";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkView } from "./ink-view";
 import { PdfBackdropCache } from "./pdf-backdrop";
@@ -119,7 +120,7 @@ export class FineNotesEmbedManager {
   }
 
   constructor(
-    readonly plugin: GoodObsidianPlugin,
+    private readonly plugin: GoodObsidianPlugin,
     private readonly app: App,
   ) {
     this.pdfCache = new PdfBackdropCache(app);
@@ -819,9 +820,6 @@ export class FineNotesEmbedView {
   private canvas: HTMLCanvasElement | null = null;
   private containerEl: HTMLElement | null = null;
   private isDestroyed = false;
-  private resolvedPageIndex = 0;
-  private resolvedCropBounds: Bounds | null = null;
-  private resolvedClip: NotebookClip | null = null;
 
   constructor(
     private readonly manager: FineNotesEmbedManager,
@@ -853,43 +851,23 @@ export class FineNotesEmbedView {
       },
     });
 
-    // Clicking anywhere on the embed activates inline editing; Alt/Meta-click opens full notebook
+    // Clicking anywhere on the embed navigates directly to the source notebook & region
     this.containerEl.addEventListener("click", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
-      if (evt.altKey || evt.metaKey || evt.ctrlKey) {
-        const linkText = `${this.file.path}${this.subpath}`;
-        void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
-        return;
-      }
-      this.activateInlineEditing();
+      const linkText = `${this.file.path}${this.subpath}`;
+      void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
     });
 
     this.containerEl.addEventListener("keydown", (evt) => {
       if (evt.key === "Enter" || evt.key === " ") {
         evt.preventDefault();
-        this.activateInlineEditing();
+        const linkText = `${this.file.path}${this.subpath}`;
+        void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
       }
     });
 
     await this.paintContent();
-  }
-
-  private activateInlineEditing(): void {
-    if (this.isDestroyed || !this.containerEl) return;
-    startInlineHandwriteSession({
-      plugin: this.manager.plugin,
-      app: this.app,
-      containerEl: this.containerEl,
-      notebookFile: this.file,
-      pageIndex: this.resolvedPageIndex,
-      clip: this.resolvedClip,
-      cropBounds: this.resolvedCropBounds ?? { minX: 0, minY: 0, maxX: 800, maxY: 360 },
-      sourcePath: this.sourcePath,
-      onClosed: () => {
-        void this.paintContent();
-      },
-    });
   }
 
   async refresh(): Promise<void> {
@@ -972,10 +950,6 @@ export class FineNotesEmbedView {
       };
     }
 
-    this.resolvedPageIndex = pageIndex;
-    this.resolvedCropBounds = cropBounds;
-    this.resolvedClip = clip;
-
     const cropW = Math.max(1, cropBounds.maxX - cropBounds.minX);
     const cropH = Math.max(1, cropBounds.maxY - cropBounds.minY);
 
@@ -1056,6 +1030,10 @@ export class FineNotesEmbedView {
           drawPlacedCircuit(ctx, circuit);
         }
       }
+    }
+
+    for (const equation of page.equations ?? []) {
+      if (boundsIntersect(equationBounds(equation), cropBounds)) paintEquation(ctx, equation);
     }
 
     // 4. Text boxes

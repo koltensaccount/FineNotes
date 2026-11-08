@@ -337,14 +337,17 @@ export function copyElements(
 ): ElementLists {
   let circuitCounter = 1;
   let equationCounter = 1;
+  const strokeIds = new Map<string, string>();
+  const strokes = elements.strokes.map((stroke) => {
+    const copy = structuredClone(stroke);
+    copy.id = ids.stroke();
+    strokeIds.set(stroke.id, copy.id);
+    copy.pts = translatePoints(stroke.pts, dx, dy);
+    delete copy.t0;
+    return copy;
+  });
   return {
-    strokes: elements.strokes.map((stroke) => {
-      const copy = structuredClone(stroke);
-      copy.id = ids.stroke();
-      copy.pts = translatePoints(stroke.pts, dx, dy);
-      delete copy.t0;
-      return copy;
-    }),
+    strokes,
     images: elements.images.map((image) => {
       const copy = structuredClone(image);
       copy.id = ids.image();
@@ -355,6 +358,11 @@ export function copyElements(
     textBoxes: elements.textBoxes.map((textBox) => {
       const copy = structuredClone(textBox);
       copy.id = ids.textBox();
+      if (copy.onShape) {
+        const copiedShapeId = strokeIds.get(copy.onShape);
+        if (copiedShapeId) copy.onShape = copiedShapeId;
+        else delete copy.onShape;
+      }
       copy.x += dx;
       copy.y += dy;
       return copy;

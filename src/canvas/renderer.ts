@@ -1154,9 +1154,6 @@ export class Renderer {
     usePressure: boolean,
     circuits?: readonly CircuitElement[],
     turn?: { x: number; y: number; angle: number },
-    _tables?: unknown,
-    _graphs?: unknown,
-    _night?: boolean,
     equations?: readonly EquationElement[],
   ): void {
     const box = this.layout.boxes[pageIndex];

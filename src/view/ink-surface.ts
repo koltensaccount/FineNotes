@@ -217,7 +217,7 @@ import {
 import { CircuitModal } from "./circuit-modal";
 import { insideShape, takesLabel, labelArea, labelOf } from "../model/shape-label";
 import { DUPLICATE_OFFSET, duplicateImage, nextImageId } from "../model/images";
-import { RecolorEquations } from "../model/equation";
+import { nextEquationId, RecolorEquations } from "../model/equation";
 import {
   AddElements,
   type ElementLists,
@@ -710,6 +710,7 @@ interface PressMenu {
 
 const NO_IMAGES: ReadonlySet<ImageElement> = new Set();
 const NO_STROKES: ReadonlySet<string> = new Set();
+const NO_EQUATIONS: ReadonlySet<EquationElement> = new Set();
 const NO_CIRCUITS: ReadonlySet<CircuitElement> = new Set();
 
 /** A lasso selection: strokes, images and text boxes on one page, held by identity. */
@@ -5267,7 +5268,7 @@ export class InkSurface {
     if (!sel || !bounds || loop.length < 6) return;
     this.selectionOutline = {
       loop: loop.map((v, i) => v - (i % 2 === 0 ? bounds.minX : bounds.minY)),
-      count: sel.strokes.length + sel.images.length + sel.textBoxes.length + (sel.circuits?.length ?? 0),
+      count: sel.strokes.length + sel.images.length + sel.textBoxes.length + (sel.circuits?.length ?? 0) + (sel.equations?.length ?? 0),
     };
     this.syncSelectionOverlay();
   }
@@ -5291,6 +5292,11 @@ export class InkSurface {
       textBoxes: filter.textBoxes
         ? page.textBoxes.filter((textBox) =>
             (overlap ? boxOverlapsLasso(this.textBoxFrameOf(page.id, textBox), poly) : boxInLasso(this.textBoxFrameOf(page.id, textBox), poly)),
+          )
+        : [],
+      equations: filter.textBoxes
+        ? (page.equations ?? []).filter((equation) =>
+            overlap ? boxOverlapsLasso(equation, poly) : boxInLasso(equation, poly),
           )
         : [],
       circuits: filter.images
@@ -5457,12 +5463,12 @@ export class InkSurface {
   private select(pageId: string, elements: ElementLists): void {
     this.clearSelection();
     this.deselectImage();
-    const { strokes, textBoxes } = elements;
+    const { strokes, textBoxes, equations = [] } = elements;
     const images = elements.images.filter((image) => image.locked !== true);
     const circuits = (elements.circuits ?? []).filter((circuit) => circuit.locked !== true);
-    if (isEmptySelection({ strokes, images, textBoxes, circuits })) return;
+    if (isEmptySelection({ strokes, images, textBoxes, circuits, equations })) return;
     if (this.toolState.tool === "select") this.selectionToolUsed = true;
-    if (strokes.length === 0 && textBoxes.length === 0 && circuits.length === 0 && images.length === 1) {
+    if (strokes.length === 0 && textBoxes.length === 0 && circuits.length === 0 && equations.length === 0 && images.length === 1) {
       this.setImageSelection(pageId, images[0]);
       return;
     }
@@ -5478,6 +5484,7 @@ export class InkSurface {
       images: [...images],
       textBoxes: [...textBoxes],
       circuits: [...circuits],
+      equations: [...equations],
     };
     const shape = this.editableShape(this.selection);
     if (shape && !independentlyResizable(shape.shape!) && !["line", "arrow", "circle"].includes(shape.shape!)) this.shapeMode = "scale";
@@ -5544,7 +5551,7 @@ export class InkSurface {
     return selectionBounds(
       sel.strokes,
       [...sel.images, ...circuitsAsImages],
-      sel.textBoxes.map((textBox) => this.textBoxFrameOf(sel.pageId, textBox)),
+      [...sel.textBoxes.map((textBox) => this.textBoxFrameOf(sel.pageId, textBox)), ...(sel.equations ?? [])],
     );
   }
 
@@ -5569,11 +5576,11 @@ export class InkSurface {
 
   /** Put the selection's dashed frame where it is (or where a drag has it), and its bar. */
   private editableInk(sel: GroupSelection | null): boolean {
-    return !!sel && (sel.strokes?.length ?? 0) > 0 && !sel.images?.length && !sel.textBoxes?.length && !sel.circuits?.length;
+    return !!sel && (sel.strokes?.length ?? 0) > 0 && !sel.images?.length && !sel.textBoxes?.length && !sel.circuits?.length && !sel.equations?.length;
   }
   private singleCircuitIn(sel: GroupSelection | null): CircuitElement | null {
     if (!sel) return null;
-    if ((sel.circuits?.length ?? 0) === 1 && !sel.strokes?.length && !sel.images?.length && !sel.textBoxes?.length) {
+    if ((sel.circuits?.length ?? 0) === 1 && !sel.strokes?.length && !sel.images?.length && !sel.textBoxes?.length && !sel.equations?.length) {
       return sel.circuits![0];
     }
     return null;
@@ -5584,7 +5591,7 @@ export class InkSurface {
   }
 
   private editableShape(sel: GroupSelection | null): Stroke | null {
-    if (!sel || !sel.strokes || sel.strokes.length !== 1 || (sel.images && sel.images.length) || (sel.textBoxes && sel.textBoxes.length) || (sel.circuits && sel.circuits.length)) return null;
+    if (!sel || !sel.strokes || sel.strokes.length !== 1 || (sel.images && sel.images.length) || (sel.textBoxes && sel.textBoxes.length) || (sel.circuits && sel.circuits.length) || sel.equations?.length) return null;
     const stroke = sel.strokes[0];
     if (!stroke.shape || !shapeFrame(stroke.shape, stroke.pts)) return null;
     // Tables are ungrouped ink. Conservatively retain group behavior for connected
@@ -5676,7 +5683,7 @@ export class InkSurface {
       }
       // The loop that made the selection, while it is still those elements.
       const outline = this.selectionOutline;
-      const count = sel ? sel.strokes.length + sel.images.length + sel.textBoxes.length : 0;
+      const count = sel ? sel.strokes.length + sel.images.length + sel.textBoxes.length + (sel.circuits?.length ?? 0) + (sel.equations?.length ?? 0) : 0;
       const shown = !shape && !ink && outline !== null && outline.count === count;
       this.selectionFrameEl.toggleClass("has-outline", shown);
       if (shown) {
@@ -6106,6 +6113,7 @@ export class InkSurface {
       strokes: sel.strokes,
       images: sel.images.filter((image) => image.locked !== true),
       textBoxes: sel.textBoxes,
+      equations: sel.equations,
       circuits: (sel.circuits ?? []).filter((circuit) => circuit.locked !== true),
     };
     this.clearSelection();
@@ -6293,6 +6301,7 @@ export class InkSurface {
         strokes: group.strokes,
         images: group.images.filter((image) => image.locked !== true),
         textBoxes: group.textBoxes,
+        equations: group.equations,
         circuits: (group.circuits ?? []).filter((circuit) => circuit.locked !== true),
       };
       clipboard.put(elements, bounds);
@@ -6443,8 +6452,10 @@ export class InkSurface {
   /** Fresh ids for copies placed in this document. */
   private freshIds(): IdSource {
     let imageSeq = Number(nextImageId(this.doc).slice(1)) - 1;
+    let equationSeq = Number(nextEquationId(this.doc).slice(1)) - 1;
     return {
       stroke: () => this.strokeIds.next(),
+      equation: () => `q${++equationSeq}`,
       image: () => `i${++imageSeq}`,
       textBox: () => this.textBoxIds.next(),
     };
@@ -6860,14 +6871,14 @@ export class InkSurface {
     const hasStrokes = sel.strokes.length > 0 && !sel.strokes.every((stroke) => stroke.color === color);
     const hasEquations = !!sel.equations && sel.equations.length > 0 && !sel.equations.every((e) => e.color === color);
     if (!hasStrokes && !hasEquations) return;
-    if (hasStrokes) {
-      this.history.push(this.doc, new RecolorStrokes(sel.pageId, sel.strokes, color));
-    }
+    const commands: Command[] = [];
+    if (hasStrokes) commands.push(new RecolorStrokes(sel.pageId, sel.strokes, color));
     if (hasEquations && sel.equations) {
-      this.history.push(this.doc, new RecolorEquations(sel.pageId, sel.equations, color));
+      commands.push(new RecolorEquations(sel.pageId, sel.equations, color));
     }
+    this.history.push(this.doc, commands.length === 1 ? commands[0] : new CompositeCommand("Recolor selection", commands));
     const box = this.boxForPage(sel.pageId);
-    const bounds = selectionBounds(sel.strokes, [], []);
+    const bounds = selectionBounds(sel.strokes, [], sel.equations ?? []);
     // A colour is not part of a stroke's cached outline: re-rasterise.
     if (box && bounds) this.renderer?.invalidateRegion(box.index, bounds);
     this.renderDry();
@@ -6975,6 +6986,7 @@ export class InkSurface {
     this.renderer?.setHiddenStrokes(new Set(drag.selection.strokes.map((stroke) => stroke.id)));
     this.renderer?.setHiddenImages(new Set(drag.selection.images));
     this.renderer?.setHiddenCircuits?.(new Set(drag.selection.circuits ?? []));
+    if (drag.selection.equations?.length) this.renderer?.setHiddenEquations(new Set(drag.selection.equations));
     this.renderer?.invalidateRegion(box.index, drag.bounds);
     this.renderDry();
   }
@@ -6988,25 +7000,13 @@ export class InkSurface {
     const circuitsToDraw = drag.circuit
       ? [{ ...drag.circuit.circuit, ...drag.circuit.draft }]
       : drag.selection.circuits;
-    if (circuitsToDraw && circuitsToDraw.length > 0) {
-      this.renderer?.renderSelectionDraft(
-        box.index,
-        strokes,
-        images,
-        drag.dx,
-        drag.dy,
-        this.toolState.pressureEnabled,
-        circuitsToDraw,
-      );
+    const args = [box.index, strokes, images, drag.dx, drag.dy, this.toolState.pressureEnabled] as const;
+    if (drag.selection.equations?.length) {
+      this.renderer?.renderSelectionDraft(...args, circuitsToDraw, undefined, drag.selection.equations);
+    } else if (circuitsToDraw?.length) {
+      this.renderer?.renderSelectionDraft(...args, circuitsToDraw);
     } else {
-      this.renderer?.renderSelectionDraft(
-        box.index,
-        strokes,
-        images,
-        drag.dx,
-        drag.dy,
-        this.toolState.pressureEnabled,
-      );
+      this.renderer?.renderSelectionDraft(...args);
     }
   }
 
@@ -7044,6 +7044,7 @@ export class InkSurface {
         this.renderer?.setHiddenStrokes(NO_STROKES);
         this.renderer?.setHiddenImages(NO_IMAGES);
         this.renderer?.setHiddenCircuits?.(NO_CIRCUITS);
+        if (drag.selection.equations?.length) this.renderer?.setHiddenEquations(NO_EQUATIONS);
         this.renderer?.clearWet();
         const box = this.boxForPage(drag.selection.pageId);
         if (box) this.renderer?.invalidateRegion(box.index, drag.bounds);
@@ -7059,6 +7060,7 @@ export class InkSurface {
     this.renderer?.setHiddenStrokes(NO_STROKES);
     this.renderer?.setHiddenImages(NO_IMAGES);
     this.renderer?.setHiddenCircuits?.(NO_CIRCUITS);
+    if (drag.selection.equations?.length) this.renderer?.setHiddenEquations(NO_EQUATIONS);
     this.renderer?.clearWet();
     const { pageId } = drag.selection;
     const box = this.boxForPage(pageId);

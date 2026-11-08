@@ -372,7 +372,7 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
       toggle(
         "useManagedStorage",
         "Use managed FineNotes storage",
-        "Store Handwrite Here backing notebooks, generated embeds, media, and exports in a centralized FineNotes vault folder.",
+        "Store newly created Handwrite Here backing notebooks and region previews in a shared vault folder.",
         ["storage", "managed", "attachments", "handwriting", "embeds"],
       ),
       drawnRow(

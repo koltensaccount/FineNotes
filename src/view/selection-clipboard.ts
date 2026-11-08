@@ -1,3 +1,4 @@
+import { paintEquation } from "../canvas/equation-paint";
 /**
  * Selection clipboard rendering and system clipboard integration.
  *
@@ -116,6 +117,10 @@ export async function renderSelectionToPng(
 
     for (const circuit of elements.circuits ?? []) {
       drawPlacedCircuit(ctx, circuit);
+    }
+
+    for (const equation of elements.equations ?? []) {
+      paintEquation(ctx, equation);
     }
 
     const pressure = options.pressure !== false;
