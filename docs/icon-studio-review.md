@@ -2,7 +2,7 @@
 
 ## Current design target
 
-The second mockup (“Lecture Notes”) guides the writing tools. The writing tools and notebook/page batches were approved in chat. The next review group covers PDF import, scanning, and single-page conversion.
+The second mockup (“Lecture Notes”) guides the writing tools. The first nine icons were approved in chat. The final batch covers Handwrite Here and Update companion PDF.
 
 ### Candidate behavior
 
@@ -17,6 +17,8 @@ The second mockup (“Lecture Notes”) guides the writing tools. The writing to
 | Import PDF | Obsidian `file-text` | Folded sheet with an inward arrow |
 | Scan document | Obsidian `scan-line` | Sheet framed by camera guides |
 | Convert to notebook | Obsidian `book-open` | Open notebook with a turning page |
+| Handwrite Here | No dedicated icon | Tilted pen between text lines |
+| Update companion PDF | Text-only button | Folded sheet with a refresh arrow |
 
 All batches use one 24×24 grid, a 1.6-unit neutral outline, rounded joins and caps, and minimal detail. Test at displayed tool size, not just enlarged.
 

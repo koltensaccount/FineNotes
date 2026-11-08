@@ -7,7 +7,7 @@ import { addIcon } from "obsidian";
 import { ICON_NEW_NOTEBOOK } from "../constants";
 
 export type IconReviewDecision = "approved" | "rejected";
-export type IconFamilyGroup = "Writing tools" | "Notebook and pages" | "Import and convert";
+export type IconFamilyGroup = "Writing tools" | "Notebook and pages" | "Import and convert" | "Handwriting and PDF updates";
 
 export interface IconFamilyCandidate {
   readonly id: string;
@@ -136,6 +136,29 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
       <path d="M12 7.5C9.5 5.5 6.5 5.5 3.5 6.5V18.5C6.5 17.5 9.5 17.5 12 19.5C14.5 17.5 17.5 17.5 20.5 18.5V7.5"/>
       ${seam("M12 7.5V19.5")}
       <path d="M12 7.5C13.5 5.5 15.25 4.5 17.25 4.25Q17.75 4.2 17.75 4.75V12.75Q17.75 13.25 17.25 13.35C15.25 13.65 13.5 14.6 12 16.5"/>
+    `,
+  },
+  {
+    id: "handwrite-here-concept2",
+    title: "Handwrite Here",
+    category: "Handwriting and PDF updates",
+    original: "fn-original-none",
+    usage: "Markdown command — a tilted pen writing between two text lines.",
+    svg: `
+      <path d="M4 5.5H10M4 19H20"/>
+      <path d="M8 15.5L8.9 12.2L15.4 5.7A1.7 1.7 0 0 1 17.8 8.1L11.3 14.6Z"/>
+    `,
+  },
+  {
+    id: "update-companion-pdf-concept2",
+    title: "Update companion PDF",
+    category: "Handwriting and PDF updates",
+    original: "fn-original-none",
+    usage: "Notebook settings and command palette — a folded sheet with a refresh arrow.",
+    svg: `
+      <path d="M7 3.5H15L19 7.5V18.5A2 2 0 0 1 17 20.5H7A2 2 0 0 1 5 18.5V5.5A2 2 0 0 1 7 3.5Z"/>
+      ${seam("M15 3.5V7.5H19")}
+      <path d="M15.25 13A3.5 3.5 0 1 0 15.05 15.75M15.25 10.5V13H12.75"/>
     `,
   },
 ];

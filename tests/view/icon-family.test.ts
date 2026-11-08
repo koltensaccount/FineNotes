@@ -18,16 +18,19 @@ const expectedIds = [
   "import-pdf-concept2",
   "scan-document-concept2",
   "convert-notebook-concept2",
+  "handwrite-here-concept2",
+  "update-companion-pdf-concept2",
 ];
 
 describe("FineNotes Concept #2 icon review", () => {
-  it("keeps the three review batches separate", () => {
+  it("keeps the review batches separate", () => {
     expect(ICON_FAMILY_CANDIDATES.map((candidate) => candidate.id)).toEqual(expectedIds);
     expect(new Set(expectedIds).size).toBe(ICON_FAMILY_CANDIDATES.length);
     expect(ICON_FAMILY_CANDIDATES.map(({ category }) => category)).toEqual([
       ...Array(3).fill("Writing tools"),
       ...Array(3).fill("Notebook and pages"),
       ...Array(3).fill("Import and convert"),
+      ...Array(2).fill("Handwriting and PDF updates"),
     ]);
     for (const candidate of ICON_FAMILY_CANDIDATES) {
       expect(candidate.title).toBeTruthy();
@@ -37,12 +40,13 @@ describe("FineNotes Concept #2 icon review", () => {
     }
   });
 
-  it("keeps the real original stroke or Obsidian icon in each comparison", () => {
+  it("uses the current glyph where the action has one", () => {
     const current = ICON_FAMILY_CANDIDATES.map(x => x.original);
     expect(current).toEqual([
       "fn-original-pen", "fn-original-highlighter", "eraser",
       "notebook-pen", "panel-left", "plus",
       "file-text", "scan-line", "book-open",
+      "fn-original-none", "fn-original-none",
     ]);
   });
 

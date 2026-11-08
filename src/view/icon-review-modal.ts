@@ -20,7 +20,12 @@ export interface IconReviewHost {
   saveDecision: (id: string, value: IconReviewDecision | null) => Promise<void>;
 }
 
-const GROUPS: readonly IconFamilyGroup[] = ["Import and convert", "Notebook and pages", "Writing tools"];
+const GROUPS: readonly IconFamilyGroup[] = [
+  "Handwriting and PDF updates",
+  "Import and convert",
+  "Notebook and pages",
+  "Writing tools",
+];
 
 const INK_CHOICES = [
   { value: "#4184df", label: "Blue" },
@@ -101,7 +106,7 @@ export class IconReviewModal extends Modal {
     root.createDiv({
       cls: "finenotes-icon-review-intro",
       text:
-        "Next batch: import and convert icons. Compare Current and New, then approve or reject each icon. " +
+        "Final batch: Handwrite Here and Update companion PDF. Compare Current and New, then approve or reject each icon. " +
         "Add comments under each icon, then choose Save feedback to keep your comments and decisions.",
     });
 
