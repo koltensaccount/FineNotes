@@ -7383,6 +7383,8 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   box-sizing: border-box;
   width: var(--gob-adjustment-thumb);
   height: var(--gob-adjustment-thumb);
+  /* The native theme also offsets its thumb. This track centers its own. */
+  top: 0;
   margin-top: calc((var(--gob-adjustment-track) - var(--gob-adjustment-thumb)) / 2);
   border: 2px solid var(--interactive-accent);
   border-radius: 50%;
