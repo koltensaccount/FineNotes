@@ -15,6 +15,8 @@ export interface InputSample {
   y: number;
   /** The pointer's pressure, 0..1. A 0 means the device gave no reading. */
   pressure: number;
+  /** Event time in milliseconds, when supplied by the input adapter. */
+  timeStamp?: number;
 }
 
 /**
@@ -32,6 +34,7 @@ export interface StrokeBuilderOptions {
   pressureEnabled: boolean;
   pressureSensitivity?: number;
   stabilization?: number;
+  timeBasedStabilization?: boolean;
   /** The pressure stored when there is no reading to go by. */
   fallbackPressure: number;
   /**
@@ -217,20 +220,28 @@ export class StrokeBuilder {
     return readings.length % 2 === 1 ? readings[mid] : (readings[mid - 1] + readings[mid]) / 2;
   }
 
-  private stabilized: {x:number;y:number} | null = null;
+  private stabilized: Pick<InputSample, "x" | "y" | "timeStamp"> | null = null;
   private offer(sample: InputSample, final: boolean): boolean {
-    const amount=Math.max(0,Math.min(1,this.options.stabilization ?? 0));
-    if(amount>0) {
-      // The pen-up reading belongs to the same filtered path. Bypassing the
-      // filter for that one sample made the end jump from the stabilized tip
-      // to the raw Pencil position; closed handwriting such as “o” showed the
-      // jump as a sharp kink. One final filter step preserves the curve and
-      // still lets the tip catch up naturally.
-      if(this.stabilized) {
-        const alpha=1-.85*amount;
-        sample={...sample,x:this.stabilized.x+(sample.x-this.stabilized.x)*alpha,y:this.stabilized.y+(sample.y-this.stabilized.y)*alpha};
+    const amount = Math.max(0, Math.min(1, this.options.stabilization ?? 0));
+    if (amount > 0) {
+      const prior = this.stabilized;
+      if (prior) {
+        const retention = 0.85 * amount;
+        const elapsed = (sample.timeStamp ?? NaN) - (prior.timeStamp ?? NaN);
+        // Match the existing filter at a 120 Hz reference cadence. Sparse
+        // desktop samples must advance the filter by elapsed time, not by
+        // the number of pointer events the browser delivered.
+        const steps = this.options.timeBasedStabilization && elapsed > 0
+          ? Math.min(elapsed * 0.12, final ? 1 : 4)
+          : 1;
+        const alpha = 1 - Math.pow(retention, steps);
+        sample = {
+          ...sample,
+          x: prior.x + (sample.x - prior.x) * alpha,
+          y: prior.y + (sample.y - prior.y) * alpha,
+        };
       }
-      this.stabilized={x:sample.x,y:sample.y};
+      this.stabilized = { x: sample.x, y: sample.y, timeStamp: sample.timeStamp };
     }
     // Read the pressure first, even for a sample about to be dropped: the
     // pen's first real reading still fills in the points before it.

@@ -1,4 +1,3 @@
-/** Plugin style preferences only. Visibility belongs to each interactive view. */
 import { hexToRgb, parseHexColor } from "./colors";
 import type { Page } from "./document";
 export interface WritingGuideStyle {
@@ -9,6 +8,22 @@ export interface WritingGuideStyle {
   colorMode: "auto" | "custom";
   customColor: string;
 }
+export interface EmbedWritingGuides {
+  enabled: boolean;
+  includeInPreview: boolean;
+  style: WritingGuideStyle;
+}
+
+export function embedWritingGuidesOf(raw: unknown): EmbedWritingGuides | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = raw as Partial<EmbedWritingGuides>;
+  return {
+    enabled: value.enabled === true,
+    includeInPreview: value.includeInPreview === true,
+    style: writingGuidesOf(value.style),
+  };
+}
+
 export const DEFAULT_WRITING_GUIDES: Readonly<WritingGuideStyle> = {
   style: "lines", spacing: 32, thickness: 1, opacity: .2, colorMode: "auto", customColor: "#64748b",
 };

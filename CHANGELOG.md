@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 95 — Handwrite Here, Sidecar, and table previews
+
+- Extend locked inline handwriting continuously and scroll the note during a held stroke.
+- Remember writing guide settings per handwriting block and optionally include them in the saved PNG.
+- Keep the writing canvas cursor hidden on Mac and focus the canvas for ink undo and redo shortcuts.
+- Show a table drag preview only after the pointer moves past the tap threshold.
+
 ### Beta 94 — Toolbar and tool menu polish
 
 - Keep tool menu labels and checkmarks aligned as selections change.

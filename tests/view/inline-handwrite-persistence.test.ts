@@ -22,9 +22,22 @@ vi.mock("../../src/view/ink-surface", () => ({
       surfaces.push({ change: callbacks.onChange, finish: this.finishPointerInput, destroy: this.destroy });
     }
     setTool() {}
+    setWritingGuides() {}
+    writingGuideContext() { return { eligible: true, paper: "#ffffff", scale: 1 }; }
     layout() {}
   },
 }));
+vi.mock("../../src/view/toolbar", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/view/toolbar")>();
+  return {
+    ...actual,
+    Toolbar: class {
+      syncActive = vi.fn();
+      syncWritingGuides = vi.fn();
+      destroy = vi.fn();
+    },
+  };
+});
 
 import { TFile } from "obsidian";
 import { DEFAULT_SETTINGS } from "../../src/settings-data";
@@ -42,9 +55,21 @@ function deferred<T>() {
 
 function host(): HTMLElement {
   const element = {
-    isConnected: true, ownerDocument: {}, empty() {},
-    addClass() {}, removeClass() {}, toggleClass() {},
-    createEl: () => host(), createSpan: () => host(), createDiv: () => host(),
+    isConnected: true,
+    ownerDocument: { body: { classList: { contains: () => false } } },
+    empty() {},
+    addClass() {},
+    removeClass() {},
+    toggleClass() {},
+    setAttribute() {},
+    getAttribute() { return null; },
+    removeAttribute() {},
+    addEventListener() {},
+    removeEventListener() {},
+    createEl: () => host(),
+    createSpan: () => host(),
+    createDiv: () => host(),
+    style: {},
     select() {},
   };
   return element as unknown as HTMLElement;
@@ -109,6 +134,30 @@ afterEach(async () => {
 });
 
 describe("inline handwriting persistence", () => {
+  it("saves guide-only edits per block and restores them on reopen", async () => {
+    const f = setup();
+    const session = f.session();
+    await session.start();
+    const { writingGuideHost } = session as unknown as {
+      writingGuideHost(): import("../../src/view/writing-guides").WritingGuideHost;
+    };
+    const guides = writingGuideHost.call(session);
+    guides.enable(true);
+    guides.includeInPreview!(true);
+    guides.configure({ style: "grid", spacing: 48 });
+    expect(await session.close()).toBe(true);
+    expect(f.page().clips![0].writingGuides).toMatchObject({
+      enabled: true, includeInPreview: true, style: { style: "grid", spacing: 48 },
+    });
+    expect(f.page(f.otherId).clips![0].writingGuides).toBeUndefined();
+
+    const reopened = f.session();
+    await reopened.start();
+    expect(writingGuideHost.call(reopened).state()).toMatchObject({
+      enabled: true, includeInPreview: true, style: { style: "grid", spacing: 48 },
+    });
+  });
+
   it("merges local additions and erasures with external edits after a reorder, preserving body and page fields", async () => {
     const f = setup();
     const session = f.session();

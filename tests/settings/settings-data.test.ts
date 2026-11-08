@@ -50,6 +50,7 @@ const FRESH_INSTALL = {
   lastNotebookChoices: null,
   recognitionProviderId: "manual",
   desynchronizedCanvas: true,
+  hideMacCanvasCursor: true,
   debugHud: false,
   scribbleNoticeShown: false,
   lastSeenVersion: "",

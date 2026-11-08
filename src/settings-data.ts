@@ -107,6 +107,7 @@ export interface GoodObsidianSettings {
 
   recognitionProviderId: string;
   desynchronizedCanvas: boolean;
+  hideMacCanvasCursor: boolean;
   /** The input overlay: raw pointer events drawn over the page. */
   debugHud: boolean;
   /** The iPad Scribble notice is shown once; this says it has been. */
@@ -207,6 +208,7 @@ export const DEFAULT_SETTINGS: GoodObsidianSettings = {
   lastNotebookChoices: null,
   recognitionProviderId: MANUAL_PROVIDER_ID,
   desynchronizedCanvas: true,
+  hideMacCanvasCursor: true,
   debugHud: false,
   scribbleNoticeShown: false,
   lastSeenVersion: "",

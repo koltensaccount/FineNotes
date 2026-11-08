@@ -1250,6 +1250,7 @@ export class InkView extends TextFileView {
       {
         app: this.app,
         desynchronizedCanvas: this.settings.desynchronizedCanvas,
+        hideMacCanvasCursor: this.settings.hideMacCanvasCursor,
         highlighterAlpha: this.settings.highlighterAlpha,
         debug: this.showHud,
         palette,
@@ -2505,6 +2506,7 @@ export class InkView extends TextFileView {
                 backdropPainter: this.backdrops,
                 pdf: this.pdfCache,
                 includeBackground: incBg,
+                writingGuides: clip.writingGuides,
                 usePressure: this.toolState.pressureEnabled,
                 highlighterAlpha: this.settings.highlighterAlpha,
                 themeMode: isDark ? "dark" : "light",

@@ -1,3 +1,4 @@
+import type { EmbedWritingGuides } from "./writing-guides";
 /**
  * The notebook as the editor holds it: pages, and the strokes, pictures and
  * text boxes on them. These types are also the file format's shape (see
@@ -304,6 +305,7 @@ export interface CircuitElement {
 
 /** A persistent clip reference capturing a cropped region of a notebook page. */
 export interface NotebookClip {
+  writingGuides?: EmbedWritingGuides;
   isExpandable?: boolean;
   /** Derived link state: unreferenced regions must not stop another region expanding. */
   isUnreferenced?: boolean;

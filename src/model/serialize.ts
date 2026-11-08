@@ -1,3 +1,4 @@
+import { embedWritingGuidesOf } from "./writing-guides";
 import { lineStyleOf } from "../ink/line-style";
 /**
  * How a notebook is kept on disk. A note is ordinary Markdown with one data
@@ -613,7 +614,9 @@ function normalizeClip(raw: unknown, pageId: string): NotebookClip | null {
       maxY: raw.elementBounds.maxY as number,
     };
   }
+  const writingGuides = embedWritingGuidesOf(raw.writingGuides);
   return {
+    ...(writingGuides ? { writingGuides } : {}),
     id: raw.id,
     pageId: typeof raw.pageId === "string" ? raw.pageId : pageId,
     bounds: {

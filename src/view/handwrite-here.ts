@@ -34,7 +34,7 @@ import {
   ensureManagedDirectory,
 } from "../model/storage-resolver";
 import { emptyDocument } from "../model/document";
-import { createBlockPage, resolveBlockBounds } from "../model/handwrite-block";
+import { BLOCK_PADDING, createBlockPage, resolveBlockBounds } from "../model/handwrite-block";
 import { renderClipPng } from "./clip-png";
 
 export type NotebookChoiceItem =
@@ -223,7 +223,11 @@ export function insertHandwritingEmbed(
   const at = embedInsertionOffset(before, current, offset);
   if (at === null) throw new Error("The insertion location changed. Run Handwrite Here again.");
   const prefix = at > 0 && current[at - 1] !== "\n" ? "\n" : "";
-  editor.replaceRange(`${prefix}${embed}\n`, editor.offsetToPos(at));
+  const inserted = `${prefix}${embed}\n`;
+  editor.replaceRange(inserted, editor.offsetToPos(at));
+  if (typeof editor.setCursor === "function") {
+    editor.setCursor(editor.offsetToPos(at + inserted.length));
+  }
 }
 
 export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
@@ -329,7 +333,15 @@ export async function handwriteHere(
 
   if (notebookIsOpen(app, notebook)) throw new Error("Close the full notebook editor before writing inline.");
   const blockId = `block-${crypto.randomUUID()}`;
-  const { page, clip } = createBlockPage(emptyDocument(), blockId, plugin.settings.paperWidth);
+  // New blocks use the writing column as their coordinate width. Existing
+  // blocks keep their stored width and fit it as a view transform.
+  const column = sourceView.contentEl?.querySelector<HTMLElement>(".cm-content");
+  const css = column && column.ownerDocument.defaultView?.getComputedStyle(column);
+  const columnWidth = column && css
+    ? column.clientWidth - (parseFloat(css.paddingLeft) || 0) - (parseFloat(css.paddingRight) || 0)
+    : 0;
+  const width = columnWidth > 2 * BLOCK_PADDING ? Math.round(columnWidth) : plugin.settings.paperWidth;
+  const { page, clip } = createBlockPage(emptyDocument(), blockId, width);
 
   // Allocate preview PNG in managed storage or attachment folder
   let imagePath: string;

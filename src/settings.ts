@@ -521,6 +521,11 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
 
   private supportGroup(): SettingDefinitionItem {
     return group("Support and diagnostics", [
+      {
+        ...toggle("hideMacCanvasCursor", "Hide cursor on the writing canvas",
+          "Hides the pointer on FineNotes writing surfaces on Mac, including Sidecar. Reopen the writing surface after changing this setting."),
+        visible: Platform.isDesktopApp === true && Platform.isMacOS === true,
+      },
       toggle("desynchronizedCanvas", "Desynchronized canvas", DESC.desynchronized, [
         "latency",
         "glitch",

@@ -1092,6 +1092,7 @@ body,
   min-height: 38px;
   padding: 0;
   border-radius: var(--gob-radius-pill);
+  corner-shape: round;
   color: var(--gob-icon);
 }
 
@@ -1722,6 +1723,57 @@ body.is-mobile.goodobsidian-dialog-typing .app-container {
   opacity: 0.85;
 }
 
+.goodobsidian-bottom-controls {
+  position: absolute;
+  z-index: 15;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.goodobsidian-bottom-controls > * {
+  pointer-events: auto;
+}
+.goodobsidian-bottom-controls .goodobsidian-zoomreadout {
+  position: static;
+  right: auto;
+  bottom: auto;
+  pointer-events: none;
+}
+.goodobsidian-bottom-btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--gob-radius-pill);
+  border: 1px solid var(--gob-line);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  box-shadow: var(--gob-shadow-float);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease-out;
+}
+.goodobsidian-bottom-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.goodobsidian-bottom-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+.goodobsidian-bottom-btn.is-unlocked {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
 /* A thin thumb on the right edge (and the bottom one when zoomed in wide). */
 .goodobsidian-scrollthumb {
   position: absolute;
@@ -1785,6 +1837,10 @@ body.is-mobile.goodobsidian-dialog-typing .app-container {
 .goodobsidian-scroll.is-hand-dragging,
 .goodobsidian-scroll.is-hand-dragging * {
   cursor: grabbing;
+}
+
+.goodobsidian-scroll.is-mac-cursor-hidden:not(.is-hand) {
+  cursor: none;
 }
 
 .goodobsidian-scroll.is-hand .goodobsidian-eraser-cursor {
@@ -2267,6 +2323,7 @@ body.is-mobile .goodobsidian-scrollthumb {
   padding: 0 10px;
   border: none;
   border-radius: var(--gob-radius-pill);
+  corner-shape: round;
   background: transparent;
   box-shadow: none;
   color: var(--text-muted);
@@ -6626,6 +6683,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   background: transparent;
   color: var(--text-muted);
   border-radius: var(--gob-radius-pill);
+  corner-shape: round;
   cursor: pointer;
   font-size: var(--font-ui-small);
   font-weight: 500;
@@ -7438,6 +7496,19 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   height: auto;
 }
 
+.finenotes-embed.is-transparent { background-color: transparent; }
+
+.finenotes-block-preview,
+.finenotes-embed.has-png-preview .finenotes-embed-canvas {
+  display: none;
+}
+
+.finenotes-embed.has-png-preview .finenotes-block-preview {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .finenotes-embed-badge {
   position: absolute;
   bottom: 8px;
@@ -7861,55 +7932,158 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
   position: relative;
   border: 1px solid var(--interactive-accent) !important;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   background: var(--background-primary);
-}
-.finenotes-inline-toolbar {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: var(--background-secondary);
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+.finenotes-inline-active .goodobsidian-toolbar {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
   border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
   z-index: 10;
   position: sticky;
   top: 0;
-}
-.finenotes-inline-tool-button {
-  display: inline-flex;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding: 3px 6px;
   gap: 4px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-normal);
-  cursor: pointer;
-  font-size: var(--font-ui-smaller);
+  min-height: 38px;
 }
-.finenotes-inline-tool-button:hover {
-  background: var(--background-modifier-hover);
+.finenotes-inline-active .goodobsidian-toolbar::-webkit-scrollbar {
+  display: none;
 }
-.finenotes-inline-tool-button.is-active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
+.finenotes-inline-active .goodobsidian-toolbar .goodobsidian-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
-.finenotes-inline-toolbar-sep {
-  width: 1px;
-  height: 18px;
-  background: var(--background-modifier-border);
+.finenotes-inline-active .goodobsidian-toolbar .goodobsidian-bar-group.is-centre {
+  position: static;
+  margin: 0;
+  padding: 0;
+  border: none;
+  flex-shrink: 0;
+}
+.finenotes-inline-active .goodobsidian-toolbar .goodobsidian-bar-group.is-tools {
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
   margin: 0 2px;
+  flex-shrink: 0;
 }
-.finenotes-inline-done {
+.finenotes-inline-active .goodobsidian-toolbar .goodobsidian-bar-group.goodobsidian-bar-doc {
+  position: sticky;
+  right: 0;
   margin-left: auto;
+  flex-shrink: 0;
+  background: var(--background-secondary);
+  z-index: 5;
+  padding-left: 4px;
+}
+.finenotes-inline-active .goodobsidian-toolbar button {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 4px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+.finenotes-inline-active .goodobsidian-toolbar button.finenotes-inline-done {
+  width: auto !important;
+  min-width: 0;
+  height: 30px;
   font-weight: 600;
+  font-size: 13px;
   color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  border-radius: var(--gob-radius-m);
+  padding: 3px 10px;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.finenotes-inline-active .goodobsidian-toolbar button.finenotes-inline-done > * {
+  pointer-events: none;
+}
+.finenotes-inline-active .goodobsidian-options {
+  position: absolute;
+  z-index: 20;
+  max-width: calc(100% - 12px);
+  min-height: 36px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  gap: 4px;
+}
+.finenotes-inline-active .goodobsidian-options::-webkit-scrollbar {
+  display: none;
+}
+.finenotes-inline-active .goodobsidian-options.is-floating {
+  z-index: 20;
+}
+/* Swatches paint into their content box and need the shared, even padding. */
+.finenotes-inline-active .goodobsidian-options button:where(:not(.goodobsidian-swatch)) {
+  height: 28px;
+  padding: 2px 6px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-pentype,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-quick-width,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-erasersize,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-shape,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-lasso-choice {
+  width: 28px;
+  min-width: 28px;
+  padding: 2px;
+}
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-erasermode,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-eraser-size-control,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-eraserfilter,
+.finenotes-inline-active .goodobsidian-options button.goodobsidian-eraser-clear {
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 2px 8px;
+  font-size: var(--font-ui-smaller, 11px);
+  white-space: nowrap;
+}
+.finenotes-inline-active .goodobsidian-popover {
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  z-index: 50;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .finenotes-inline-surface-host {
-  min-height: 240px;
   position: relative;
+  height: 360px;
+  min-height: 240px;
+  max-height: 70vh;
+  width: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.finenotes-inline-surface-host .goodobsidian-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
 }
 
 
@@ -8201,4 +8375,66 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
 }
 .goodobsidian-companion-update > span {
   display: inline-flex;
+}
+
+/* The host occupies the full continuous block in the note. Only the visible
+   slice gets a canvas backing store, even when the block grows very tall. */
+.finenotes-inline-active.is-inline-locked {
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.is-inline-locked .finenotes-inline-surface-host {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  display: block;
+}
+.is-inline-locked .finenotes-inline-surface-host .goodobsidian-surface {
+  top: 0;
+  bottom: auto;
+  height: min(100%, var(--finenotes-note-viewport-height, 100dvh));
+  background: transparent;
+}
+.is-inline-locked .goodobsidian-scroll {
+  touch-action: pan-y;
+}
+.is-inline-locked :is(.goodobsidian-fit-width, .goodobsidian-zoomreadout, .goodobsidian-pageindicator, .goodobsidian-scrollthumb) {
+  display: none;
+}
+.finenotes-inline-active .goodobsidian-pageindicator {
+  display: none;
+}
+.is-inline-locked .goodobsidian-toolbar {
+  position: relative;
+  background: transparent;
+  box-shadow: none;
+  border-bottom: 0;
+}
+.is-inline-locked .goodobsidian-toolbar .goodobsidian-bar-doc {
+  background: transparent;
+}
+.is-inline-locked .goodobsidian-options {
+  position: relative;
+  inset: auto !important;
+  transform: none !important;
+  align-self: flex-start;
+  box-shadow: none;
+  background: transparent;
+  border-color: transparent;
+}
+.cm-embed-block:has(.finenotes-inline-active.is-inline-locked) {
+  border-color: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.cm-embed-block:has(.finenotes-inline-active.is-inline-locked) .edit-block-button {
+  visibility: hidden;
+}
+
+
+:is(.cm-scroller, .markdown-preview-view):has(.finenotes-inline-active.is-inline-locked) {
+  overflow-anchor: none;
 }

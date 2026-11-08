@@ -241,6 +241,7 @@ describe("the rows", () => {
       [AI, "(block)", "render"],
       [AI, "Image model", "text:imageModel"],
       [AI, `${label} API key for images`, "render"],
+      [SUPPORT, "Hide cursor on the writing canvas", "toggle:hideMacCanvasCursor"],
       [SUPPORT, "Desynchronized canvas", "toggle:desynchronizedCanvas"],
       [SUPPORT, "Input debug overlay", "toggle:debugHud"],
       [SUPPORT, "FineNotes Icon Studio", "render"],
@@ -271,6 +272,7 @@ describe("the rows", () => {
     );
     const label = VENDORS.anthropic.label;
     expect(aliases).toEqual({
+      "Hide cursor on the writing canvas": [],
       "Draw and hold to make shapes": ["shape recognition", "straighten", "snap"],
       "Select active tool again to return to pen": ["tool", "eraser", "lasso", "text", "shape"],
       "Return to pen after one use": ["tool", "eraser", "lasso", "text", "shape"],
@@ -405,7 +407,7 @@ describe("which rows show", () => {
       "Desynchronized canvas",
       "Input debug overlay",
       "FineNotes Icon Studio",
-      "(block 37)",
+      "(block 38)",
     ]);
   });
 

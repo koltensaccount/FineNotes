@@ -1,4 +1,4 @@
-/** Interactive tiles only; never imported by export or thumbnail painters. */
+/** Shared by the editor and opt-in handwriting previews. */
 import type { Bounds, Page } from "../model/document";
 import { guideColor, guidesEligible, type WritingGuideStyle } from "../model/writing-guides";
 

@@ -3,6 +3,7 @@ import type { WritingGuideStyle } from "../model/writing-guides";
 import { highlighterPolygons } from "../ink/highlighter";
 import { lineStyleOf, patternedRuns } from "../ink/line-style";
 import type { LineStyle } from "../model/document";
+import { isPaperDark, adaptColorForTheme, type ContrastMode } from "./contrast";
 /**
  * Paginated wet/dry canvas renderer (DOM).
  *
@@ -180,8 +181,8 @@ export function drawPlacedImage(
  * light line along a cover's edges (Joost, 2026-09-24).
  */
 export function paperColorOf(page: Page, theme: PaperTheme): string {
-  const backdrop = page.backdrop;
-  return (backdrop.kind !== "pdf" ? backdrop.paperColor : undefined) ?? theme.paper;
+  const backdrop = page?.backdrop;
+  return (backdrop && backdrop.kind !== "pdf" ? backdrop.paperColor : undefined) ?? theme.paper;
 }
 
 /**
@@ -341,6 +342,8 @@ export class Renderer {
   highlighterAlpha = DEFAULT_HIGHLIGHTER_ALPHA;
   /** Paper colours. Paper-white by default; a dark page is a notebook override. */
   paper: PaperTheme = LIGHT_PAPER;
+  adaptContrast = false;
+  inlinePaper = false;
 
   /** The desk and the page shadows. */
   private readonly backdrop: Layer;
@@ -633,6 +636,10 @@ export class Renderer {
     // The desk. The page is an object lying on it, not a region filling the
     // pane (design brief), so the field is painted edge to edge first.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.inlinePaper) {
+      ctx.clearRect(0, 0, this.backdrop.canvas.width, this.backdrop.canvas.height);
+      return;
+    }
     ctx.fillStyle = this.paper.desk;
     ctx.fillRect(0, 0, this.dry.canvas.width, this.dry.canvas.height);
     const sprite = this.shadowSprite();
@@ -977,19 +984,24 @@ export class Renderer {
     ctx.beginPath();
     ctx.rect(0, 0, box.width, box.height);
     ctx.clip();
-    ctx.fillStyle = paperColorOf(page, this.paper);
-    ctx.fillRect(0, 0, box.width, box.height);
+    const paperBg = this.inlinePaper ? this.paper.paper : paperColorOf(page, this.paper);
+    if (!this.inlinePaper) {
+      ctx.fillStyle = paperBg;
+      ctx.fillRect(0, 0, box.width, box.height);
+    }
     // A 1 page-px rule vanishes at preview scale; keep rules about half a
     // device pixel wide there, as the sidebar thumbnails do.
-    this.painter?.paint(ctx, page.backdrop, page.geometry, Math.max(1, 0.5 / level), {
+    if (!this.inlinePaper) this.painter?.paint(ctx, page.backdrop, page.geometry, Math.max(1, 0.5 / level), {
       deviceScale: level,
       ...(Number.isFinite(region.minX) ? { region } : {}),
     });
-    if (this.writingGuides) paintWritingGuides(ctx, page, region, this.writingGuides, paperColorOf(page, this.paper), this.view.scale, level);
+    if (this.writingGuides) paintWritingGuides(ctx, page, region, this.writingGuides, paperBg, this.view.scale, level);
     this.paintImages(ctx, page, region, level);
     this.paintCircuits(ctx, page, region, level);
-    this.paintEquations(ctx, page, region);
+    const contrast = this.pageContrastMode(page);
+    this.paintEquations(ctx, page, region, contrast);
     // Inset by half a device pixel so the hairline lies inside the clip.
+    if (this.inlinePaper) return;
     const hair = 1 / level;
     ctx.strokeStyle = this.paper.edge;
     ctx.lineWidth = hair;
@@ -1027,17 +1039,34 @@ export class Renderer {
     }
   }
 
+  /** Returns the contrast adaptation mode for a given page or the renderer's paper. */
+  pageContrastMode(page?: Page): ContrastMode {
+    if (!this.adaptContrast) return "disabled";
+    const bg = page && !this.inlinePaper ? paperColorOf(page, this.paper) : this.paper.paper;
+    return isPaperDark(bg) ? "dark" : "light";
+  }
+
+  private resolveContrast(contrastOrDark?: boolean | ContrastMode, page?: Page): ContrastMode {
+    if (!this.adaptContrast) return "disabled";
+    if (contrastOrDark === "disabled" || contrastOrDark === null) return "disabled";
+    if (contrastOrDark === "dark" || contrastOrDark === true) return "dark";
+    if (contrastOrDark === "light") return "light";
+    return this.pageContrastMode(page);
+  }
+
   /** The page's typed equations that overlap `region`. */
   private paintEquations(
     ctx: CanvasRenderingContext2D,
     page: Page,
     region: Bounds,
+    contrast: ContrastMode = "disabled",
   ): void {
     if (!page.equations || page.equations.length === 0) return;
     for (const equation of page.equations) {
       if (this.hiddenEquations.has(equation)) continue;
       if (!overlaps(equationBounds(equation), region)) continue;
-      paintEquation(ctx, equation);
+      const color = adaptColorForTheme(equation.color, contrast);
+      paintEquation(ctx, color === equation.color ? equation : { ...equation, color });
     }
   }
 
@@ -1049,14 +1078,15 @@ export class Renderer {
     hidden?: ReadonlySet<string>,
     replaced?: ReadonlyMap<string, readonly Stroke[]>,
   ): void {
+    const contrast = this.pageContrastMode(page);
     for (const stroke of page.strokes) {
       if (hidden?.has(stroke.id) || this.hiddenStrokes.has(stroke.id)) continue;
       const pieces = replaced?.get(stroke.id);
       if (pieces) {
-        for (const piece of pieces) this.paintEntry(ctx, piece, region, usePressure);
+        for (const piece of pieces) this.paintEntry(ctx, piece, region, usePressure, contrast);
         continue;
       }
-      this.paintEntry(ctx, stroke, region, usePressure);
+      this.paintEntry(ctx, stroke, region, usePressure, contrast);
     }
   }
 
@@ -1065,10 +1095,11 @@ export class Renderer {
     stroke: Stroke,
     region: Bounds,
     usePressure: boolean,
+    contrast: ContrastMode = "disabled",
   ): void {
     const entry = this.pathEntry(stroke, usePressure);
     if (entry.runs.length === 0 || !entry.bounds || !overlaps(entry.bounds, region)) return;
-    paintStroke(ctx, entry, stroke, this.highlighterAlpha);
+    paintStroke(ctx, entry, stroke, this.highlighterAlpha, contrast);
   }
 
   /**
@@ -1179,12 +1210,15 @@ export class Renderer {
       }
     }
     if (equations) {
+      const contrast = this.resolveContrast(undefined);
       for (const equation of equations) {
-        paintEquation(ctx, equation);
+        const color = adaptColorForTheme(equation.color, contrast);
+        paintEquation(ctx, color === equation.color ? equation : { ...equation, color });
       }
     }
+    const strokeContrast = this.resolveContrast(undefined);
     for (const stroke of strokes) {
-      paintStroke(ctx, this.pathEntry(stroke, usePressure), stroke, this.highlighterAlpha);
+      paintStroke(ctx, this.pathEntry(stroke, usePressure), stroke, this.highlighterAlpha, strokeContrast);
     }
     ctx.restore();
     this.setWetVisible(true);
@@ -1197,13 +1231,14 @@ export class Renderer {
    * (and dropping incoming pointer events) as a note filled up. The caller
    * then repaints the dry layer, which is a blit.
    */
-  appendCommittedStroke(pageIndex: number, stroke: Stroke, usePressure: boolean): void {
+  appendCommittedStroke(pageIndex: number, stroke: Stroke, usePressure: boolean, contrastOrDark?: boolean | ContrastMode): void {
     // A pen landing after a zoom must not commit into stale, lower-resolution tiles.
     this.settle();
     const box = this.layout.boxes[pageIndex];
     if (!box) return;
     const entry = this.pathEntry(stroke, usePressure);
     if (entry.runs.length === 0 || !entry.bounds) return;
+    const contrast = this.resolveContrast(contrastOrDark);
     for (const tile of this.tiles.values()) {
       if (tile.pageId !== box.id || tile.level !== this.level) continue;
       const tr = tile.rect;
@@ -1221,7 +1256,7 @@ export class Renderer {
       ctx.beginPath();
       ctx.rect(0, 0, box.width, box.height);
       ctx.clip();
-      paintStroke(ctx, entry, stroke, this.highlighterAlpha);
+      paintStroke(ctx, entry, stroke, this.highlighterAlpha, contrast);
       ctx.restore();
     }
     const preview = this.previews.peek(box.id);
@@ -1232,14 +1267,14 @@ export class Renderer {
       ctx.beginPath();
       ctx.rect(0, 0, box.width, box.height);
       ctx.clip();
-      paintStroke(ctx, entry, stroke, this.highlighterAlpha);
+      paintStroke(ctx, entry, stroke, this.highlighterAlpha, contrast);
       ctx.restore();
     }
   }
 
   /** Draw the in-progress stroke (page space) on the wet layer. */
-  renderWet(pageIndex: number, pts: number[], style: StrokeStyle): void {
-    this.renderWetMany(pageIndex, [pts], style);
+  renderWet(pageIndex: number, pts: number[], style: StrokeStyle, contrastOrDark?: boolean | ContrastMode): void {
+    this.renderWetMany(pageIndex, [pts], style, contrastOrDark);
   }
 
   /**
@@ -1293,14 +1328,15 @@ export class Renderer {
    * Draw several in-progress strokes at once on the wet layer — a table being
    * dragged out, which is an outline plus its row and column lines.
    */
-  renderWetMany(pageIndex: number, strokes: readonly number[][], style: StrokeStyle): void {
+  renderWetMany(pageIndex: number, strokes: readonly number[][], style: StrokeStyle, contrastOrDark?: boolean | ContrastMode): void {
     const box = this.layout.boxes[pageIndex];
     const ctx = this.wet.ctx;
     this.wipe(ctx);
     if (!box) return;
     this.enterWetPage(ctx, box);
     this.wet.canvas.style.mixBlendMode = style.tool === "highlighter" ? "multiply" : "normal";
-    for (const pts of strokes) fillStroke(ctx, pts, style, this.highlighterAlpha);
+    const contrast = this.resolveContrast(contrastOrDark);
+    for (const pts of strokes) fillStroke(ctx, pts, style, this.highlighterAlpha, contrast);
     ctx.restore();
     this.setWetVisible(true);
   }
@@ -1309,14 +1345,15 @@ export class Renderer {
    * Draw the handwriting being written, already traced into `runs` (page
    * space), on the wet layer, painted as a stored stroke of `style` is.
    */
-  renderWetRuns(pageIndex: number, runs: readonly InkRun[], style: StrokeStyle): void {
+  renderWetRuns(pageIndex: number, runs: readonly InkRun[], style: StrokeStyle, contrastOrDark?: boolean | ContrastMode): void {
     const box = this.layout.boxes[pageIndex];
     const ctx = this.wet.ctx;
     this.wipe(ctx);
     if (!box) return;
     this.enterWetPage(ctx, box);
     this.wet.canvas.style.mixBlendMode = style.tool === "highlighter" ? "multiply" : "normal";
-    paintStroke(ctx, { runs }, style, this.highlighterAlpha);
+    const contrast = this.resolveContrast(contrastOrDark);
+    paintStroke(ctx, { runs }, style, this.highlighterAlpha, contrast);
     ctx.restore();
     this.setWetVisible(true);
   }
@@ -1353,6 +1390,7 @@ function paintStroke(
   ink: { runs: readonly InkRun[]; paths?: readonly Path2D[]; highlighterPath?: Path2D },
   style: { color: string; tool: Tool; size: number; lineStyle?: LineStyle; dashOffset?: number },
   highlighterAlpha: number,
+  contrast: ContrastMode = "disabled",
 ): void {
   const highlighter = style.tool === "highlighter";
   ctx.save();
@@ -1360,10 +1398,7 @@ function paintStroke(
     ctx.globalAlpha = highlighterAlpha;
     ctx.globalCompositeOperation = HIGHLIGHTER_BLEND;
   }
-  // Ink colour is absolute (contracts/design-brief.md): a stored colour is
-  // painted exactly as stored. It is never remapped to suit the app theme —
-  // that is how a note written on one device stays legible on another.
-  ctx.fillStyle = style.color;
+  ctx.fillStyle = adaptColorForTheme(style.color, contrast);
   const styled = style.tool === "pen" && lineStyleOf(style.lineStyle) !== "solid" && !ink.paths;
   if (highlighter) {
     if (!ink.highlighterPath) {
@@ -1392,9 +1427,10 @@ export function fillStroke(
   points: number[],
   style: StrokeStyle,
   highlighterAlpha: number,
+  contrast: ContrastMode = "disabled",
 ): void {
   const runs = inkRuns(points, penFor(style), style.shape === true);
-  paintStroke(ctx, { runs }, style, highlighterAlpha);
+  paintStroke(ctx, { runs }, style, highlighterAlpha, contrast);
 }
 
 export interface ThumbnailOptions {
@@ -1405,6 +1441,8 @@ export interface ThumbnailOptions {
   paper?: PaperTheme;
   /** Draws the page's placed images; without one they are left out. */
   images?: ImagePainter;
+  /** Enable contrast adaptation for light/dark notes (default false). */
+  adaptContrast?: boolean;
 }
 
 /**
@@ -1429,8 +1467,10 @@ export function renderPageThumbnail(
   if (!ctx) return;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const paperBg = paperColorOf(page, options.paper ?? LIGHT_PAPER);
+  const isDark = isPaperDark(paperBg);
   if (!options.transparent) {
-    ctx.fillStyle = paperColorOf(page, options.paper ?? LIGHT_PAPER);
+    ctx.fillStyle = paperBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   // Each axis scaled to the rounded canvas, so the page fills it exactly: at
@@ -1456,15 +1496,21 @@ export function renderPageThumbnail(
     for (const circuit of page.circuits) drawPlacedCircuit(ctx, circuit, undefined, k);
   }
 
+  const contrast: ContrastMode = options.adaptContrast
+    ? (isDark ? "dark" : "light")
+    : "disabled";
   if (page.equations) {
-    for (const equation of page.equations) paintEquation(ctx, equation);
+    for (const equation of page.equations) {
+      const color = adaptColorForTheme(equation.color, contrast);
+      paintEquation(ctx, color === equation.color ? equation : { ...equation, color });
+    }
   }
 
   for (const box of page.textBoxes) paintTextBox(ctx, box);
 
   const alpha = options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA;
   for (const stroke of page.strokes) {
-    fillStroke(ctx, stroke.pts, styleOf(stroke, options.usePressure), alpha);
+    fillStroke(ctx, stroke.pts, styleOf(stroke, options.usePressure), alpha, contrast);
   }
   ctx.restore();
 }

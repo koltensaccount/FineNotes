@@ -47,6 +47,7 @@ describe("handwrite-block", () => {
     expect(emptyBounds.minX).toBe(BLOCK_PADDING);
     expect(emptyBounds.maxX).toBe(800 - BLOCK_PADDING);
     expect(emptyBounds.minY).toBe(BLOCK_PADDING);
+    expect(emptyBounds.maxY - emptyBounds.minY).toBeLessThan(100);
 
     // Add stroke
     page.strokes.push({
@@ -60,6 +61,7 @@ describe("handwrite-block", () => {
 
     const boundsWithInk = resolveBlockBounds(page, clip);
     expect(boundsWithInk.maxY).toBeGreaterThanOrEqual(450 + 24);
+    expect(boundsWithInk.maxY).toBeLessThan(page.geometry.height - BLOCK_PADDING);
   });
 
   it("finds block by block id or subpath across document pages", () => {

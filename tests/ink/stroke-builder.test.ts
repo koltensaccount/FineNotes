@@ -174,3 +174,18 @@ it("keeps a stabilized handwritten loop smooth at pen-up",()=>{
   expect(finalStep).toBeLessThan(rawJump);
   expect(finalStep/rawJump).toBeCloseTo(1-.85*.6,10);
 });
+
+it.each([0, 0.25, 0.5, 0.75, 1])("keeps desktop stabilization %s consistent across sample cadences", (stabilization) => {
+  const endAt = (hz: number) => {
+    const builder = new StrokeBuilder({ minDistance: 0, stabilization, timeBasedStabilization: true });
+    builder.add({ x: 0, y: 0, pressure: 0.25, timeStamp: 0 });
+    for (let i = 1; i <= hz / 10; i++) {
+      builder.add({ x: 100, y: 0, pressure: 0.75, timeStamp: i * 1000 / hz });
+    }
+    const points = builder.points();
+    expect(points.at(-1)).toBe(0.75);
+    return points[points.length - 3];
+  };
+  expect(endAt(60)).toBeCloseTo(endAt(120), 10);
+  expect(endAt(240)).toBeCloseTo(endAt(120), 10);
+});

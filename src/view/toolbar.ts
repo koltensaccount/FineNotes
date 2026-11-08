@@ -155,7 +155,7 @@ import { type PenGestures, penGesturesOf } from "../ink/pen-gestures";
 export type ActiveTool = "pen" | "highlighter" | "eraser" | "select" | "text" | "shape";
 
 /** Identifiers for tools that can be reordered or hidden in the main toolbar. */
-export type ConfigurableToolId = "select" | "pen" | "eraser" | "text" | "shape" | "image" | "record";
+export type ConfigurableToolId = "select" | "pen" | "eraser" | "text" | "shape" | "image" | "record" | "highlighter";
 
 export interface ConfigurableToolMeta {
   id: ConfigurableToolId;
@@ -167,6 +167,7 @@ export interface ConfigurableToolMeta {
 export const CONFIGURABLE_TOOLS: Record<ConfigurableToolId, ConfigurableToolMeta> = {
   select: { id: "select", icon: "lasso", label: "Lasso select (V)", name: "Lasso select" },
   pen: { id: "pen", icon: "pen-tool", label: "Pen (P)", name: "Pen" },
+  highlighter: { id: "highlighter", icon: "highlighter", label: "Highlighter (H)", name: "Highlighter" },
   eraser: { id: "eraser", icon: APPROVED_ICONS.eraser, label: "Eraser (E)", name: "Eraser" },
   text: { id: "text", icon: "type", label: "Text box (T)", name: "Text box" },
   shape: { id: "shape", icon: "shapes", label: "Shapes (S)", name: "Shapes" },
@@ -454,6 +455,12 @@ export interface ToolbarOptions {
   toolbarPosition?: ToolbarPosition;
   /** Initial docked position of the tool options sub-menu pill. */
   optionsPosition?: ToolbarPosition;
+  /** Whether the toolbar is operating in compact inline Handwrite Here mode. */
+  inline?: boolean;
+  /** Action invoked when Done is tapped in inline mode. */
+  onDone?: () => void;
+  /** Action invoked when Open in Notebook is tapped in inline mode. */
+  onOpenNotebook?: () => void;
 }
 
 /** Minimum gap between the pill and the edge of the page area, in CSS px. */
@@ -634,8 +641,10 @@ export class Toolbar {
     this.keepFocus(this.barEl, true);
     this.keepFocus(this.optionsEl, true);
     this.installPressFeedback();
-    this.installBarDockGestures();
-    this.installOptionsDockGestures();
+    if (!this.options.inline) {
+      this.installBarDockGestures();
+      this.installOptionsDockGestures();
+    }
   }
 
   /**
@@ -694,11 +703,37 @@ export class Toolbar {
   // --- Tier 1 ---------------------------------------------------------------
 
   private buildBar(): void {
+    const cb = this.callbacks;
+    if (this.options.inline) {
+      const history = this.barEl.createDiv({ cls: "goodobsidian-bar-group is-centre" });
+      this.undoButton = this.barButton(history, "undo-2", "Undo (Cmd/Ctrl+Z)", () =>
+        this.callbacks.onUndo(),
+      );
+      this.redoButton = this.barButton(history, "redo-2", "Redo (Cmd/Ctrl+Shift+Z)", () =>
+        this.callbacks.onRedo(),
+      );
+
+      const tools = this.barEl.createDiv({ cls: "goodobsidian-bar-group is-tools" });
+      this.toolsGroup = tools;
+      this.renderToolsGroup();
+
+      const doc = this.barEl.createDiv({ cls: "goodobsidian-bar-group goodobsidian-bar-doc" });
+      if (this.options.onOpenNotebook) {
+        this.barButton(doc, "external-link", "Open in Notebook", () => this.options.onOpenNotebook?.());
+      }
+      if (this.options.onDone) {
+        const doneBtn = this.barButton(doc, "check", "Done", () => this.options.onDone?.());
+        doneBtn.addClass("finenotes-inline-done");
+        doneBtn.createSpan({ text: "Done" });
+      }
+      this.watchCrowding();
+      return;
+    }
+
     // Passing `cb.onFoo` straight through is safe: ToolbarCallbacks declares
     // them as properties holding functions, not as methods. Passing
     // `undefined` is load-bearing — barButton disables a button that has no
     // handler, which is how the not-yet-implemented tools render greyed out.
-    const cb = this.callbacks;
     const left = this.barEl.createDiv({ cls: "goodobsidian-bar-group" });
     this.thumbnailsButton = this.barButton(
       left,
@@ -792,7 +827,8 @@ export class Toolbar {
       button.setAttribute("title", `${label} — not available yet`);
       return button;
     }
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (evt) => {
+      evt?.stopPropagation?.();
       if (Date.now() < this.suppressClickUntil) return;
       if (!button.disabled) handler(button);
     });
@@ -846,13 +882,19 @@ export class Toolbar {
     this.toolButtonsMap.clear();
     this.recordButton = null;
 
-    for (const toolId of this.toolOrder) {
-      if (this.hiddenTools.has(toolId)) continue;
+    const toolList = this.options.inline
+      ? (["pen", "highlighter", "eraser"] as ConfigurableToolId[])
+      : this.toolOrder;
+
+    for (const toolId of toolList) {
+      if (!this.options.inline && this.hiddenTools.has(toolId)) continue;
       const meta = CONFIGURABLE_TOOLS[toolId];
       if (!meta) continue;
       const button = this.createConfigurableToolButton(tools, meta);
       this.toolButtonsMap.set(toolId, button);
-      this.installToolGestures(button, toolId);
+      if (!this.options.inline) {
+        this.installToolGestures(button, toolId);
+      }
     }
     this.syncSelectButtonIcon();
     this.syncActive();
@@ -866,6 +908,7 @@ export class Toolbar {
     switch (meta.id) {
       case "select":
       case "pen":
+      case "highlighter":
       case "eraser":
       case "text":
       case "shape": {
@@ -2617,6 +2660,7 @@ export class Toolbar {
     // row at their foot the pen gestures, with a way back.
     let gestures = false;
     this.popoverRender = () => {
+      const prevScroll = this.popover?.scrollTop ?? 0;
       body.empty();
       const flip = (): void => {
         gestures = !gestures;
@@ -2625,6 +2669,9 @@ export class Toolbar {
       if (gestures) this.renderPenGestures(body, flip);
       else this.renderPenTypes(body, flip);
       this.keepPopoverInside(anchor);
+      if (this.popover && prevScroll > 0) {
+        this.popover.scrollTop = prevScroll;
+      }
     };
     this.popoverRender();
   }
@@ -2793,7 +2840,15 @@ export class Toolbar {
     return body;
   }
 
-  dismissPopover(): void { this.closePopover(); }
+  hasOpenPopover(): boolean { return this.popover !== null; }
+
+  dismissPopover(): boolean {
+    if (this.popover) {
+      this.closePopover();
+      return true;
+    }
+    return false;
+  }
 
   private closePopover(): void {
     for (const dispose of this.popoverDisposers ?? []) dispose();
@@ -3194,11 +3249,22 @@ export class Toolbar {
     const pos = this.optionsEl.contains(anchor) ? this.optionsPosition : this.toolbarPosition;
 
     const leftEdge = Math.max(hostBox.left, viewport?.offsetLeft ?? 0) + EDGE_INSET;
-    const rightEdge = Math.max(leftEdge, Math.min(hostBox.right,
-      (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth)) - EDGE_INSET);
-    const topEdge = Math.max(hostBox.top, viewport?.offsetTop ?? 0) + EDGE_INSET;
-    const bottomEdge = Math.max(topEdge, Math.min(hostBox.bottom,
-      (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight), win.innerHeight - keyboardHeight(this.host.ownerDocument)) - EDGE_INSET);
+    const rightEdge = Math.max(
+      leftEdge,
+      Math.min(
+        this.options.inline ? hostBox.right : win.innerWidth,
+        (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth),
+      ) - EDGE_INSET,
+    );
+    const topEdge = Math.max(this.options.inline ? hostBox.top : 0, viewport?.offsetTop ?? 0) + EDGE_INSET;
+    const bottomEdge = Math.max(
+      topEdge,
+      Math.min(
+        hostBox.bottom,
+        (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight),
+        win.innerHeight - keyboardHeight(this.host.ownerDocument),
+      ) - EDGE_INSET,
+    );
     const measured = popover.getBoundingClientRect();
     const fit = fitPopover({left: leftEdge, right: rightEdge, top: topEdge, bottom: bottomEdge}, anchorBox,
       {width: measured.width, height: Math.max(measured.height, popover.scrollHeight ?? 0)}, pos);
@@ -3274,6 +3340,21 @@ export class Toolbar {
 
     const hostBox = this.host.getBoundingClientRect();
     const barBox = this.barEl.getBoundingClientRect();
+
+    if (this.options.inline) {
+      pill.setCssStyles({
+        maxWidth: `${Math.max(0, hostBox.width - 16)}px`,
+        maxHeight: "none",
+      });
+      const pillBox = pill.getBoundingClientRect();
+      const left = Math.max(8, Math.round((hostBox.width - pillBox.width) / 2));
+      const top = Math.round(barBox.bottom - hostBox.top + 4);
+      pill.setCssStyles({
+        left: `${left}px`,
+        top: `${top}px`,
+      });
+      return;
+    }
     // Reserve the toolbar's edge on both axes, including opposite-edge docks.
     const left = Math.min(hostBox.width, Math.max(EDGE_INSET,
       barPos === "left" ? barBox.right - hostBox.left + EDGE_INSET : this.leftInset + EDGE_INSET));
@@ -3469,10 +3550,20 @@ export class Toolbar {
     if (state.tool === "eraser") this.eraserSizeLabel?.setText(previewThicknessLabel("ball", eraserSizeFor(state)));
     this.refreshQuickWidths();
     this.widthEditorRefresh?.();
+    const highlighterControl = this.toolButtons.get("highlighter");
+    if (highlighterControl) {
+      highlighterControl.empty();
+      if (!this.setWritingIcon(highlighterControl, "highlighter")) {
+        iconOrText(highlighterControl, "highlighter", "Highlighter (H)");
+      }
+      highlighterControl.setAttribute("aria-label", "Highlighter (H)");
+      highlighterControl.setAttribute("title", "Highlighter (H)");
+    }
     const penControl = this.toolButtons.get("pen");
     if (penControl) {
       penControl.empty();
-      const tool = state.tool === "highlighter" || this.activePenType().id === "highlighter"
+      const hasSeparateHighlighter = this.toolButtons.has("highlighter");
+      const tool = !hasSeparateHighlighter && (state.tool === "highlighter" || this.activePenType().id === "highlighter")
         ? "highlighter"
         : "pen";
       if (!this.setWritingIcon(penControl, tool)) {
@@ -3481,11 +3572,15 @@ export class Toolbar {
           this.host.ownerDocument,
         ));
       }
-      penControl.setAttribute("aria-label", `${this.activePenType().label} (P)`);
-      penControl.setAttribute("title", `${this.activePenType().label} (P)`);
+      const label = hasSeparateHighlighter ? "Pen (P)" : `${this.activePenType().label} (P)`;
+      penControl.setAttribute("aria-label", label);
+      penControl.setAttribute("title", label);
     }
-    // Highlighter is a pen type, so the pen button stands for both.
-    markChosen(this.toolButtons, state.tool === "highlighter" ? "pen" : state.tool, true);
+    if (state.tool === "highlighter" && this.toolButtons.has("highlighter")) {
+      markChosen(this.toolButtons, "highlighter", true);
+    } else {
+      markChosen(this.toolButtons, state.tool === "highlighter" ? "pen" : state.tool, true);
+    }
     if (this.options.writingPresets) {
       for (const [id, swatch] of this.colorSwatches) {
         const active = id === this.options.writingPresets.selectedIds[this.writingTool];

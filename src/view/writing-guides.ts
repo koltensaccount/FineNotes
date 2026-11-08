@@ -5,18 +5,25 @@ import { renderColorMixer } from "./color-picker";
 import { installPopoverDismiss, placePopover } from "./template-picker";
 
 export interface WritingGuideHost {
-  state: () => { enabled: boolean; style: WritingGuideStyle; eligible: boolean; paper: string; scale: number };
+  state: () => { enabled: boolean; includeInPreview?: boolean; style: WritingGuideStyle; eligible: boolean; paper: string; scale: number };
   enable: (enabled: boolean) => void;
+  includeInPreview?: (enabled: boolean) => void;
   configure: (patch: Partial<WritingGuideStyle>) => void;
   subscribe: (changed: () => void) => () => void;
 }
 
-/** Shared by More's compact popover and Notebook Settings. No document edits. */
+/** Shared by the compact popover and Notebook Settings. */
 export function renderWritingGuideControls(parent: HTMLElement, host: WritingGuideHost): () => void {
   const body = parent.createDiv({ cls: "goodobsidian-writing-guides" });
   const row = body.createEl("label", { cls: "goodobsidian-guide-enable", text: "Enable writing guides" });
   const enabled = row.createEl("input", { type: "checkbox", attr: { "aria-label": "Enable writing guides" } });
   enabled.addEventListener("change", () => host.enable(enabled.checked));
+  const includeInPreview = host.includeInPreview;
+  const output = includeInPreview
+    ? body.createEl("label", { cls: "goodobsidian-guide-enable", text: "Include guides in saved preview" })
+        .createEl("input", { type: "checkbox", attr: { "aria-label": "Include guides in saved preview" } })
+    : null;
+  output?.addEventListener("change", () => includeInPreview?.(output.checked));
   const notice = body.createDiv({ cls: "goodobsidian-popover-hint" });
   const buttons = new Map<string, HTMLButtonElement>();
   const segments = (title: string, choices: readonly string[], choose: (value: string) => void): void => {
@@ -59,7 +66,10 @@ export function renderWritingGuideControls(parent: HTMLElement, host: WritingGui
   const refresh = (): void => {
     const state = host.state(), style = writingGuidesOf(state.style);
     enabled.checked = state.enabled;
-    notice.textContent = "Temporary guides on every page. Never included in PDFs or thumbnails.";
+    if (output) output.checked = state.includeInPreview === true;
+    notice.textContent = output
+      ? "Guide settings are remembered for this handwriting block."
+      : "Temporary guides on every page. Never included in PDFs or thumbnails.";
     for (const [key, control] of sliders) {
       const number = style[key as "spacing" | "thickness" | "opacity"];
       control.input.value = String(key === "opacity" ? Math.round(number * 100) : number);

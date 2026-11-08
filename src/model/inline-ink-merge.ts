@@ -27,7 +27,7 @@ function otherPageData({ strokes, epoch, geometry, clips, ...page }: Page): stri
   const { height, ...dimensions } = geometry;
   return JSON.stringify({
     page, dimensions,
-    clips: clips?.map(({ bounds, updatedAt, ...clip }) => {
+    clips: clips?.map(({ bounds, updatedAt, writingGuides, ...clip }) => {
       const { maxY, ...edges } = bounds;
       return { ...clip, bounds: edges };
     }),
@@ -41,6 +41,12 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
   }
   if (latest.geometry.width !== base.geometry.width || latest.geometry.height < base.geometry.height) {
     throw new Error("The handwriting block was resized elsewhere.");
+  }
+
+  const guideKey = (page: Page): string | undefined => JSON.stringify(page.clips?.[0]?.writingGuides);
+  const guideChanged = guideKey(base) !== guideKey(local);
+  if (guideChanged && guideKey(base) !== guideKey(latest) && guideKey(local) !== guideKey(latest)) {
+    throw new Error("The writing guides were changed elsewhere.");
   }
 
   const before = strokesById(base.strokes);
@@ -67,6 +73,12 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
   const sameOrder = latest.strokes.length === base.strokes.length &&
     latest.strokes.every((stroke, index) => sameStroke(stroke, base.strokes[index]));
   latest.strokes = sameOrder ? local.strokes : [...disk.values()];
+
+  if (guideChanged) {
+    const clip = latest.clips![0];
+    clip.writingGuides = local.clips![0].writingGuides;
+    clip.updatedAt = Date.now();
+  }
 
   if (local.geometry.height > base.geometry.height && local.geometry.height > latest.geometry.height) {
     latest.geometry.height = local.geometry.height;

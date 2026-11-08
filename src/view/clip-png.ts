@@ -1,3 +1,5 @@
+import { paintWritingGuides } from "../canvas/writing-guides";
+import type { EmbedWritingGuides } from "../model/writing-guides";
 import { equationBounds } from "../model/equation";
 import { paintEquation } from "../canvas/equation-paint";
 import type { PdfBackdropCache } from "./pdf-backdrop";
@@ -7,6 +9,7 @@ import type { PdfBackdropCache } from "./pdf-backdrop";
 
 import type { Backdrop, Bounds, Page, PageGeometry, SyntheticBackdrop } from "../model/document";
 import { strokeBounds } from "../model/document";
+import { isBlockPage } from "../model/handwrite-block";
 import {
   drawSynthetic,
   paperTheme,
@@ -16,6 +19,7 @@ import {
   drawPlacedImage,
   fillStroke,
   paintTextBox,
+  paperColorOf,
   styleOf,
 } from "../canvas/renderer";
 import { drawPlacedCircuit } from "../circuit/circuit-render";
@@ -27,6 +31,7 @@ export interface RenderClipPngOptions {
   scale?: number;
   images?: ImagePainter | null;
   includeBackground?: boolean;
+  writingGuides?: EmbedWritingGuides;
   usePressure?: boolean;
   highlighterAlpha?: number;
   themeMode?: "dark" | "light";
@@ -42,64 +47,8 @@ export interface RenderClipPngOptions {
   highQuality?: boolean;
 }
 
-export function parseColorToRgb(color: string): { r: number; g: number; b: number; a?: number } | null {
-  const c = color.trim().toLowerCase();
-  if (c === "black") return { r: 0, g: 0, b: 0 };
-  if (c === "white") return { r: 255, g: 255, b: 255 };
-  if (c.startsWith("#")) {
-    const hex = c.slice(1);
-    if (hex.length === 3 || hex.length === 4) {
-      return {
-        r: parseInt(hex[0] + hex[0], 16),
-        g: parseInt(hex[1] + hex[1], 16),
-        b: parseInt(hex[2] + hex[2], 16),
-        a: hex.length === 4 ? parseInt(hex[3] + hex[3], 16) / 255 : 1,
-      };
-    }
-    if (hex.length === 6 || hex.length === 8) {
-      return {
-        r: parseInt(hex.slice(0, 2), 16),
-        g: parseInt(hex.slice(2, 4), 16),
-        b: parseInt(hex.slice(4, 6), 16),
-        a: hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
-      };
-    }
-  }
-  const rgbMatch = /^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(c);
-  if (rgbMatch) {
-    return {
-      r: parseInt(rgbMatch[1], 10),
-      g: parseInt(rgbMatch[2], 10),
-      b: parseInt(rgbMatch[3], 10),
-    };
-  }
-  return null;
-}
-
-/**
- * Intelligently convert black/dark text to white in dark mode and vice versa,
- * while preserving vibrant colors (blue, red, green, etc.).
- */
-export function adaptColorForTheme(color: string, isDark: boolean): string {
-  const rgb = parseColorToRgb(color);
-  if (!rgb) return color;
-  const maxVal = Math.max(rgb.r, rgb.g, rgb.b);
-  const minVal = Math.min(rgb.r, rgb.g, rgb.b);
-  const isMonochrome = (maxVal - minVal) <= 35; // grayscale or neutral
-
-  if (isDark) {
-    // In dark mode: black or very dark text/strokes become white
-    if (isMonochrome && maxVal <= 90) {
-      return "#ffffff";
-    }
-  } else {
-    // In light mode: white or very light text/strokes become black
-    if (isMonochrome && minVal >= 180) {
-      return "#1a1a1a";
-    }
-  }
-  return color;
-}
+import { parseColorToRgb, isPaperDark, adaptColorForTheme } from "../canvas/contrast";
+export { parseColorToRgb, isPaperDark, adaptColorForTheme };
 
 function boundsMeet(a: Bounds, b: Bounds): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
@@ -160,6 +109,10 @@ export async function renderClipPng(
       : typeof document !== "undefined" && document.body.classList.contains("theme-dark");
   const theme = paperTheme(isDark);
   const includeBackground = options.includeBackground ?? (options.pdf ? true : false);
+  const blockPaper = isBlockPage(page) && page.backdrop.kind !== "pdf";
+  const contrast = !includeBackground ? isDark
+    : blockPaper ? (isPaperDark(paperColorOf(page, theme)) ? "dark" : "light")
+    : "disabled";
 
   ctx.save();
   ctx.scale(scale, scale);
@@ -173,6 +126,8 @@ export async function renderClipPng(
       if (!entry.ok || !entry.box) throw new Error(entry.ok ? "Missing PDF region" : entry.reason);
       try { ctx.drawImage(entry.canvas,entry.box.x,entry.box.y,entry.box.w,entry.box.h); }
       finally { if("close" in entry.canvas) (entry.canvas as { close?: () => void }).close?.(); else {entry.canvas.width=0;entry.canvas.height=0;} }
+    } else if (blockPaper) {
+      drawSynthetic(ctx, page.backdrop, geom, theme);
     } else if (options.backdropPainter && page.backdrop) {
       options.backdropPainter.paint(ctx, page.backdrop, geom, 1);
     } else {
@@ -185,6 +140,10 @@ export async function renderClipPng(
   }
 
   const cropBox: Bounds = { minX, minY, maxX, maxY };
+  if (options.writingGuides?.includeInPreview) {
+    const paper = includeBackground ? paperColorOf(page, theme) : theme.paper;
+    paintWritingGuides(ctx, page, cropBox, options.writingGuides.style, paper, 1, scale);
+  }
 
   // 2. Draw placed images
   const pictures = page.images ?? [];
@@ -226,7 +185,7 @@ export async function renderClipPng(
 
   for (const equation of page.equations ?? []) {
     if (!boundsMeet(equationBounds(equation), cropBox)) continue;
-    const color = includeBackground ? equation.color : adaptColorForTheme(equation.color, isDark);
+    const color = adaptColorForTheme(equation.color, contrast);
     paintEquation(ctx, color === equation.color ? equation : { ...equation, color });
   }
 
@@ -239,12 +198,8 @@ export async function renderClipPng(
         cropBox,
       )
     ) {
-      if (!includeBackground) {
-        const adaptedColor = adaptColorForTheme(box.color, isDark);
-        paintTextBox(ctx, adaptedColor === box.color ? box : { ...box, color: adaptedColor });
-      } else {
-        paintTextBox(ctx, box);
-      }
+      const color = adaptColorForTheme(box.color, contrast);
+      paintTextBox(ctx, color === box.color ? box : { ...box, color });
     }
   }
 
@@ -252,13 +207,9 @@ export async function renderClipPng(
   for (const stroke of page.strokes ?? []) {
     const sb = strokeBounds(stroke);
     if (sb && !boundsMeet(sb, cropBox)) continue;
-    if (!includeBackground) {
-      const adaptedColor = adaptColorForTheme(stroke.color, isDark);
-      const adaptedStroke = adaptedColor === stroke.color ? stroke : { ...stroke, color: adaptedColor };
-      fillStroke(ctx, adaptedStroke.pts, styleOf(adaptedStroke, options.usePressure ?? true), options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA);
-    } else {
-      fillStroke(ctx, stroke.pts, styleOf(stroke, options.usePressure ?? true), options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA);
-    }
+    const color = adaptColorForTheme(stroke.color, contrast);
+    const adapted = color === stroke.color ? stroke : { ...stroke, color };
+    fillStroke(ctx, stroke.pts, styleOf(adapted, options.usePressure ?? true), options.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA);
   }
 
   ctx.restore();

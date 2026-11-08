@@ -35,6 +35,7 @@ export interface PointerSample {
   pressure: number;
   tiltX: number;
   tiltY: number;
+  timeStamp?: number;
 }
 
 export type PointerDebugType = "down" | "move" | "up" | "cancel";
@@ -127,6 +128,7 @@ export class PointerController {
     private readonly listener: PointerControllerCallbacks,
     /** Space is held: a pen or mouse coming down pans like a finger (FineNotes#7). */
     private readonly handHeld: () => boolean = () => false,
+    private readonly nativeTouchScroll: () => boolean = () => false,
   ) {
     this.fingers = new FingerGesture(listener);
     this.handlers = {
@@ -161,6 +163,7 @@ export class PointerController {
 
   private pressed(event: PointerEvent): void {
     if (event.pointerType === "mouse" && event.button != null && event.button !== 0) return;
+    if (event.pointerType === "touch" && this.nativeTouchScroll()) return;
     const { pointerId, clientX, clientY, timeStamp } = event;
     const role = roleOf(event.pointerType, this.stroke !== null);
     if (role === "draw" && this.stroke === null && this.handHeld()) {
@@ -234,7 +237,7 @@ export class PointerController {
   private sample(event: PointerEvent): PointerSample {
     const at = this.toLocal(event.clientX, event.clientY);
     const { pressure, tiltX, tiltY } = event;
-    return { x: at.x, y: at.y, pressure, tiltX, tiltY };
+    return { x: at.x, y: at.y, pressure, tiltX, tiltY, timeStamp: event.timeStamp };
   }
 
   /** One position with a fraction is enough: this device's pen does not round. */

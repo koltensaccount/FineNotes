@@ -1,9 +1,10 @@
+import { paintWritingGuides } from "../canvas/writing-guides";
 import { equationBounds } from "../model/equation";
 import { paintEquation } from "../canvas/equation-paint";
 import { relinkDocument } from "../model/moved-files";
-import { renderClipPng } from "./clip-png";
+import { renderClipPng, adaptColorForTheme, parseColorToRgb } from "./clip-png";
 import { findBlockInDocument, resolveBlockBounds } from "../model/handwrite-block";
-import { startInlineHandwriteSession, getActiveInlineSession } from "./inline-handwrite";
+import { startInlineHandwriteSession, getActiveInlineSession, type InlineHandwriteSession } from "./inline-handwrite";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkView } from "./ink-view";
 import { PdfBackdropCache } from "./pdf-backdrop";
@@ -32,7 +33,6 @@ import {
   type InkDocument,
   type NotebookClip,
   type Page,
-  clipCurrentBounds,
   findClip,
   strokeBounds,
 } from "../model/document";
@@ -45,7 +45,7 @@ import {
   paperColorOf,
   styleOf,
 } from "../canvas/renderer";
-import { LIGHT_PAPER } from "../canvas/backdrop";
+import { LIGHT_PAPER, DARK_PAPER } from "../canvas/backdrop";
 import { DEFAULT_HIGHLIGHTER_ALPHA } from "../constants";
 import { drawPlacedCircuit } from "../circuit/circuit-render";
 import { stripInkSuffix } from "../model/new-notebook";
@@ -72,6 +72,11 @@ export class FineNotesEmbedManager {
   readonly pdfCache: PdfBackdropCache;
   private readonly activeEmbedViews = new Set<FineNotesEmbedView>();
   private readonly liveNotebookEmbeds = new Map<HTMLElement, { mount: HTMLElement; view: FineNotesEmbedView; src: string }>();
+
+  /** Returns the active inline handwriting session, if one is currently active. */
+  getActiveInlineSession(): InlineHandwriteSession | null {
+    return getActiveInlineSession();
+  }
 
   /** Refresh theme-dependent PNGs, including notebooks that are not open. */
   refreshPngEmbeds(file?: TFile): Promise<void> {
@@ -100,16 +105,16 @@ export class FineNotesEmbedManager {
             for (const page of doc.pages) {
               const geom = page.geometry ?? { width: 1024, height: 1366 };
               const assets = (page.clips ?? []).filter(clip => clip.imagePath).map(clip => ({
-                path: clip.imagePath!, bounds: resolveBlockBounds(page, clip), padding: 8,
+                path: clip.imagePath!, bounds: resolveBlockBounds(page, clip), padding: 8, writingGuides: clip.writingGuides,
               }));
-              if (page.pageEmbedPath) assets.push({path: page.pageEmbedPath, bounds: {minX: 0, minY: 0, maxX: geom.width, maxY: geom.height}, padding: 0});
+              if (page.pageEmbedPath) assets.push({path: page.pageEmbedPath, bounds: {minX: 0, minY: 0, maxX: geom.width, maxY: geom.height}, padding: 0, writingGuides: undefined});
               for (const asset of assets) {
                 if (this.disposed || this.pngRefreshPending || file.stat.mtime !== mtime) break;
                 const image = this.app.vault.getAbstractFileByPath(asset.path);
                 if (!(image instanceof TFile)) continue;
                 const buffer = await renderClipPng(page, asset.bounds, {
                   images: this.imageCache, backdropPainter: this.backdropPainter, pdf: this.pdfCache,
-                  includeBackground, themeMode, padding: asset.padding,
+                  includeBackground, themeMode, padding: asset.padding, writingGuides: asset.writingGuides,
                   usePressure: this.plugin.settings.pressureWidth,
                   highlighterAlpha: this.plugin.settings.highlighterAlpha,
                 });
@@ -178,12 +183,19 @@ export class FineNotesEmbedManager {
       }
     };
 
-    this.plugin.registerEvent(this.app.workspace.on("css-change", () => { void this.refreshPngEmbeds(); }));
+    this.plugin.registerEvent(
+      this.app.workspace.on("css-change", () => {
+        void this.refreshPngEmbeds();
+        for (const view of this.activeEmbedViews) {
+          view.refresh();
+        }
+      }),
+    );
 
     // Watch vault modifications to update embedded notes in real-time
     this.plugin.registerEvent(
       this.app.vault.on("modify", (file) => {
-        if (file instanceof TFile && file.extension === "png" && /-clip-|-page-/i.test(file.name)) {
+        if (file instanceof TFile && file.extension === "png" && /-(?:clip|page|block)-/i.test(file.name)) {
           this.refreshEmbedImagesInDom(file);
         }
         if (file instanceof TFile && this.plugin.isInkFile(file)) {
@@ -477,6 +489,7 @@ export class FineNotesEmbedManager {
     let page: Page | null = null;
     let bounds: Bounds | null = null;
     let isClip = false;
+    let writingGuides: NotebookClip["writingGuides"];
 
     const clipMatch = /^(.*?)-(?:clip)-([a-zA-Z0-9_-]+)\.png$/i.exec(imageFile.name);
     const pageMatch = /^(.*?)-(?:page)-(\d+)\.png$/i.exec(imageFile.name);
@@ -531,8 +544,9 @@ export class FineNotesEmbedManager {
           );
           if (clip) {
             isClip = true;
+            writingGuides = clip.writingGuides;
             page = p;
-            bounds = clipCurrentBounds(p, clip);
+            bounds = resolveBlockBounds(p, clip);
             break;
           }
           if (p.pageEmbedPath === imageFile.path || p.pageEmbedPath?.endsWith("/" + imageFile.name) || (pageMatch && i === parseInt(pageMatch[2], 10) - 1)) {
@@ -560,6 +574,7 @@ export class FineNotesEmbedManager {
         highlighterAlpha: this.plugin.settings.highlighterAlpha,
         themeMode: isDark ? "dark" : "light",
         padding: isClip ? 8 : 0,
+        writingGuides,
         highQuality: true,
         scale: 3.0,
       });
@@ -731,7 +746,7 @@ export class FineNotesEmbedManager {
 
       if (matches) {
         const cleanBase = (img.src || srcAttr).split("?")[0];
-        img.src = `${cleanBase}?t=${now}`;
+        img.src = `${cleanBase}?t=${img.classList?.contains("finenotes-block-preview") ? file.stat.mtime : now}`;
       }
     }
   }
@@ -951,6 +966,7 @@ export class FineNotesEmbedView {
       evt.preventDefault();
       evt.stopPropagation();
       if (this.containerEl?.hasClass("finenotes-inline-active")) return;
+      if (evt.target instanceof Element && evt.target.closest(".goodobsidian-toolbar, .goodobsidian-options, .goodobsidian-popover, .finenotes-inline-surface-host")) return;
       if (evt.altKey || evt.metaKey || evt.ctrlKey) {
         const linkText = `${this.file.path}${this.subpath}`;
         void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
@@ -1107,7 +1123,7 @@ export class FineNotesEmbedView {
     const cssHeight = Math.round((cssWidth * cropH) / cropW);
     const dpr = window.devicePixelRatio || 1;
 
-    if (!this.canvas) {
+    if (!this.canvas?.isConnected) {
       this.containerEl.empty();
       this.canvas = this.containerEl.createEl("canvas", {
         cls: "finenotes-embed-canvas",
@@ -1131,9 +1147,53 @@ export class FineNotesEmbedView {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const isDark =
+      typeof document !== "undefined" &&
+      (this.containerEl?.ownerDocument?.body?.classList.contains("theme-dark") ??
+        document.body?.classList.contains("theme-dark") ??
+        false);
+    const paperTheme = this.inlineBlockId && isDark ? DARK_PAPER : LIGHT_PAPER;
+    this.backdropPainter.theme = paperTheme;
+
+    const includeBackground = !this.inlineBlockId || this.manager.plugin.settings.embedBackground === true;
+    const paperBg = paperColorOf(page, paperTheme);
+    const rgb = parseColorToRgb(paperBg);
+    const contrast = !this.inlineBlockId ? "disabled" : (
+      includeBackground && rgb ? (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000 < 128 : isDark
+    ) ? "dark" : "light";
+
+    this.containerEl.toggleClass("is-transparent", !includeBackground);
+
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = paperColorOf(page, LIGHT_PAPER);
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (includeBackground) {
+      ctx.fillStyle = paperBg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    const imageFile = this.inlineBlockId && clip?.imagePath
+      ? this.app.vault.getAbstractFileByPath(clip.imagePath)
+      : null;
+    let preview = this.containerEl.querySelector<HTMLImageElement>("img.finenotes-block-preview");
+    if (imageFile instanceof TFile) {
+      if (!preview) {
+        const container = this.containerEl;
+        preview = container.createEl("img", {
+          cls: "finenotes-block-preview",
+          attr: { alt: "Handwritten ink" },
+        });
+        preview.addEventListener("load", () => container.toggleClass("has-png-preview", true));
+        preview.addEventListener("error", () => container.toggleClass("has-png-preview", false));
+      }
+      const url = this.app.vault.getResourcePath(imageFile).split("?")[0];
+      preview.style.width = `${cssWidth}px`;
+      const src = `${url}?t=${imageFile.stat.mtime}`;
+      if (preview.getAttribute("src") !== src) preview.src = src;
+    } else {
+      preview?.remove();
+      this.containerEl.removeClass("has-png-preview");
+    }
 
     const scaleX = canvas.width / cropW;
     const scaleY = canvas.height / cropH;
@@ -1166,6 +1226,11 @@ export class FineNotesEmbedView {
       { deviceScale: scaleX },
     );
 
+    if (clip?.writingGuides?.includeInPreview) {
+      paintWritingGuides(ctx, page, cropBounds, clip.writingGuides.style,
+        includeBackground ? paperBg : paperTheme.paper, 1, scaleX);
+    }
+
     // 2. Images
     for (const img of page.images) {
       if (boxesIntersect(img.x, img.y, img.w, img.h, cropBounds)) {
@@ -1183,13 +1248,17 @@ export class FineNotesEmbedView {
     }
 
     for (const equation of page.equations ?? []) {
-      if (boundsIntersect(equationBounds(equation), cropBounds)) paintEquation(ctx, equation);
+      if (boundsIntersect(equationBounds(equation), cropBounds)) {
+        const color = adaptColorForTheme(equation.color, contrast);
+        paintEquation(ctx, color === equation.color ? equation : { ...equation, color });
+      }
     }
 
     // 4. Text boxes
     for (const box of page.textBoxes) {
       if (boxesIntersect(box.x, box.y, box.w, box.h ?? 30, cropBounds)) {
-        paintTextBox(ctx, box);
+        const adaptedColor = adaptColorForTheme(box.color, contrast);
+        paintTextBox(ctx, adaptedColor === box.color ? box : { ...box, color: adaptedColor });
       }
     }
 
@@ -1197,10 +1266,12 @@ export class FineNotesEmbedView {
     for (const stroke of page.strokes) {
       const sb = strokeBounds(stroke);
       if (!sb || boundsIntersect(sb, cropBounds)) {
+        const adaptedColor = adaptColorForTheme(stroke.color, contrast);
+        const strokeToPaint = adaptedColor === stroke.color ? stroke : { ...stroke, color: adaptedColor };
         fillStroke(
           ctx,
-          stroke.pts,
-          styleOf(stroke, this.usePressure),
+          strokeToPaint.pts,
+          styleOf(strokeToPaint, this.usePressure),
           this.highlighterAlpha ?? DEFAULT_HIGHLIGHTER_ALPHA,
         );
       }

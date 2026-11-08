@@ -1,3 +1,4 @@
+import { expandBlockPageIfNeeded } from "../model/handwrite-block";
 import { clipCurrentBounds } from "../model/document";
 import { penDynamicsProfile } from "../model/pen-dynamics";
 import { connectRecognizedLine } from "../ink/line-connection";
@@ -81,6 +82,7 @@ import {
   penFor,
   paperColorOf,
 } from "../canvas/renderer";
+import { isPaperDark } from "../canvas/contrast";
 import {
   type BoxFrame,
   type LassoFilter,
@@ -439,6 +441,9 @@ export interface InkSurfaceOptions {
   /** Colours the selection's "Colour" row offers (the pen's palette); default {@link PALETTE}. */
   palette?: readonly string[];
   app?: import("obsidian").App;
+  /** Whether the surface is operating in an inline Handwrite Here session. */
+  inline?: boolean;
+  hideMacCanvasCursor?: boolean;
 }
 
 /** What the surface tells its host, and asks it. Only `onChange` is required. */
@@ -813,6 +818,10 @@ export class InkSurface {
   private offPageTimer = 0;
   private offPageFade: Animation | null = null;
   private readonly indicatorEl: HTMLElement;
+  private readonly bottomControlsEl: HTMLElement;
+  private readonly fitWidthBtn: HTMLElement;
+  private readonly navLockBtn: HTMLElement;
+  private isNavLocked = true;
   /** "68%", while the zoom changes. */
   private readonly zoomReadoutEl: HTMLElement;
   private readonly thumbYEl: HTMLElement;
@@ -1073,6 +1082,9 @@ export class InkSurface {
   } | null = null;
   /** Where the pen was last seen (layout space), for a cancel, which has no position. */
   private penAt: Pt | null = null;
+  private inlineEdgePointer: { x: number; y: number; sample: PointerSample } | null = null;
+  private inlineEdgeFrameTime = 0;
+  private readonly macDrawingInput = Platform.isDesktopApp && Platform.isMacOS;
   /**
    * An eraser stroke or shape that lifted with "Return after one use" on:
    * the switch waits out the rejoin window (`input/pen-rejoin.ts`), since a
@@ -1092,6 +1104,8 @@ export class InkSurface {
   private wetRevision = -1;
   /** A pane with no size yet is laid out again on the next frames, a bounded number of times. */
   private readonly sizeWait = new SizeWait();
+  private readonly isInline: boolean;
+  private inlineZoomSet = false;
 
   // The diagnostics HUD: its pointer log, when it is next redrawn, and the
   // numbers the surface adds (the last shape verdict, layouts, frame rate).
@@ -1146,6 +1160,7 @@ export class InkSurface {
   ) {
     this.paperIsDark = options.darkPaper === true;
     this.paper = paperTheme(this.paperIsDark);
+    this.isInline = options.inline === true;
     this.app = options.app;
     this.toolSeen = toolState.tool;
     this.drawingTool = drawingToolOf("pen", toolState.tool);
@@ -1159,6 +1174,14 @@ export class InkSurface {
         }),
     );
     this.scrollEl = this.surfaceEl.createDiv({ cls: "goodobsidian-scroll" });
+    if (this.macDrawingInput) {
+      // PointerController prevents the default focus action on pen-down.
+      // Give Mac Undo/Redo shortcuts a target inside the drawing view.
+      this.scrollEl.tabIndex = -1;
+      // Keep this a canvas preference. Sidecar can alternate pen and mouse
+      // events over the same canvas, so event type cannot own cursor visibility.
+      this.scrollEl.toggleClass("is-mac-cursor-hidden", options.hideMacCanvasCursor === true);
+    }
     this.paperEl = this.scrollEl.createDiv({ cls: "goodobsidian-paper" });
     this.textBoxesEl = this.paperEl.createDiv({ cls: "goodobsidian-textboxes" });
     this.textDraftEl = this.textBoxesEl.createDiv({ cls: "goodobsidian-textbox-draft is-hidden" });
@@ -1169,11 +1192,41 @@ export class InkSurface {
     // pull to add a page. (Read from Obsidian's app.js; it listens on the
     // bubbling path, so the stopPropagation below also holds, but not for a
     // touch on a text box, which that guard lets through.)
-    this.surfaceEl.dataset.ignoreSwipe = "true";
+    if (!this.isInline) this.surfaceEl.dataset.ignoreSwipe = "true";
     this.indicatorEl = this.surfaceEl.createDiv({ cls: "goodobsidian-pageindicator is-idle" });
-    // A readout, not a control: a button there would sit under a resting palm
-    // the moment a two-finger zoom gives way to writing.
-    this.zoomReadoutEl = this.surfaceEl.createDiv({ cls: "goodobsidian-zoomreadout is-idle" });
+    this.bottomControlsEl = this.surfaceEl.createDiv({ cls: "goodobsidian-bottom-controls" });
+    this.fitWidthBtn = this.bottomControlsEl.createEl("button", {
+      cls: "goodobsidian-bottom-btn goodobsidian-fitwidth-btn goodobsidian-fit-width clickable-icon",
+      attr: {
+        "aria-label": "Fit width",
+        title: "Fit width — fit writing page to viewport",
+      },
+    });
+    iconInto(this.fitWidthBtn, "chevrons-left-right", "↔");
+    this.fitWidthBtn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      this.fitWidth();
+    });
+
+    this.navLockBtn = this.bottomControlsEl.createEl("button", {
+      cls: "goodobsidian-bottom-btn goodobsidian-navlock-btn goodobsidian-nav-lock clickable-icon is-locked",
+      attr: {
+        "aria-label": "Unlock notebook viewport",
+        title: "Unlock notebook viewport",
+        "aria-pressed": "true",
+      },
+    });
+    iconInto(this.navLockBtn, "lock", "🔒");
+    this.navLockBtn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      this.toggleNavLock();
+    });
+
+    // The inline viewport has its own navigation affordances. Notebook
+    // views retain their existing zoom controls and keyboard shortcuts.
+    this.fitWidthBtn.toggle(this.isInline);
+    this.navLockBtn.toggle(this.isInline);
+    this.zoomReadoutEl = this.bottomControlsEl.createDiv({ cls: "goodobsidian-zoomreadout is-idle" });
     this.zoomReadoutEl.setAttribute("aria-hidden", "true");
     this.thumbYEl = this.surfaceEl.createDiv({
       cls: "goodobsidian-scrollthumb is-vertical is-idle",
@@ -1356,6 +1409,18 @@ export class InkSurface {
     );
     renderer.highlighterAlpha = options.highlighterAlpha;
     renderer.paper = this.paper;
+    if (options.inline) {
+      renderer.adaptContrast = true;
+      renderer.inlinePaper = true;
+      const owner = this.surfaceEl.ownerDocument;
+      const followNote = (): void => {
+        if (!this.isInlineLocked) return;
+        this.syncViewport();
+        this.requestFrame();
+      };
+      owner.addEventListener("scroll", followNote, true);
+      this.disposers.push(() => owner.removeEventListener("scroll", followNote, true));
+    }
     this.renderer = renderer;
 
     // Pen, mouse and finger input arrive through the transparent overlay,
@@ -1365,6 +1430,7 @@ export class InkSurface {
       (clientX, clientY) => this.toLayout(clientX, clientY),
       this.pointerCallbacks,
       () => this.handHeld,
+      () => this.isInlineLocked,
     );
     input.attach();
     this.pointerInput = input;
@@ -1414,7 +1480,7 @@ export class InkSurface {
           return;
         }
       }
-      if (onTextBox(event.target)) return;
+      if (this.isInlineLocked || onTextBox(event.target)) return;
       // The lasso's menu scrolls by itself when it is taller than the view
       // (the custom colour picker): a finger there must not be cancelled.
       if (onSelectionMenu(event.target)) {
@@ -1522,6 +1588,8 @@ export class InkSurface {
     // A pane that changes size (a sidebar, a rotation, a split) is laid out again.
     const sizeWatch = new ResizeObserver(() => this.layout());
     sizeWatch.observe(this.surfaceEl);
+    const noteScroller = this.isInline ? this.inlineNoteScroller() : null;
+    if (noteScroller) sizeWatch.observe(noteScroller);
     this.disposers.push(() => sizeWatch.disconnect());
 
     // Every path that changes the history — a stroke, an erase, a withdrawn
@@ -1792,6 +1860,13 @@ export class InkSurface {
     this.requestFrame();
   }
 
+  private isPaperDark(pageIndex?: number): boolean {
+    const theme = this.paper ?? paperTheme(this.paperIsDark ?? false);
+    const page = pageIndex !== undefined ? this.doc?.pages?.[pageIndex] : this.doc?.pages?.[this.pageIndex];
+    const bg = page && !this.isInlineLocked ? paperColorOf(page, theme) : theme.paper;
+    return isPaperDark(bg);
+  }
+
   get darkPaper(): boolean {
     return this.paperIsDark;
   }
@@ -1800,7 +1875,7 @@ export class InkSurface {
   resetView(): void {
     this.pinch = null;
     this.zoomAnim = null;
-    this.userZoom = this.minZoom;
+    this.userZoom = this.isInline ? 1.0 : this.minZoom;
     this.ensurePaperSize();
     this.layout();
     // After the layout, which would otherwise keep the current page of a row centred.
@@ -1808,6 +1883,96 @@ export class InkSurface {
     this.syncViewport();
     this.requestFrame();
     this.reportStatus();
+  }
+
+  get navLocked(): boolean {
+    return this.isNavLocked;
+  }
+
+  get isHand(): boolean {
+    return this.handHeld;
+  }
+
+  get currentTool(): ActiveTool {
+    return this.toolSeen;
+  }
+
+  get fitWidthButton(): HTMLElement {
+    return this.fitWidthBtn;
+  }
+
+  get navLockButton(): HTMLElement {
+    return this.navLockBtn;
+  }
+
+  private get isInlineLocked(): boolean {
+    return this.isInline && this.isNavLocked;
+  }
+
+  toggleNavLock(): void {
+    if (!this.isInline) return;
+    this.finishPointerInput();
+    this.isNavLocked = !this.isNavLocked;
+    this.setHand(false);
+    this.scroller.cancel();
+    this.pinch = null;
+    this.zoomAnim = null;
+    this.userZoom = 1;
+    this.scroller.setPosition(0, 0);
+    this.surfaceEl.closest(".finenotes-inline-active")?.classList.toggle("is-inline-locked", this.isNavLocked);
+    this.navLockBtn.toggleClass("is-locked", this.isNavLocked);
+    this.navLockBtn.toggleClass("is-unlocked", !this.isNavLocked);
+    this.navLockBtn.setAttribute("aria-pressed", String(this.isNavLocked));
+    const label = this.isNavLocked ? "Unlock notebook viewport" : "Return to Markdown viewport";
+    this.navLockBtn.setAttribute("aria-label", label);
+    this.navLockBtn.setAttribute("title", label);
+    iconInto(this.navLockBtn, this.isNavLocked ? "lock" : "unlock", this.isNavLocked ? "🔒" : "🔓");
+    if (this.renderer) {
+      this.renderer.inlinePaper = this.isNavLocked;
+      this.renderer.invalidateAll();
+    }
+    this.layout();
+    this.flashChrome(true);
+  }
+
+  /**
+   * Fit the full writing page width exactly to the inner writing viewport,
+   * without notebook desk margins.
+   */
+  fitWidth(): void {
+    if (this.isInlineLocked || this.doc.pages.length === 0) return;
+    const page = this.doc.pages[this.pageIndex] ?? this.doc.pages[0];
+    const pageWidth = page?.geometry?.width ?? DEFAULT_PAPER_WIDTH;
+    if (!pageWidth || this.cssW <= 0) return;
+
+    const targetScale = this.cssW / pageWidth;
+    this.pinch = null;
+    this.zoomAnim = null;
+    this.userZoom = this.clampZoom(targetScale);
+    this.ensurePaperSize();
+    this.layout();
+
+    const box = this.pageLayout.boxes[this.pageIndex] ?? this.pageLayout.boxes[0];
+    const pageLeftInLayout = box ? box.x : 0;
+    const targetX = pageLeftInLayout * this.scale;
+    const targetY = (box ? box.y : 0) * this.scale;
+    this.scroller.setPosition(targetX, targetY);
+    this.syncViewport();
+    this.syncTextBoxes();
+    this.syncImageOverlay();
+    this.syncSelectionOverlay();
+    this.flashChrome(true);
+    this.requestFrame();
+    this.reportStatus();
+  }
+
+  /** Map client screen coordinates to page coordinates, for gestures and assertions. */
+  clientToPage(clientX: number, clientY: number): { x: number; y: number; pageIndex: number } | null {
+    const at = this.toLayout(clientX, clientY);
+    const box = boxAtPoint(this.pageLayout, at.x, at.y);
+    if (!box) return null;
+    const p = this.toPage(box, at);
+    return { x: p.x, y: p.y, pageIndex: box.index };
   }
 
   zoomIn(): void {
@@ -1973,8 +2138,8 @@ export class InkSurface {
 
   /** Let (or stop) a pull past the last page add a page. The host knows single pages. */
   setPullToAddPage(enabled: boolean): void {
-    this.pullAddEnabled = enabled;
-    if (!enabled) this.pullAdd.hide();
+    this.pullAddEnabled = enabled && !this.isInline;
+    if (!this.pullAddEnabled) this.pullAdd.hide();
   }
 
   /** Which way this notebook's pages run. */
@@ -2156,6 +2321,7 @@ export class InkSurface {
    * the key-up then goes elsewhere.
    */
   setHand(held: boolean): void {
+    if (held && this.isInlineLocked) return;
     if (this.handHeld === held) return;
     this.handHeld = held;
     this.scrollEl.toggleClass("is-hand", held);
@@ -2245,6 +2411,18 @@ export class InkSurface {
   layout(): void {
     const renderer = this.renderer;
     if (!renderer) return;
+    const host = this.surfaceEl.parentElement;
+    const inlinePage = this.isInline ? this.doc.pages[0] : undefined;
+    if (host && inlinePage) {
+      const scale = host.clientWidth / inlinePage.geometry.width;
+      const note = this.isInlineLocked ? this.inlineNoteScroller() : null;
+      if (note?.clientHeight) {
+        host.style.setProperty("--finenotes-note-viewport-height", `${note.clientHeight}px`);
+      }
+      host.style.height = this.isInlineLocked && scale > 0
+        ? `${Math.ceil(inlinePage.geometry.height * scale)}px`
+        : "";
+    }
     const { clientWidth: cssW, clientHeight: cssH } = this.surfaceEl;
     const size = this.sizeWait.check(cssW, cssH);
     if (size === "retry") window.requestAnimationFrame(() => this.layout());
@@ -2253,7 +2431,7 @@ export class InkSurface {
     this.cssW = cssW;
     this.cssH = cssH;
 
-    const direction = scrollDirectionOf(this.doc);
+    const direction = this.isInline ? "vertical" : scrollDirectionOf(this.doc);
     const turned = direction !== this.direction;
     // The page being read stays the page being read when the pages turn.
     const reading = this.pageIndex;
@@ -2265,7 +2443,10 @@ export class InkSurface {
     const priorAt = this.scroller.position;
     const anchored = this.zoomInitialised && !turned && direction === "vertical" && !this.pinch;
     this.direction = direction;
-    this.pageLayout = layoutPages(this.doc.pages, { direction });
+    this.pageLayout = layoutPages(inlinePage ? [inlinePage] : this.doc.pages, this.isInlineLocked
+      ? { direction, gap: 0, marginX: 0, marginY: 0 }
+      : { direction });
+    if (this.isInline && this.activePage) this.activePage = this.pageLayout.boxes[0] ?? null;
     renderer.setLayout(this.pageLayout);
     // Fit the page stack to the available width, but never magnify past 1:1 —
     // on a wide desktop pane an upscaled page looks like a zoom bug, and the
@@ -2274,7 +2455,9 @@ export class InkSurface {
     // point of the whole design.
     // A row fits one page (and its margins) to the pane, not the whole row.
     const fit = this.pageLayout.fitWidth;
-    this.baseScale = fit > 0 ? Math.min(1, cssW / fit) : 1;
+    this.baseScale = this.isInlineLocked && fit > 0 ? cssW / fit
+      : this.isInline ? 1 : (fit > 0 ? Math.min(1, cssW / fit) : 1);
+    if (this.isInlineLocked) this.userZoom = 1;
     this.updateZoomFloor(cssH);
     if (direction === "horizontal") {
       // One page per screen, as GoodNotes: now the floor is known, space the
@@ -2328,18 +2511,24 @@ export class InkSurface {
   private updateZoomFloor(cssH: number): void {
     let tallest = 0;
     for (const box of this.pageLayout.boxes) tallest = Math.max(tallest, box.height);
+    const fit = this.pageLayout.fitWidth;
     const step = nextZoomFloor({
       zoom: this.userZoom,
-      floor: this.minZoom,
-      newFloor: fitPageZoom(tallest, this.baseScale, cssH),
+      floor: this.isInline ? Math.min(0.5, fit > 0 ? this.cssW / fit : 0.5) : this.minZoom,
+      newFloor: this.isInline ? 1.0 : fitPageZoom(tallest, this.baseScale, cssH),
       initialised: this.zoomInitialised,
       // A pane made short by the keyboard must not re-fit the page into it.
       keyboard: document.body.hasClass(TEXT_EDITING_BODY_CLASS) || keyboardHeight() > 0,
     });
-    this.minZoom = step.floor;
+    this.minZoom = this.isInline ? Math.min(0.5, fit > 0 ? this.cssW / fit : 0.5) : step.floor;
     this.zoomInitialised = true;
     if (this.pinch) return;
-    if (step.zoom !== this.userZoom) {
+    if (this.isInline) {
+      if (!this.inlineZoomSet) {
+        this.userZoom = 1.0;
+        this.inlineZoomSet = true;
+      }
+    } else if (step.zoom !== this.userZoom) {
       this.zoomAnim = null;
       this.userZoom = step.zoom;
     }
@@ -2406,7 +2595,18 @@ export class InkSurface {
     if (!this.renderer) return;
     const scale = this.unitScale;
     const paperWidth = this.pageLayout.width * scale;
-    const { x, y } = this.scroller.position;
+    const host = this.surfaceEl.parentElement;
+    const note = this.isInlineLocked ? this.inlineNoteScroller() : null;
+    // Keep the bounded backing canvases over the part of the block on screen.
+    // The full-height host remains in the Markdown flow and owns the space.
+    const noteOffset = host && note
+      ? clamp(note.getBoundingClientRect().top - host.getBoundingClientRect().top, 0,
+        Math.max(0, host.clientHeight - this.cssH))
+      : 0;
+    if (this.isInline) this.surfaceEl.style.top = this.isInlineLocked ? `${noteOffset}px` : "";
+    const { x, y } = this.isInlineLocked
+      ? { x: 0, y: Math.max(0, noteOffset) }
+      : this.scroller.position;
     // A page narrower than the pane floats centred; a wider one scrolls. A row
     // always scrolls: its scroll range already centres the first and last page.
     this.offsetX =
@@ -2457,7 +2657,7 @@ export class InkSurface {
     this.syncScrollThumbs(true);
     this.chromeUntil.thumbs = t + THUMB_HOLD_MS;
     if (zoom) {
-      this.zoomReadoutEl.setText(`${zoomPercent(this.scale)}%`);
+      this.zoomReadoutEl.setText(`${this.isInline ? Math.round(this.scale * 100) : zoomPercent(this.scale)}%`);
       this.zoomReadoutEl.removeClass("is-idle");
       this.chromeUntil.zoom = t + ZOOM_READOUT_HOLD_MS;
     }
@@ -2543,7 +2743,8 @@ export class InkSurface {
     const dragScrolling = this.stepSelectionDragScroll(t);
     const scrolling = this.scroller.step(t);
     const zooming = this.stepZoomAnim(t);
-    const moving = scrolling || zooming || dragScrolling;
+    const inlineScrolling = this.stepInlineEdgeScroll(t);
+    const moving = scrolling || zooming || dragScrolling || inlineScrolling;
     const busy = moving || this.scroller.isDragging || this.pinch !== null;
     this.noteViewMotion(busy);
     this.syncViewport();
@@ -2661,6 +2862,7 @@ export class InkSurface {
    * value past the limits, everything else clamps first.
    */
   private applyZoom(nextZoom: number, anchorX: number, anchorY: number): void {
+    if (this.isInlineLocked) return;
     const before = this.toLayout(anchorX, anchorY);
     this.userZoom = nextZoom;
     this.ensurePaperSize();
@@ -2688,6 +2890,7 @@ export class InkSurface {
   }
 
   private onWheel(event: WheelEvent): void {
+    if (this.isInlineLocked) return;
     event.preventDefault();
     const unit = event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? this.cssH : 1;
     if (event.ctrlKey || event.metaKey) {
@@ -3490,6 +3693,8 @@ export class InkSurface {
       // and small handwriting lost most of its samples.
       minDistance: this.atFitZoom(MIN_SAMPLE_DISTANCE),
       pressureEnabled: this.toolState.pressureEnabled,
+      // Preserve the established native iPad Pencil filter.
+      timeBasedStabilization: !Platform.isIosApp && !Platform.isAndroidApp,
       ...penDynamicsProfile(this.toolState.penDynamics, this.toolState.penType ?? "fountain"),
       // Until a stroke's first reading arrives it is drawn at the pen's
       // pressure on the last stroke, not at 0.5: a light hand (~0.25) saw
@@ -3561,16 +3766,149 @@ export class InkSurface {
     }
   }
 
+  private trackInlineEdgePointer(sample: PointerSample): void {
+    if (!this.isInlineLocked || !this.builder || !this.activePage) return;
+    const rect = this.surfaceEl.getBoundingClientRect();
+    const scale = this.unitScale;
+    this.inlineEdgePointer = {
+      x: rect.left + this.offsetX + sample.x * scale,
+      y: rect.top + (sample.y - this.viewport.scrollY) * scale,
+      sample,
+    };
+    this.requestFrame();
+  }
+
+  private stopInlineEdgeScroll(): void {
+    this.inlineEdgePointer = null;
+    this.inlineEdgeFrameTime = 0;
+  }
+
+  private stepInlineEdgeScroll(t: number): boolean {
+    const pointer = this.inlineEdgePointer;
+    const box = this.activePage;
+    if (!pointer || !box || !this.builder || !this.isInlineLocked || this.snap || this.circleDrag) return false;
+    const note = this.inlineNoteScroller();
+    if (!note) return false;
+    const rect = this.surfaceEl.getBoundingClientRect();
+    const { top, bottom } = this.inlineViewportEdges();
+    const y = pointer.y - rect.top;
+    const depth = Math.min(1, (y - (bottom - 64)) / 64);
+    if (depth <= 0 || y >= bottom || y < top || pointer.x < rect.left || pointer.x >= rect.right) {
+      this.inlineEdgeFrameTime = 0;
+      return false;
+    }
+
+    // Make real document space ahead of the Pencil, then scroll the note
+    // itself. No nested scroll offset or pen-up is needed in Markdown mode.
+    const scale = this.unitScale;
+    const visiblePageBottom = this.viewport.scrollY + bottom / scale - box.y;
+    const height = box.height;
+    this.growInlinePage(visiblePageBottom, 96 / scale);
+    const grown = this.pageLayout.boxes[box.index] ?? box;
+    const visible = this.inlineViewportEdges().bottom;
+    // When growth already revealed room on screen, let the Pencil move into
+    // it before scrolling. Otherwise advance with frame time near the edge.
+    if (visible - (pointer.y - this.surfaceEl.getBoundingClientRect().top) >= 64) {
+      this.inlineEdgeFrameTime = 0;
+      return grown.height !== height;
+    }
+    const dt = this.inlineEdgeFrameTime ? Math.min(32, t - this.inlineEdgeFrameTime) : 16;
+    this.inlineEdgeFrameTime = t;
+    const before = note.scrollTop;
+    const remaining = (grown.y + grown.height - this.viewport.scrollY) * scale - visible;
+    if (remaining <= 0) return grown.height !== height;
+    const distance = Math.min(remaining, Math.max(1, Math.round((45 + 195 * depth) * dt / 1000)));
+    note.scrollTo({ top: before + distance, behavior: "instant" });
+    if (note.scrollTop === before) return grown.height !== height;
+    this.syncViewport();
+
+    // The tip stayed in screen space as paper moved underneath. Project the
+    // same tip through the updated transform and keep it in the same stroke.
+    const sample = { ...pointer.sample, ...this.toLayout(pointer.x, pointer.y), timeStamp: t };
+    this.penAt = sample;
+    this.inkMove(grown, [sample]);
+    return true;
+  }
+
+  private inlineNoteScroller(): HTMLElement | null {
+    return this.surfaceEl.closest<HTMLElement>(".cm-scroller, .markdown-preview-view");
+  }
+
+  private inlineViewportEdges(): { top: number; bottom: number } {
+    const surface = this.surfaceEl.getBoundingClientRect();
+    const note = this.inlineNoteScroller()?.getBoundingClientRect();
+    return {
+      top: note ? Math.max(0, note.top - surface.top) : 0,
+      bottom: note ? Math.min(this.cssH, note.bottom - surface.top) : this.cssH,
+    };
+  }
+
+  private inlineSampleInside(box: PageBox, sample: Pt, edges: { top: number; bottom: number }): boolean {
+    const x = sample.x * this.unitScale + this.offsetX;
+    const y = (sample.y - this.viewport.scrollY) * this.unitScale;
+    return sample.x >= box.x && sample.x < box.x + box.width &&
+      sample.y >= box.y && sample.y < box.y + box.height &&
+      x >= 0 && x < this.cssW && y >= edges.top && y < edges.bottom;
+  }
+
+  private extendAcrossInlineBottom(box: PageBox, sample: Pt): PageBox {
+    if (!this.isInlineLocked || (this.toolState.tool !== "pen" && this.toolState.tool !== "highlighter")) return box;
+    const scale = this.unitScale;
+    const pageBottom = box.y + box.height;
+    const overshoot = (sample.y - pageBottom) * scale;
+    if (overshoot < 0 || overshoot > 48 || sample.x < box.x || sample.x >= box.x + box.width) return box;
+    // A captured Pencil can skip over the last few pixels of a short block
+    // in one event. Extend at that document edge before rejecting the sample.
+    // The window edge and the sides remain stroke boundaries.
+    const surface = this.surfaceEl.getBoundingClientRect();
+    const note = this.inlineNoteScroller()?.getBoundingClientRect();
+    const clientY = surface.top + (sample.y - this.viewport.scrollY) * scale;
+    const bottom = surface.top + (pageBottom - this.viewport.scrollY) * scale;
+    if (bottom > surface.bottom + 1 || (note && clientY >= note.bottom)) return box;
+    this.growInlinePage(sample.y - box.y);
+    return this.pageLayout.boxes[box.index] ?? box;
+  }
+
+  private revealInlineWritingRoom(sample: Pt, box: PageBox): void {
+    const scale = this.unitScale;
+    const { bottom } = this.inlineViewportEdges();
+    const y = (sample.y - this.viewport.scrollY) * scale;
+    if (y < bottom - 48) return;
+    // Extend the region first. Scrolling the note alone can expose the
+    // paragraph below the block instead of more writable paper.
+    const revealDistance = 72;
+    const visiblePageBottom = this.viewport.scrollY + bottom / scale - box.y;
+    this.growInlinePage(visiblePageBottom, revealDistance / scale);
+    const grown = this.pageLayout.boxes[box.index] ?? box;
+    const visibleBottom = this.inlineViewportEdges().bottom;
+    const pageBottom = (grown.y + grown.height - this.viewport.scrollY) * scale;
+    const newlyVisible = Math.max(0, visibleBottom - bottom);
+    const room = Math.min(revealDistance - newlyVisible, pageBottom - visibleBottom);
+    if (room <= 0) return;
+    if (this.isInlineLocked) {
+      const note = this.inlineNoteScroller();
+      note?.scrollBy({ top: room, behavior: "smooth" });
+    } else {
+      this.scroller.scrollBy(0, room);
+      this.syncViewport();
+      this.requestFrame();
+    }
+  }
+
   private readonly pointerCallbacks = this.createPointerCallbacks();
   private createPointerCallbacks(): PointerControllerCallbacks { return {
     onStart: (sample) => {
       this.constraintAngle = undefined;
       this.callbacks.onPen?.(true);
       this.penDown(sample);
+      if (this.macDrawingInput && this.builder) {
+        this.scrollEl.focus({ preventScroll: true });
+      }
+      this.trackInlineEdgePointer(sample);
     },
     onMove: (coalesced) => {
       this.penAt = coalesced[coalesced.length - 1] ?? this.penAt;
-      const box = this.activePage;
+      let box = this.activePage;
       if (this.shapeTap) {
         const pending = this.shapeTap;
         const last = coalesced[coalesced.length - 1];
@@ -3578,15 +3916,52 @@ export class InkSurface {
         this.shapeTap = null;
         this.inkDown(pending.box, pending.at, pending.sample);
       }
-      if (box) this.gestureOf(this.toolState.tool).move(box, coalesced);
+      if (!box) return;
+      if (this.isInline) {
+        let edges = this.inlineViewportEdges();
+        const outside = coalesced.find((sample) => !this.inlineSampleInside(box!, sample, edges));
+        if (outside) {
+          box = this.extendAcrossInlineBottom(box, outside);
+          edges = this.inlineViewportEdges();
+        }
+        const exit = coalesced.findIndex((sample) => !this.inlineSampleInside(box!, sample, edges));
+        if (exit !== -1) {
+          if (exit > 0) this.gestureOf(this.toolState.tool).move(box, coalesced.slice(0, exit));
+          const sample = coalesced[exit];
+          const leavesBottom = sample.x >= box.x && sample.x < box.x + box.width &&
+            (sample.y - this.viewport.scrollY) * this.unitScale >= edges.bottom;
+          const writing = this.toolState.tool === "pen" || this.toolState.tool === "highlighter";
+          this.pointerInput?.cancelDrawing();
+          this.lastLift = null;
+          const grown = this.pageLayout.boxes[box.index];
+          if (writing && leavesBottom && grown) this.revealInlineWritingRoom(sample, grown);
+          return;
+        }
+      }
+      const last = coalesced.at(-1);
+      if (last) this.trackInlineEdgePointer(last);
+      this.gestureOf(this.toolState.tool).move(box, coalesced);
     },
     onEnd: (sample) => {
+      this.stopInlineEdgeScroll();
       this.callbacks.onPen?.(false);
       if (this.finishTextDismiss()) return;
-      const box = this.activePage;
+      const active = this.activePage;
+      const box = active && this.isInline ? this.extendAcrossInlineBottom(active, sample) : active;
+      if (this.isInline && box && !this.inlineSampleInside(box, sample, this.inlineViewportEdges())) {
+        this.finishToolGesture(box, null);
+        this.lastLift = null;
+        return;
+      }
+      const writing = this.isInline && (this.toolState.tool === "pen" || this.toolState.tool === "highlighter");
       this.finishToolGesture(box, sample);
+      if (writing && box) {
+        const grown = this.pageLayout.boxes[box.index];
+        if (grown) this.revealInlineWritingRoom(sample, grown);
+      }
     },
     onCancel: () => {
+      this.stopInlineEdgeScroll();
       this.callbacks.onPen?.(false);
       if (this.finishTextDismiss()) return;
       this.finishToolGesture(this.activePage, null);
@@ -3594,6 +3969,7 @@ export class InkSurface {
     // Fingers. Native touch-scroll is off (touch-action: none), so the
     // scroller gets the raw gesture and the frame loop moves the page.
     onPanStart: (x, y, t) => {
+      if (this.isInlineLocked) return;
       // A resting palm must not scroll the page out from under an image or a
       // selection being dragged; without a dragStart the moves and the end
       // are no-ops.
@@ -3661,6 +4037,7 @@ export class InkSurface {
       this.requestFrame();
     },
     onPinchStart: (centerX, centerY) => {
+      if (this.isInlineLocked) return;
       this.fingerTap = null;
       if (!this.circlePress) this.stopPress();
       if (this.imageDrag || this.groupDrag) return;
@@ -3871,7 +4248,19 @@ export class InkSurface {
     cancel: (box) => this.inkCancel(box),
   };
 
+  private growInlinePage(y: number, buffer = 80 / this.unitScale): void {
+    if (!this.isInline) return;
+    const page = this.doc.pages[0];
+    // Reserve space while the pointer is still down, before the renderer
+    // clips the wet stroke at the old bottom edge.
+    if (page && expandBlockPageIfNeeded(page, y, buffer)) {
+      this.renderer?.invalidateAll();
+      this.layout();
+    }
+  }
+
   private inkDown(box: PageBox, at: Pt, sample: PointerSample): void {
+    this.growInlinePage(at.y);
     const mode = this.toolState.tool === "shape" ? shapeModeFor(this.toolState) : "auto";
     if (mode !== "auto") {
       // A preset is dragged out as its bounding box, as in GoodNotes.
@@ -3972,11 +4361,14 @@ export class InkSurface {
     // Keeping a sample is cheap and happens at once; outlining the stroke is
     // not, so it waits for the next frame (`scheduleWet`), once however many
     // moves came in meanwhile.
+    let bottom = -Infinity;
     for (const sample of samples) {
       const local = this.toPage(box, sample);
+      if (this.isInline) bottom = Math.max(bottom, local.y);
       builder.add({ ...sample, ...local });
       this.trackHold(local);
     }
+    if (bottom > -Infinity) this.growInlinePage(bottom);
     this.scheduleWet();
   }
 
@@ -4317,14 +4709,15 @@ export class InkSurface {
     const box = this.activePage;
     const builder = this.builder;
     if (!builder || !box) return;
+    const isDark = this.isPaperDark(box.index);
     // A snapped shape is drawn as the clean shape, following the held pen.
     if (this.snap) {
-      this.renderer?.renderWet(box.index, this.snap.pts, { ...this.currentStyle(), shape: true });
+      this.renderer?.renderWet(box.index, this.snap.pts, { ...this.currentStyle(), shape: true }, isDark);
       return;
     }
     const style = this.currentStyle();
     if (style.tool === "highlighter") {
-      this.renderer?.renderWetRuns(box.index, highlighterWetRuns(builder, style.size), style);
+      this.renderer?.renderWetRuns(box.index, highlighterWetRuns(builder, style.size), style, isDark);
       return;
     }
     const pts = builder.view;
@@ -4345,7 +4738,7 @@ export class InkSurface {
     // changes nothing kept.
     const open = runs[runs.length - 1];
     if (open) for (const tip of builder.tail) open.pts.push(tip[0], tip[1]);
-    this.renderer?.renderWetRuns(box.index, runs, style);
+    this.renderer?.renderWetRuns(box.index, runs, style, isDark);
   }
 
   /**
@@ -4623,7 +5016,8 @@ export class InkSurface {
     const command = addStrokesTimed(page, [stroke], this.penDownAt);
     this.history.push(this.doc, command);
     this.strokeIndex.add(page.id, stroke);
-    this.renderer?.appendCommittedStroke(box.index, stroke, this.toolState.pressureEnabled);
+    const isDark = this.isPaperDark(box.index);
+    this.renderer?.appendCommittedStroke(box.index, stroke, this.toolState.pressureEnabled, isDark);
     // The wet layer was just cleared: blit the tiles now, or the stroke
     // would be missing for a frame.
     this.inkChanged();
@@ -4657,9 +5051,8 @@ export class InkSurface {
   }
 
   /**
-   * The strokes of the table being dragged out. Until the pen has moved past
-   * the tap slop they are the table a tap would place, so what shows at
-   * pen-down is exactly what lifting there leaves on the page.
+   * Resolve the table from the drag bounds, or use the default cell size
+   * when a tap is committed.
    */
   private tableDragStrokes(box: PageBox): TableStroke[] {
     const drag = this.shapeDrag;
@@ -4675,10 +5068,13 @@ export class InkSurface {
   private showShapeDraft(box: PageBox): void {
     const drag = this.shapeDrag;
     if (!drag) return;
+    const isDark = this.isPaperDark(box.index);
     if (drag.preset === "table") {
+      // Wait for a drag so the tap-sized table doesn't flash at pen-down.
+      if (!drag.moved) return;
       const strokes = this.tableDragStrokes(box).map((part) => part.pts);
       if (strokes.length === 0) this.renderer?.clearWet();
-      else this.renderer?.renderWetMany(box.index, strokes, this.tableStyle());
+      else this.renderer?.renderWetMany(box.index, strokes, this.tableStyle(), isDark);
       return;
     }
     // While dragging, preview the real size — even a tiny one; the tap
@@ -4688,7 +5084,7 @@ export class InkSurface {
       this.renderer?.clearWet();
       return;
     }
-    this.renderer?.renderWet(box.index, pts, { ...this.currentStyle(), shape: true });
+    this.renderer?.renderWet(box.index, pts, { ...this.currentStyle(), shape: true }, isDark);
   }
 
   /** A table is ruled in the pen's colour, thinner than handwriting. */
@@ -4738,9 +5134,10 @@ export class InkSurface {
     }));
     // One undo step, every line sharing the gesture's pen-down time.
     this.history.push(this.doc, addStrokesTimed(page, strokes, this.penDownAt, "Add table"));
+    const isDark = this.isPaperDark(box.index);
     for (const stroke of strokes) {
       this.strokeIndex.add(page.id, stroke);
-      this.renderer?.appendCommittedStroke(box.index, stroke, this.toolState.pressureEnabled);
+      this.renderer?.appendCommittedStroke(box.index, stroke, this.toolState.pressureEnabled, isDark);
     }
     this.inkChanged();
   }
