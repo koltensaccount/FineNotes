@@ -6599,7 +6599,6 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-guide-enable input { width: 20px; height: 20px; }
 .goodobsidian-guide-slider { display: grid; gap: 6px; padding: 4px 0; font-size: var(--font-ui-small); }
 .goodobsidian-guide-slider-head span:last-child { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.goodobsidian-guide-slider input { width: 100%; min-height: 36px; margin: 0; }
 .goodobsidian-writing-guides .goodobsidian-segmented button { min-height: 44px; flex: 1; }
 .goodobsidian-guide-label { font-size: var(--font-ui-small); font-weight: 500; }
 .goodobsidian-guide-color { display: flex; align-items: center; gap: 10px; min-height: 44px; justify-content: flex-start; }
@@ -7412,7 +7411,63 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-options .goodobsidian-pentype.is-active { transform: none; }
 
 .goodobsidian-pen-dynamics-control { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; width: 100%; }
-.goodobsidian-pen-dynamics-control input[type="range"] { width: 100%; min-height: 44px; margin: 0; touch-action: pan-y; }
+/* Keep the input easy to grab without stretching Obsidian's painted track
+   to the full touch target. The width wedge and audio scrubber style their own tracks. */
+:is(
+  .goodobsidian-pen-dynamics-control,
+  .goodobsidian-thickness-slider,
+  .goodobsidian-guide-slider,
+  .goodobsidian-slide-import-controls,
+  .finenotes-icon-review-size
+) input[type="range"] {
+  --gob-adjustment-track: 6px;
+  --gob-adjustment-thumb: 18px;
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  height: var(--gob-touch);
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+:is(
+  .goodobsidian-pen-dynamics-control,
+  .goodobsidian-thickness-slider,
+  .goodobsidian-guide-slider,
+  .goodobsidian-slide-import-controls,
+  .finenotes-icon-review-size
+) input[type="range"]::-webkit-slider-runnable-track {
+  height: var(--gob-adjustment-track);
+  border: 0;
+  border-radius: var(--gob-radius-pill);
+  background: var(--slider-track-background, var(--background-modifier-border));
+}
+
+:is(
+  .goodobsidian-pen-dynamics-control,
+  .goodobsidian-thickness-slider,
+  .goodobsidian-guide-slider,
+  .goodobsidian-slide-import-controls,
+  .finenotes-icon-review-size
+) input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: var(--gob-adjustment-thumb);
+  height: var(--gob-adjustment-thumb);
+  margin-top: calc((var(--gob-adjustment-track) - var(--gob-adjustment-thumb)) / 2);
+  border: 2px solid var(--interactive-accent);
+  border-radius: 50%;
+  background: var(--slider-thumb-bg, var(--background-primary));
+  box-shadow: var(--gob-shadow-raised);
+}
 
 /* --- Live FineNotes Embeds ------------------------------------------------ */
 
