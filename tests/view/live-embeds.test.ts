@@ -244,3 +244,72 @@ it("renders embed ink with the selected pressure and highlighter opacity", async
       expect.objectContaining({usePressure: false, color: "#1971c2"}), .18);
   } finally { fill.mockRestore(); vi.unstubAllGlobals(); }
 });
+
+it("renders the command's saved reference through the FineNotes code-block lifecycle", () => {
+  const notebook = { path: 'Moved/Book "#1".notebook.md' };
+  const render = vi.fn();
+  const destroy = vi.fn();
+  const manager = Object.create(FineNotesEmbedManager.prototype);
+  const getFileByPath = vi.fn(() => notebook);
+  Object.assign(manager, {
+    app: { vault: { getFileByPath } },
+    plugin: { isInkFile: () => true, fileMoves: { relink: () => notebook.path } },
+    createNotebookEmbed: vi.fn(() => ({ render, destroy })),
+  });
+  const el = { empty: vi.fn() };
+  const sourcePath = "Course/Note.md";
+  const addChild = vi.fn((child: { onload(): void; onunload(): void }) => child.onload());
+  manager.processCodeBlock(JSON.stringify({ notebook: "Old/Book.notebook.md", block: "block-abc" }), el, {
+    sourcePath, addChild,
+  });
+  expect(getFileByPath).toHaveBeenCalledWith(notebook.path);
+  expect(manager.createNotebookEmbed).toHaveBeenCalledWith(el, notebook, "#^block-abc", sourcePath);
+  expect(render).toHaveBeenCalledOnce();
+  addChild.mock.calls[0][0].onunload();
+  expect(destroy).toHaveBeenCalledOnce();
+});
+
+it("mounts old Handwrite Here links in Live Preview without deleting the native embed", () => {
+  const notebook = { path: "Course/Book.notebook.md" };
+  const sourcePath = "Course/Note.md";
+  const render = vi.fn();
+  const destroy = vi.fn();
+  const createNotebookEmbed = vi.fn(() => ({ render, destroy }));
+  const classes = new Set<string>();
+  const native = {
+    isConnected: true,
+    closest: vi.fn(() => native),
+    querySelectorAll: () => [],
+    getAttribute: () => "Book.notebook#^block-abc",
+    hasClass: (cls: string) => classes.has(cls),
+    addClass: (cls: string) => classes.add(cls),
+    removeClass: (cls: string) => classes.delete(cls),
+    createDiv: vi.fn(() => ({ parentElement: native, remove: vi.fn() })),
+    empty: vi.fn(),
+  };
+  const getFirstLinkpathDest = vi.fn(() => notebook);
+  const manager = Object.assign(Object.create(FineNotesEmbedManager.prototype), {
+    app: {
+      workspace: { getLeavesOfType: () => [{ view: { file: { path: sourcePath }, contentEl: { contains: () => true } } }] },
+      metadataCache: { getFirstLinkpathDest },
+    },
+    plugin: { isInkFile: () => true },
+    liveNotebookEmbeds: new Map(),
+    createNotebookEmbed,
+  });
+
+  manager.processLiveNotebookEmbeds(native);
+  manager.processLiveNotebookEmbeds(native);
+  expect(getFirstLinkpathDest).toHaveBeenCalledWith("Book.notebook", sourcePath);
+  const mount = native.createDiv.mock.results[0].value;
+  expect(createNotebookEmbed).toHaveBeenCalledExactlyOnceWith(mount, notebook, "#^block-abc", sourcePath);
+  expect(render).toHaveBeenCalledOnce();
+  expect(native.empty).not.toHaveBeenCalled();
+  expect(classes.has("finenotes-live-notebook-embed")).toBe(true);
+
+  native.isConnected = false;
+  manager.pruneLiveNotebookEmbeds();
+  expect(destroy).toHaveBeenCalledOnce();
+  expect(mount.remove).toHaveBeenCalledOnce();
+  expect(classes.has("finenotes-live-notebook-embed")).toBe(false);
+});

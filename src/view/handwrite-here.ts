@@ -373,12 +373,12 @@ export async function handwriteHere(
   // Queue inline activation for when the embed mounts in the DOM
   plugin.embedManager?.queuePendingActivation(notebook.path, blockId);
 
-  // Insert embed link into the source markdown note
-  const embedLink = app.fileManager.generateMarkdownLink(notebook, source.path, `#^${blockId}`);
+  // A registered code block renders in Live Preview and Reading view.
+  // Native notebook embeds can instead transclude the backing note's Markdown.
   insertHandwritingEmbed(
     editor,
     before,
     offset,
-    `!${embedLink}`,
+    `\`\`\`finenotes\n${JSON.stringify({ notebook: notebook.path, block: blockId })}\n\`\`\``,
   );
 }

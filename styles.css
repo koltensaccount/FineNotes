@@ -7395,6 +7395,10 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 
 /* --- Live FineNotes Embeds ------------------------------------------------ */
 
+.finenotes-live-notebook-embed > :not(.finenotes-embed-wrapper) {
+  display: none;
+}
+
 .finenotes-embed-wrapper {
   display: inline-block;
   max-width: 100%;

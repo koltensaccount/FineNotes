@@ -21,6 +21,7 @@ import { PdfBackdropCache } from "./pdf-backdrop";
 import {
   type App,
   type MarkdownPostProcessorContext,
+  type MarkdownView,
   TFile,
   setIcon,
   MarkdownRenderChild,
@@ -70,6 +71,7 @@ export class FineNotesEmbedManager {
   private readonly backdropPainter: VaultBackdropRenderer;
   readonly pdfCache: PdfBackdropCache;
   private readonly activeEmbedViews = new Set<FineNotesEmbedView>();
+  private readonly liveNotebookEmbeds = new Map<HTMLElement, { mount: HTMLElement; view: FineNotesEmbedView; src: string }>();
 
   /** Refresh theme-dependent PNGs, including notebooks that are not open. */
   refreshPngEmbeds(file?: TFile): Promise<void> {
@@ -155,7 +157,19 @@ export class FineNotesEmbedManager {
   ) {
     this.pdfCache = new PdfBackdropCache(app);
     this.imageCache = new VaultImageCache(app);
-    this.plugin.register(()=>{ this.disposed = true; for(const view of [...this.activeEmbedViews]) view.destroy(); this.imageCache.destroy(); this.pdfCache.destroy(); this.docCache.clear(); this.sourceIndex = null; });
+    this.plugin.register(() => {
+      this.disposed = true;
+      for (const [element, embed] of this.liveNotebookEmbeds) {
+        embed.mount.remove();
+        element.removeClass("finenotes-live-notebook-embed");
+      }
+      this.liveNotebookEmbeds.clear();
+      for (const view of [...this.activeEmbedViews]) view.destroy();
+      this.imageCache.destroy();
+      this.pdfCache.destroy();
+      this.docCache.clear();
+      this.sourceIndex = null;
+    });
     this.backdropPainter = new VaultBackdropRenderer(this.pdfCache);
 
     this.imageCache.onReady = () => {
@@ -271,15 +285,28 @@ export class FineNotesEmbedManager {
 
     this.plugin.registerMarkdownPostProcessor((el) => markImages(el));
     if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
-      const observer = new MutationObserver(records => {
+      const observer = new MutationObserver((records) => {
+        this.pruneLiveNotebookEmbeds();
         for (const record of records) {
-          if (record.type === "attributes" && record.target instanceof Element) void markImages(record.target);
-          else for (const node of record.addedNodes) if (node instanceof Element) void markImages(node);
+          if (record.type === "attributes" && record.target instanceof Element) {
+            markImages(record.target);
+            this.processLiveNotebookEmbeds(record.target);
+          } else {
+            for (const node of record.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              markImages(node);
+              this.processLiveNotebookEmbeds(node);
+            }
+          }
         }
       });
-      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src", "data-src"] });
       this.plugin.register(() => observer.disconnect());
-      this.app.workspace.onLayoutReady(() => { if (!this.disposed) void markImages(document.body); });
+      this.app.workspace.onLayoutReady(() => {
+        if (this.disposed) return;
+        markImages(document.body);
+        this.processLiveNotebookEmbeds(document.body);
+      });
     }
     if (typeof document !== "undefined") {
       this.plugin.registerDomEvent(document,"click",(event:MouseEvent)=>{
@@ -746,37 +773,73 @@ export class FineNotesEmbedManager {
     return null;
   }
 
-  private processMarkdownEmbeds(el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
-    const embedEls = el.querySelectorAll<HTMLElement>(".internal-embed");
-    for (let i = 0; i < embedEls.length; i++) {
-      const embedEl = embedEls[i];
-      const src = embedEl.getAttribute("src") || embedEl.getAttribute("data-src") || "";
-      if (!src) continue;
+  private createNotebookEmbed(el: HTMLElement, file: TFile, subpath: string, sourcePath: string): FineNotesEmbedView {
+    return new FineNotesEmbedView(
+      this, this.app, el, file, subpath, sourcePath, this.backdropPainter, this.imageCache,
+      this.plugin.settings.pressureWidth !== false, this.plugin.settings.highlighterAlpha,
+    );
+  }
 
-      const [linkpath, subpath] = src.split("#");
-      const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkpath, ctx.sourcePath);
-      if (!targetFile || !this.plugin.isInkFile(targetFile)) continue;
+  private pruneLiveNotebookEmbeds(): void {
+    for (const [el, embed] of this.liveNotebookEmbeds) {
+      if (el.isConnected && embed.mount.parentElement === el &&
+          embed.src === (el.getAttribute("src") || el.getAttribute("data-src"))) continue;
+      this.liveNotebookEmbeds.delete(el);
+      embed.view.destroy();
+      embed.mount.remove();
+      el.removeClass("finenotes-live-notebook-embed");
+    }
+  }
 
-      // Intercept the internal-embed element
-      embedEl.empty();
-      embedEl.addClass("finenotes-embed-wrapper");
+  /** Live Preview creates native embeds outside the Markdown postprocessor. */
+  private processLiveNotebookEmbeds(root: Element): void {
+    const selector = '.internal-embed:is([src*="#^block-"], [data-src*="#^block-"])';
+    const containing = root.closest<HTMLElement>(selector);
+    const embeds = containing ? [containing] : [];
+    embeds.push(...root.querySelectorAll<HTMLElement>(selector));
+    for (const el of embeds) {
+      if (!el.isConnected || this.liveNotebookEmbeds.has(el) || el.hasClass("finenotes-embed-wrapper") ||
+          !el.closest(".markdown-source-view.mod-cm6")) continue;
+      const owner = this.app.workspace.getLeavesOfType("markdown")
+        .map((leaf) => leaf.view as MarkdownView)
+        .find((view) => view.contentEl.contains(el));
+      if (!owner?.file) continue;
+      const src = el.getAttribute("src") || el.getAttribute("data-src") || "";
+      const match = /^(.*)(#\^block-[a-zA-Z0-9_-]+)$/.exec(src);
+      if (!match) continue;
+      const file = this.app.metadataCache.getFirstLinkpathDest(match[1], owner.file.path);
+      if (!file || !this.plugin.isInkFile(file)) continue;
 
-      const view = new FineNotesEmbedView(
-        this,
-        this.app,
-        embedEl,
-        targetFile,
-        subpath ? `#${subpath}` : "",
-        ctx.sourcePath,
-        this.backdropPainter,
-        this.imageCache,
-        this.plugin.settings.pressureWidth !== false,
-        this.plugin.settings.highlighterAlpha,
-      );
-      const child=new MarkdownRenderChild(embedEl);
-      child.onunload=()=>view.destroy(); ctx.addChild(child);
+      // Keep Obsidian's native subtree intact so disabling FineNotes restores it.
+      const mount = el.createDiv({ cls: "finenotes-embed-wrapper" });
+      const view = this.createNotebookEmbed(mount, file, match[2], owner.file.path);
+      this.liveNotebookEmbeds.set(el, { mount, view, src });
+      el.addClass("finenotes-live-notebook-embed");
       void view.render();
     }
+  }
+
+  private processMarkdownEmbeds(el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
+    const embeds = el.matches(".internal-embed") ? [el] : [];
+    embeds.push(...el.querySelectorAll<HTMLElement>(".internal-embed"));
+    for (const embedEl of embeds) {
+      if (embedEl.hasClass("finenotes-embed-wrapper") || this.liveNotebookEmbeds.has(embedEl)) continue;
+      const src = embedEl.getAttribute("src") || embedEl.getAttribute("data-src");
+      if (!src) continue;
+      const [linkpath, subpath] = src.split("#");
+      const file = this.app.metadataCache.getFirstLinkpathDest(linkpath, ctx.sourcePath);
+      if (!file || !this.plugin.isInkFile(file)) continue;
+      embedEl.addClass("finenotes-embed-wrapper");
+      this.renderMarkdownEmbed(embedEl, file, subpath ? `#${subpath}` : "", ctx);
+    }
+  }
+
+  private renderMarkdownEmbed(el: HTMLElement, file: TFile, subpath: string, ctx: MarkdownPostProcessorContext): void {
+    const view = this.createNotebookEmbed(el, file, subpath, ctx.sourcePath);
+    const child = new MarkdownRenderChild(el);
+    child.onload = () => { void view.render(); };
+    child.onunload = () => view.destroy();
+    ctx.addChild(child);
   }
 
   private processCodeBlock(
@@ -792,7 +855,20 @@ export class FineNotesEmbedManager {
     let linkpath = "";
     let subpath = "";
 
-    if (wikilinkMatch) {
+    const exactPath = trimmed.startsWith("{");
+    if (exactPath) {
+      try {
+        const reference: unknown = JSON.parse(trimmed);
+        if (reference && typeof reference === "object" && "notebook" in reference && "block" in reference &&
+            typeof reference.notebook === "string" && typeof reference.block === "string" &&
+            /^block-[a-zA-Z0-9_-]+$/.test(reference.block)) {
+          linkpath = this.plugin.fileMoves?.relink(reference.notebook) ?? reference.notebook;
+          subpath = `^${reference.block}`;
+        }
+      } catch {
+        // Report an invalid reference through the missing-notebook state below.
+      }
+    } else if (wikilinkMatch) {
       linkpath = wikilinkMatch[1].trim();
       subpath = wikilinkMatch[2]?.trim() ?? "";
     } else {
@@ -818,7 +894,9 @@ export class FineNotesEmbedManager {
       return;
     }
 
-    const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkpath, ctx.sourcePath);
+    const targetFile = exactPath
+      ? this.app.vault.getFileByPath(linkpath)
+      : this.app.metadataCache.getFirstLinkpathDest(linkpath, ctx.sourcePath);
     if (!targetFile || !this.plugin.isInkFile(targetFile)) {
       el.createDiv({
         cls: "finenotes-embed-error",
@@ -827,21 +905,7 @@ export class FineNotesEmbedManager {
       return;
     }
 
-    const view = new FineNotesEmbedView(
-      this,
-      this.app,
-      el,
-      targetFile,
-      subpath ? (subpath.startsWith("#") ? subpath : `#${subpath}`) : "",
-      ctx.sourcePath,
-      this.backdropPainter,
-      this.imageCache,
-      this.plugin.settings.pressureWidth !== false,
-      this.plugin.settings.highlighterAlpha,
-    );
-    const child=new MarkdownRenderChild(el);
-    child.onunload=()=>view.destroy(); ctx.addChild(child);
-    void view.render();
+    this.renderMarkdownEmbed(el, targetFile, subpath && !subpath.startsWith("#") ? `#${subpath}` : subpath, ctx);
   }
 }
 
@@ -904,9 +968,14 @@ export class FineNotesEmbedView {
 
     await this.paintContent();
 
-    if (this.manager.checkAndClearPendingActivation(this.file.path, this.subpath)) {
-      this.activateInlineEditing();
-    }
+    const activateIfPending = () => {
+      if (this.inlineBlockId && this.containerEl?.isConnected &&
+          this.manager.checkAndClearPendingActivation(this.file.path, this.subpath)) {
+        this.activateInlineEditing();
+      }
+    };
+    if (this.containerEl?.isConnected) activateIfPending();
+    else this.parentEl.ownerDocument.defaultView?.requestAnimationFrame(activateIfPending);
   }
 
   private activateInlineEditing(): void {
@@ -949,7 +1018,7 @@ export class FineNotesEmbedView {
   private async paintContent(): Promise<void> {
     if (this.isDestroyed || !this.containerEl || this.containerEl.hasClass("finenotes-inline-active")) return;
     const doc = await this.manager.loadDocument(this.file);
-    if (this.isDestroyed || !this.containerEl?.isConnected || this.containerEl.hasClass("finenotes-inline-active")) return;
+    if (this.isDestroyed || !this.containerEl || this.containerEl.hasClass("finenotes-inline-active")) return;
     this.inlineBlockId = null;
     if (!doc || doc.pages.length === 0) {
       this.containerEl.empty();

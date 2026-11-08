@@ -179,7 +179,7 @@ describe("safe Markdown insertion and command", () => {
       insertHandwritingEmbed({ ...editor, getValue: () => "changed" } as never, before, 7, "x"),
     ).toThrow();
   });
-  it("persists an association, creates dedicated block page, and inserts native embed", async () => {
+  it("persists an association, creates dedicated block page, and inserts a FineNotes render block", async () => {
     const note = Object.assign(Object.create(TFile.prototype), { path: "class/note.md" });
     const book = Object.assign(Object.create(TFile.prototype), {
       path: "class/a.notebook.md",
@@ -221,7 +221,6 @@ describe("safe Markdown insertion and command", () => {
           getLeavesOfType: () => [],
         },
         fileManager: {
-          generateMarkdownLink: vi.fn((file, _src, sub) => `[[${file.path}${sub}]]`),
           getAvailablePathForAttachment: vi.fn(async (name) => `assets/${name}`),
         },
       },
@@ -234,8 +233,9 @@ describe("safe Markdown insertion and command", () => {
     expect(saved.doc?.pages.map(({ id, title }) => ({ id, title }))).toEqual([
       { id: "p1", title: "Existing page" }, { id: expect.stringMatching(/^block-/), title: undefined },
     ]);
+    const blockId = saved.doc?.pages[1].id;
     expect(editor.replaceRange).toHaveBeenCalledWith(
-      expect.stringMatching(/^\n!\[\[class\/a\.notebook\.md#\^block-[a-f0-9-]+\]\]\n$/),
+      ["", "```finenotes", JSON.stringify({ notebook: book.path, block: blockId }), "```", ""].join("\n"),
       5,
     );
   });

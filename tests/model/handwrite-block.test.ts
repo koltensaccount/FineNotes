@@ -73,6 +73,8 @@ describe("handwrite-block", () => {
     const foundWithSubpath = findBlockInDocument(doc, "#block=block-algebra");
     expect(foundWithSubpath?.page.id).toBe("block-algebra");
 
+    expect(findBlockInDocument(doc, "#^block-algebra")).toEqual(found);
+
     const notFound = findBlockInDocument(doc, "block-missing");
     expect(notFound).toBeNull();
   });

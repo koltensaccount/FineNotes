@@ -154,7 +154,7 @@ export function findBlockInDocument(
   doc: InkDocument,
   blockId: string,
 ): { page: Page; pageIndex: number; clip: NotebookClip } | null {
-  const cleanId = blockId.replace(/^[\^#]/, "").replace(/^block=/, "").replace(/^clip=/, "").trim();
+  const cleanId = blockId.trim().replace(/^#?\^?/, "").replace(/^block=/, "").replace(/^clip=/, "").trim();
   for (let i = 0; i < doc.pages.length; i++) {
     const page = doc.pages[i];
     if (page.id === cleanId || page.id === `block-${cleanId}`) {
