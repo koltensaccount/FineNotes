@@ -191,20 +191,29 @@ describe("pen gestures pressure controls", () => {
     }
     expect(preference).not.toHaveBeenCalled();
   });
-  it("pressure writes the shared preference and removed gesture controls are absent", () => {
+  it("keeps the shared pressure preference in Pen settings and gestures on their own page", () => {
     const inputs: { value: string; listeners: Record<string, () => void> }[] = [];
-    const node = (): any => ({ querySelector: () => ({ childElementCount: 1 }), createDiv: () => node(), createSpan: () => node(), setAttribute: () => {}, addEventListener: () => {}, createEl: (tag: string, options: { type?: string }) => {
+    const node = (): any => ({ addClass: () => {}, append: () => {}, toggleClass: () => {}, querySelector: () => ({ childElementCount: 1 }), createDiv: () => node(), createSpan: () => node(), setAttribute: () => {}, addEventListener: () => {}, createEl: (tag: string, options: { type?: string }) => {
       const child = node(); child.value = ""; child.listeners = {}; child.addEventListener = (name: string, fn: () => void) => { child.listeners[name] = fn; };
       if (tag === "input" && options.type === "range") inputs.push(child);
       return child;
     } });
     const switches = new Map<string, (on: boolean) => void>(), preference = vi.fn(), saved = vi.fn(), rerender = vi.fn();
-    const state = { penGestures: {} };
+    const state = { tool: "pen", penType: "ball", penGestures: {} };
     const toolbar = Object.assign(Object.create(Toolbar.prototype), { state, callbacks: { pressureAllowed: () => true, onPressurePreferenceChange: preference, onPenGesturesChange: saved }, popoverRender: rerender, switchRow: (_body: unknown, label: string, _enabled: boolean, on: (enabled: boolean) => void) => { switches.set(label, on); return {}; } });
+    // Keep the test focused on the two pages' controls; previews are tested separately.
+    toolbar.penTypeGraphic = () => node();
+    toolbar.renderPenTypes(node(), () => {});
+    switches.get("Pressure-sensitive pens")!(false);
+    expect(preference).toHaveBeenCalledWith(false);
+    expect(inputs).toHaveLength(1);
+    expect(switches.has("Constrain shapes")).toBe(true);
+
+    switches.clear();
+    inputs.length = 0;
     toolbar.renderPenGestures(node(), () => {});
-    switches.get("Pressure sensitivity")!(false); expect(preference).toHaveBeenCalledWith(false);
+    expect([...switches.keys()]).toEqual(["Scribble to erase", "Erase shapes and highlighter", "Circle to lasso"]);
     expect(inputs).toHaveLength(0);
-    expect(switches.has("Constrain shapes with finger")).toBe(false);
     expect(rerender).not.toHaveBeenCalled();
   });
 });

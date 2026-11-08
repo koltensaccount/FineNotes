@@ -2611,7 +2611,6 @@ export class Toolbar {
     let gestures = false;
     this.popoverRender = () => {
       body.empty();
-      this.popover?.toggleClass("is-pen-gestures", gestures);
       const flip = (): void => {
         gestures = !gestures;
         this.popoverRender?.();
@@ -2628,28 +2627,30 @@ export class Toolbar {
   }
 
   private renderPenTypes(body: HTMLElement, openGestures: () => void): void {
+    body.addClass("goodobsidian-pen-menu");
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
-    const types = body.createDiv({ cls: "goodobsidian-tool-choices" });
     for (const spec of PEN_MENU_TYPES) {
       if (spec.pressure && this.callbacks.pressureAllowed?.() !== true) continue;
-      const button = types.createEl("button", {
-        cls: "goodobsidian-tool-choice goodobsidian-pen-card clickable-icon",
+      const button = body.createEl("button", {
+        cls: "goodobsidian-pen-choice clickable-icon",
         attr: { "aria-label": spec.label, title: `${spec.label} — ${TOOL_HINTS[spec.id]}` },
       });
       button.append(this.penTypeGraphic(spec));
-      const caption = button.createSpan({ cls: "goodobsidian-pen-caption" });
-      caption.createSpan({ text: spec.label });
-
-      button.setAttribute("aria-pressed", String(spec.id === this.activePenType().id));
-      button.toggleClass("is-active", spec.id === this.activePenType().id);
+      button.createSpan({ cls: "goodobsidian-pen-caption", text: spec.label });
+      const selected = spec.id === this.activePenType().id;
+      button.setAttribute("aria-pressed", String(selected));
+      button.toggleClass("is-active", selected);
+      if (selected) {
+        iconOrText(button.createSpan({ cls: "goodobsidian-pen-check", attr: { "aria-hidden": "true" } }), "check", "✓");
+      }
       button.addEventListener("click", () => {
         this.closePopover();
         this.choosePenType(spec);
       });
     }
     body.createDiv({ cls: "goodobsidian-popover-divider" });
-    const dynamics = body.createDiv({cls:"goodobsidian-pen-dynamics"});
-    dynamics.createDiv({ cls: "goodobsidian-popover-label", text: `${this.activePenType().label} settings` });
+    body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen settings" });
+    const dynamics = body.createDiv({ cls: "goodobsidian-pen-dynamics" });
     this.switchRow(dynamics,"Pressure-sensitive pens",this.callbacks.pressureAllowed?.() === true,on=>this.callbacks.onPressurePreferenceChange?.(on));
     const active=this.activePenType(), profile=penDynamicsProfile(this.state.penDynamics,active.id);
     for (const [key,label] of [["pressureSensitivity","Pressure sensitivity"],["stabilization","Stroke stabilization"]] as const) {
@@ -2672,16 +2673,14 @@ export class Toolbar {
       range.onchange=()=>this.callbacks.onPenDynamicsChange?.(this.state.penDynamics ?? {});
     }
     dynamics.createDiv({cls:"goodobsidian-popover-hint",text:"Higher stabilization follows the pen more slowly."});
-    body.createDiv({ cls: "goodobsidian-popover-divider" });
-    const constraints = body.createDiv({ cls: "goodobsidian-switch-list" });
-    this.switchRow(constraints, "Constrain shapes", this.state.constrainShapes === true, on => {
+    this.switchRow(body, "Constrain shapes", this.state.constrainShapes === true, on => {
       this.state.constrainShapes = on;
       this.callbacks.onConstrainShapesChange?.(on);
+      this.popoverRender?.();
     });
     body.createDiv({ cls: "goodobsidian-popover-hint", text: "15° angles, squares and circles. Set before drawing." });
-    body.createDiv({ cls: "goodobsidian-popover-divider" });
     const link = body.createEl("button", {
-      cls: "goodobsidian-wide goodobsidian-popover-link clickable-icon",
+      cls: "goodobsidian-popover-link clickable-icon",
     });
     link.createSpan({ text: "Pen gestures" });
     iconOrText(link.createSpan({ cls: "goodobsidian-popover-link-icon" }), "chevron-right", ">");
@@ -2699,6 +2698,7 @@ export class Toolbar {
   }
 
   private renderPenGestures(body: HTMLElement, back: () => void): void {
+    body.addClass("goodobsidian-pen-menu");
     const head = body.createDiv({ cls: "goodobsidian-popover-head" });
     const backButton = head.createEl("button", {
       cls: "goodobsidian-popover-back clickable-icon",
@@ -2715,17 +2715,11 @@ export class Toolbar {
       this.popoverRender?.();
     };
 
-    const pressure = body.createDiv({ cls: "goodobsidian-switch-list" });
-    this.switchRow(pressure, "Pressure sensitivity", this.callbacks.pressureAllowed?.() === true, (on) => {
-      this.callbacks.onPressurePreferenceChange?.(on);
-    });
-    body.createDiv({ cls: "goodobsidian-popover-hint", text: "Vary stroke thickness with Apple Pencil pressure when using Fountain Pen or Brush Pen." });
-    const scribble = body.createDiv({ cls: "goodobsidian-switch-list" });
-    this.switchRow(scribble, "Scribble to erase", gestures.scribbleErase, (on) =>
+    this.switchRow(body, "Scribble to erase", gestures.scribbleErase, (on) =>
       set({ scribbleErase: on }),
     );
     const all = this.switchRow(
-      scribble,
+      body,
       "Erase shapes and highlighter",
       gestures.scribbleErase && gestures.scribbleErasesAll,
       (on) => set({ scribbleErasesAll: on }),
@@ -2736,8 +2730,7 @@ export class Toolbar {
       text: "Erase handwriting and drawings by scribbling over them.",
     });
 
-    const lasso = body.createDiv({ cls: "goodobsidian-switch-list" });
-    this.switchRow(lasso, "Circle to lasso", gestures.circleLasso, (on) =>
+    this.switchRow(body, "Circle to lasso", gestures.circleLasso, (on) =>
       set({ circleLasso: on }),
     );
     body.createDiv({
