@@ -230,6 +230,13 @@ export class TextFileView extends Component {
     return Promise.resolve();
   }
 
+  async onLoadFile(_file: TFile): Promise<void> {}
+
+  async onClose(): Promise<void> {
+    if (this.file) await this.onUnloadFile(this.file);
+    this.file = null;
+  }
+
   onUnloadFile(_file: TFile): Promise<void> {
     return Promise.resolve();
   }

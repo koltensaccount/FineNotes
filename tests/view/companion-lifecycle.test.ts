@@ -14,8 +14,9 @@ vi.mock("../../src/view/pdf-export", () => ({
   paintPagePreview: vi.fn(),
 }));
 const { InkView } = await import("../../src/view/ink-view");
-const { WorkspaceLeaf, TFile, notices, resetFakes } = await import("./fake-obsidian");
+const { WorkspaceLeaf, TFile, TextFileView, notices, resetFakes } = await import("./fake-obsidian");
 const { exportPagesToPdf } = await import("../../src/view/pdf-export");
+const { notebookIsOpen } = await import("../../src/view/notebook-transaction");
 const ID = "a3f9211234567890";
 function setup(enabled = true) {
   const note = new TFile("Biology.notebook.md", 100);
@@ -86,6 +87,29 @@ describe("actual InkView companion lifecycle", () => {
     await again.onClose();
     expect(exportPagesToPdf).toHaveBeenCalledOnce();
   });
+  it("releases the inline lock after a closed tab finishes unloading its file", async () => {
+    const s = setup(false);
+    const view = s.make();
+    const app = { workspace: { getLeavesOfType: () => [] } } as never;
+    await view.onLoadFile(s.note as never);
+    expect(notebookIsOpen(app, s.note as never)).toBe(true);
+
+    let finishUnload!: () => void;
+    const unload = vi.spyOn(TextFileView.prototype, "onUnloadFile").mockImplementationOnce(
+      () => new Promise<void>((resolve) => { finishUnload = resolve; }),
+    );
+    try {
+      const closing = view.onClose();
+      await vi.waitFor(() => expect(unload).toHaveBeenCalledOnce());
+      expect(notebookIsOpen(app, s.note as never)).toBe(true);
+      finishUnload();
+      await closing;
+      expect(notebookIsOpen(app, s.note as never)).toBe(false);
+    } finally {
+      unload.mockRestore();
+    }
+  });
+
   it("disabled or unconfigured notebooks never auto export", async () => {
     const s = setup(false);
     const view = s.make();

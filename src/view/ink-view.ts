@@ -576,52 +576,56 @@ export class InkView extends TextFileView {
       this.resolveEmbedRefreshDelay?.();
       this.resolveEmbedRefreshDelay = null;
     }
-    this.embedRefreshPending = false;
-    this.clipsDirty = false;
-    this.nativeMenus?.destroy();
-    this.nativeMenus = null;
-    this.nativePasteModal?.close();
-    this.nativePasteModal = null;
-    if (this.file !== this.companionUnloadedFile) await this.updateCompanionPdf(false);
-    this.recordLastPage();
-    this.audio?.destroy();
-    this.audio = null;
-    window.clearTimeout(this.transcribeTimer);
-    window.clearTimeout(this.quietTimer);
-    this.quietTimer = 0;
-    this.surface?.destroy();
-    this.surface = null;
-    this.toolbar?.destroy();
-    this.toolbar = null;
-    this.sidebar?.destroy();
-    this.sidebar = null;
-    this.guidePopover?.close();
-    this.morePanel?.close();
-    this.morePanel = null;
-    this.equationEditor?.close();
-    this.equationEditor = null;
-    this.addPagePopover?.popover.close();
-    this.addPagePopover = null;
-    this.coverPopover?.popover.close();
-    this.coverPopover = null;
-    this.imageMenu?.popover.close();
-    this.imageMenu = null;
-    this.aiMenu?.close();
-    this.aiMenu = null;
-    if (this.transcription) this.transcription.cancelled = true;
-    this.pdfCache?.destroy();
-    this.pdfCache = null;
-    if (this.pdfWorkerHeld) {
-      this.pdfWorkerHeld = false;
-      releasePdfWorker();
-    }
-    this.backdrops = null;
-    this.thumbBackdrops = null;
-    this.images?.destroy();
-    this.images = null;
-    this.textPanel = null;
-    this.contentEl.empty();
     this.mounted = false;
+    try {
+      // FileView closes the file through onUnloadFile. That flushes its last
+      // save and releases the inline-write lock before we discard the view.
+      await super.onClose();
+    } finally {
+      this.embedRefreshPending = false;
+      this.clipsDirty = false;
+      this.nativeMenus?.destroy();
+      this.nativeMenus = null;
+      this.nativePasteModal?.close();
+      this.nativePasteModal = null;
+      this.audio?.destroy();
+      this.audio = null;
+      window.clearTimeout(this.transcribeTimer);
+      window.clearTimeout(this.quietTimer);
+      this.quietTimer = 0;
+      this.surface?.destroy();
+      this.surface = null;
+      this.toolbar?.destroy();
+      this.toolbar = null;
+      this.sidebar?.destroy();
+      this.sidebar = null;
+      this.guidePopover?.close();
+      this.morePanel?.close();
+      this.morePanel = null;
+      this.equationEditor?.close();
+      this.equationEditor = null;
+      this.addPagePopover?.popover.close();
+      this.addPagePopover = null;
+      this.coverPopover?.popover.close();
+      this.coverPopover = null;
+      this.imageMenu?.popover.close();
+      this.imageMenu = null;
+      this.aiMenu?.close();
+      this.aiMenu = null;
+      if (this.transcription) this.transcription.cancelled = true;
+      this.pdfCache?.destroy();
+      this.pdfCache = null;
+      if (this.pdfWorkerHeld) {
+        this.pdfWorkerHeld = false;
+        releasePdfWorker();
+      }
+      this.backdrops = null;
+      this.thumbBackdrops = null;
+      this.images?.destroy();
+      this.images = null;
+      this.textPanel = null;
+      this.contentEl.empty();
+    }
   }
 
   override onResize(): void {
