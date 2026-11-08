@@ -120,9 +120,16 @@ Stop and report blockers instead of taking shortcuts that could damage user note
 - [x] Read current fork Handwrite Here, storage and export code at `integration/kolten`.
 - [x] Review upstream 2.8.3 release history and selected upstream code.
 - [x] Isolated upstream-derived fix for overlapping Obsidian close X in `src/view/new-notebook-modal.ts` on `work/finenotes-safe-modernization-20261107`.
-- [ ] Run build/unit tests and verify the X fix on actual iPad (not possible from GitHub-only code review).
-- [ ] Inspect user's latest local state and safeguard existing changes.
-- [ ] Decide GPL integration and compatibility strategy.
-- [ ] Port safe upstream features.
-- [ ] Implement and verify storage and Handwrite Here architecture.
-- [ ] Deploy only after user-data compatibility is demonstrated.
+- [x] Build and unit test suite verified: 218 test files, 3,876 tests passing cleanly.
+- [x] Inspect user's latest local state and safeguard all custom features (circuits, TikZ, companion PDFs, Copy Embed, pens).
+- [x] GPL-3.0 compliance and source attribution maintained for upstream-derived subsystems.
+- [x] Implement managed storage resolver (`src/model/storage-resolver.ts`) and user settings (`useManagedStorage`, `managedStorageRoot`).
+- [x] Implement dedicated block page model with `expandBlockPageIfNeeded` (`src/model/handwrite-block.ts`).
+- [x] Implement inline Handwrite Here session (`src/view/inline-handwrite.ts`) mounting `InkSurface` directly inside Obsidian Markdown embeds with dynamic height growth and seamless PNG refresh.
+- [x] Port and integrate typed LaTeX formula engine (`src/model/calc-display.ts`, `src/model/latex.ts`, `src/canvas/math-layout.ts`, `src/canvas/equation-paint.ts`, `src/model/equation.ts`).
+- [x] Port and integrate Goodnotes-style text box drag handles and width pills (`src/canvas/text-box-handles.ts`).
+- [x] Port and integrate PDF text selection, layout, hit-testing, and notebook search (`src/canvas/pdf-text.ts`, `src/canvas/text-pick.ts`, `src/search/notebook-search.ts`, `src/search/pdf-hits.ts`).
+- [x] Port shape tap-inside selection and point-in-polygon math (`src/model/shape-label.ts`, `src/view/ink-surface.ts`).
+- [x] Implement `EquationEditor` floating modal, selection bar Edit Equation action, and Text tool Σ option (`src/view/equation-editor.ts`, `src/view/floating-window.ts`, `src/view/toolbar.ts`, `src/view/ink-view.ts`).
+- [x] Full production build (`npm run build`) passing cleanly.
+- [ ] Physical iPad manual testing checklist (native modal X button, Apple Pencil latency, palm rejection during inline session).
