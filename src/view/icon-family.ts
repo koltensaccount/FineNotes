@@ -22,6 +22,8 @@ export interface IconFamilyCandidate {
   readonly usage: string;
   /** Original 24×24 SVG fragments, drawn from one shared design grammar. */
   readonly svg: string;
+  /** Optional note explaining preserved live behavior. */
+  readonly preserveState?: string;
 }
 
 /**
