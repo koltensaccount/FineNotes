@@ -141,6 +141,19 @@ export class IconReviewModal extends Modal {
       });
     }
 
+    const size = controls.createEl("label", { cls: "finenotes-icon-review-size" });
+    size.createSpan({ text: "Preview size" });
+    const slider = size.createEl("input", {
+      attr: { type: "range", min: "16", max: "48", value: "25", "aria-label": "Preview size", "aria-valuetext": "25 px" },
+    });
+    const sizeValue = size.createSpan({ text: "25 px" });
+    slider.addEventListener("input", () => {
+      const value = `${slider.value} px`;
+      root.setCssProps({ "--fn-review-size": `${slider.value}px` });
+      sizeValue.setText(value);
+      slider.setAttribute("aria-valuetext", value);
+    });
+
     this.countEl = controls.createDiv({ cls: "finenotes-icon-review-progress" });
     this.syncProgress();
 

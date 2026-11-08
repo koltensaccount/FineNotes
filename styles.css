@@ -7658,6 +7658,7 @@ img.finenotes-live-embed-image:hover {
 }
 .finenotes-icon-review {
   --fn-review-ink: #4184df;
+  --fn-review-size: 25px;
   color: var(--text-normal);
   padding-bottom: 8px;
 }
@@ -7763,7 +7764,7 @@ img.finenotes-live-embed-image:hover {
 }
 .finenotes-icon-review-stage {
   width: 56px;
-  height: 52px;
+  height: max(52px, calc(var(--fn-review-size) + 8px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7779,22 +7780,22 @@ img.finenotes-live-embed-image:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: calc(var(--fn-review-size) + 1px);
+  height: calc(var(--fn-review-size) + 1px);
 }
 .finenotes-icon-review-svg > svg,
 .finenotes-icon-review-svg .svg-icon {
-  width: 25px;
-  height: 25px;
+  width: var(--fn-review-size);
+  height: var(--fn-review-size);
   stroke-width: 1.8px;
 }
 .finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-svg > svg {
   box-sizing: border-box;
-  min-width: 25px;
-  max-width: 25px;
-  min-height: 25px;
-  max-height: 25px;
-  flex: 0 0 25px;
+  min-width: var(--fn-review-size);
+  max-width: var(--fn-review-size);
+  min-height: var(--fn-review-size);
+  max-height: var(--fn-review-size);
+  flex: 0 0 var(--fn-review-size);
 }
 .finenotes-icon-review-actions {
   display: flex;
@@ -7869,7 +7870,7 @@ img.finenotes-live-embed-image:hover {
   .finenotes-icon-review-pair { justify-content: flex-start; }
   .finenotes-icon-review-actions { grid-column: 2; grid-row: 2; }
   .finenotes-icon-review-buttons > button { min-height: 35px; }
-  .finenotes-icon-review-stage { height: 50px; width: 55px; }
+  .finenotes-icon-review-stage { height: max(50px, calc(var(--fn-review-size) + 8px)); width: 55px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .finenotes-icon-review * { scroll-behavior: auto !important; }
@@ -7889,6 +7890,21 @@ img.finenotes-live-embed-image:hover {
 .finenotes-icon-review-theme[aria-pressed="true"] {
   box-shadow: inset 0 0 0 1px var(--interactive-accent);
   color: var(--text-normal);
+}
+.finenotes-icon-review-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+.finenotes-icon-review-size input {
+  width: 85px;
+}
+.finenotes-icon-review-size span:last-child {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
 }
 .finenotes-icon-review-copy {
   font-size: var(--font-ui-smaller);
