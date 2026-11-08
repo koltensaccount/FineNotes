@@ -109,9 +109,9 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
     original: "file-text",
     usage: "PDF file actions and notebook menu — a folded sheet with an inward arrow.",
     svg: `
-      <path d="M9 8V5.5A2 2 0 0 1 11 3.5H16L20 7.5V18.5A2 2 0 0 1 18 20.5H11A2 2 0 0 1 9 18.5V16"/>
+      <path d="M6.5 8V5.5A2 2 0 0 1 8.5 3.5H16L20 7.5V18.5A2 2 0 0 1 18 20.5H8.5A2 2 0 0 1 6.5 18.5V16"/>
       ${seam("M16 3.5V7.5H20")}
-      <path d="M3.5 12H14M11 9L14 12L11 15"/>
+      <path d="M4 12H13M10.25 9.25L13 12L10.25 14.75"/>
     `,
   },
   {
@@ -122,8 +122,8 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
     usage: "Scan document action — a sheet framed by camera guides.",
     svg: `
       <path d="M3.5 8V5.5A2 2 0 0 1 5.5 3.5H8M16 3.5H18.5A2 2 0 0 1 20.5 5.5V8M20.5 16V18.5A2 2 0 0 1 18.5 20.5H16M8 20.5H5.5A2 2 0 0 1 3.5 18.5V16"/>
-      <path d="M8 7.5H14L16 9.5V16.5H8Z"/>
-      <path d="M10.5 13H13.5"/>
+      <path d="M9 7H13.5L16 9.5V16A1 1 0 0 1 15 17H9A1 1 0 0 1 8 16V8A1 1 0 0 1 9 7Z"/>
+      <path d="M10.5 13.25H13.5"/>
     `,
   },
   {
@@ -133,9 +133,9 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
     original: "book-open",
     usage: "Single-page menu — an open notebook with a page turning into place.",
     svg: `
-      <path d="M12 7.5C9.5 5.5 6.5 5.5 3.5 6.5V18.5C6.5 17.5 9.5 17.5 12 19.5C14.5 17.5 17.5 17.5 20.5 18.5V6.5"/>
+      <path d="M12 7.5C9.5 5.5 6.5 5.5 3.5 6.5V18.5C6.5 17.5 9.5 17.5 12 19.5C14.5 17.5 17.5 17.5 20.5 18.5V7.5"/>
       ${seam("M12 7.5V19.5")}
-      <path d="M12 7.5C14 5.5 16 4.5 18 4.5V13.5C16 13.5 14 14.5 12 16.5"/>
+      <path d="M12 7.5C13.5 5.5 15.25 4.5 17.25 4.25Q17.75 4.2 17.75 4.75V12.75Q17.75 13.25 17.25 13.35C15.25 13.65 13.5 14.6 12 16.5"/>
     `,
   },
 ];
