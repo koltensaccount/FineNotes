@@ -1768,6 +1768,14 @@ body.is-mobile.goodobsidian-dialog-typing .app-container {
   background: var(--background-modifier-hover);
   color: var(--text-accent);
 }
+.goodobsidian-fit-width[aria-pressed] {
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.goodobsidian-fit-width[aria-pressed="true"] {
+  color: var(--text-accent);
+  border-color: var(--interactive-accent);
+}
 .goodobsidian-bottom-btn.is-unlocked {
   background: var(--interactive-accent);
   color: var(--text-on-accent);

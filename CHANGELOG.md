@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 96 — Fixed-width notebook viewing
+
+- Add a small Fixed width toggle for vertically scrolling notebooks. It fits the page to the pane and keeps scrolling vertical.
+
 ### Beta 95 — Handwrite Here, Sidecar, and table previews
 
 - Extend locked inline handwriting continuously and scroll the note during a held stroke.

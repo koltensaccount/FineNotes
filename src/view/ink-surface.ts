@@ -892,6 +892,7 @@ export class InkSurface {
   private baseScale = 1;
   /** User zoom, multiplied on top of {@link baseScale}. */
   private userZoom = 1;
+  private freeNotebookZoom: number | null = null;
   /**
    * The zoom floor: the whole (tallest) page on screen. At most 1, recomputed
    * per layout because it depends on the pane's height. Also the default.
@@ -1198,14 +1199,16 @@ export class InkSurface {
     this.fitWidthBtn = this.bottomControlsEl.createEl("button", {
       cls: "goodobsidian-bottom-btn goodobsidian-fitwidth-btn goodobsidian-fit-width clickable-icon",
       attr: {
-        "aria-label": "Fit width",
-        title: "Fit width — fit writing page to viewport",
+        "aria-label": this.isInline ? "Fit width" : "Fixed width",
+        title: this.isInline ? "Fit width" : "Fixed width · vertical scrolling",
+        ...(this.isInline ? {} : { "aria-pressed": "false" }),
       },
     });
     iconInto(this.fitWidthBtn, "chevrons-left-right", "↔");
     this.fitWidthBtn.addEventListener("click", (evt) => {
       evt.stopPropagation();
-      this.fitWidth();
+      if (this.isInline) this.fitWidth();
+      else this.toggleFixedNotebookWidth();
     });
 
     this.navLockBtn = this.bottomControlsEl.createEl("button", {
@@ -1222,9 +1225,8 @@ export class InkSurface {
       this.toggleNavLock();
     });
 
-    // The inline viewport has its own navigation affordances. Notebook
-    // views retain their existing zoom controls and keyboard shortcuts.
-    this.fitWidthBtn.toggle(this.isInline);
+    // The lock belongs to the inline viewport. Notebooks use the width button
+    // alone, and horizontal page layouts keep their page-turn gesture.
     this.navLockBtn.toggle(this.isInline);
     this.zoomReadoutEl = this.bottomControlsEl.createDiv({ cls: "goodobsidian-zoomreadout is-idle" });
     this.zoomReadoutEl.setAttribute("aria-hidden", "true");
@@ -1935,6 +1937,27 @@ export class InkSurface {
     this.flashChrome(true);
   }
 
+  private get fixedNotebookWidth(): boolean {
+    return this.freeNotebookZoom !== null;
+  }
+
+  private toggleFixedNotebookWidth(): void {
+    if (this.isInline || this.direction !== "vertical") return;
+    this.pinch = null;
+    this.zoomAnim = null;
+    this.scroller.cancel();
+    if (this.freeNotebookZoom === null) {
+      this.freeNotebookZoom = this.userZoom;
+    } else {
+      this.userZoom = this.freeNotebookZoom;
+      this.freeNotebookZoom = null;
+    }
+    this.fitWidthBtn.setAttribute("aria-pressed", String(this.fixedNotebookWidth));
+    this.layout();
+    this.flashChrome(true);
+    this.reportStatus();
+  }
+
   /**
    * Fit the full writing page width exactly to the inner writing viewport,
    * without notebook desk margins.
@@ -2443,9 +2466,17 @@ export class InkSurface {
     const priorAt = this.scroller.position;
     const anchored = this.zoomInitialised && !turned && direction === "vertical" && !this.pinch;
     this.direction = direction;
+    if (!this.isInline) {
+      if (direction === "horizontal" && this.freeNotebookZoom !== null) {
+        this.userZoom = this.freeNotebookZoom;
+        this.freeNotebookZoom = null;
+        this.fitWidthBtn.setAttribute("aria-pressed", "false");
+      }
+      this.fitWidthBtn.toggle(direction === "vertical");
+    }
     this.pageLayout = layoutPages(inlinePage ? [inlinePage] : this.doc.pages, this.isInlineLocked
       ? { direction, gap: 0, marginX: 0, marginY: 0 }
-      : { direction });
+      : { direction, marginX: this.fixedNotebookWidth ? 0 : undefined });
     if (this.isInline && this.activePage) this.activePage = this.pageLayout.boxes[0] ?? null;
     renderer.setLayout(this.pageLayout);
     // Fit the page stack to the available width, but never magnify past 1:1 —
@@ -2455,10 +2486,10 @@ export class InkSurface {
     // point of the whole design.
     // A row fits one page (and its margins) to the pane, not the whole row.
     const fit = this.pageLayout.fitWidth;
-    this.baseScale = this.isInlineLocked && fit > 0 ? cssW / fit
+    this.baseScale = (this.isInlineLocked || this.fixedNotebookWidth) && fit > 0 ? cssW / fit
       : this.isInline ? 1 : (fit > 0 ? Math.min(1, cssW / fit) : 1);
-    if (this.isInlineLocked) this.userZoom = 1;
-    this.updateZoomFloor(cssH);
+    if (this.isInlineLocked || this.fixedNotebookWidth) this.userZoom = 1;
+    if (!this.fixedNotebookWidth) this.updateZoomFloor(cssH);
     if (direction === "horizontal") {
       // One page per screen, as GoodNotes: now the floor is known, space the
       // pages so a centred page's neighbours sit just off the pane. The gap
@@ -2550,7 +2581,7 @@ export class InkSurface {
         : undefined;
     const extraBottom = this.editingTextView() ? Math.max(keyboardHeight(), 320) : 0;
     this.scroller.setExtent({
-      contentWidth: width,
+      contentWidth: this.fixedNotebookWidth ? this.cssW : width,
       contentHeight: height,
       viewportWidth: this.cssW,
       viewportHeight: this.cssH,
@@ -2862,7 +2893,7 @@ export class InkSurface {
    * value past the limits, everything else clamps first.
    */
   private applyZoom(nextZoom: number, anchorX: number, anchorY: number): void {
-    if (this.isInlineLocked) return;
+    if (this.isInlineLocked || this.fixedNotebookWidth) return;
     const before = this.toLayout(anchorX, anchorY);
     this.userZoom = nextZoom;
     this.ensurePaperSize();
@@ -2894,6 +2925,7 @@ export class InkSurface {
     event.preventDefault();
     const unit = event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? this.cssH : 1;
     if (event.ctrlKey || event.metaKey) {
+      if (this.fixedNotebookWidth) return;
       const factor = wheelZoomFactor(event.deltaY * unit);
       this.applyZoom(this.clampZoom(this.userZoom * factor), event.clientX, event.clientY);
       window.clearTimeout(this.wheelZoomTimer);
@@ -4037,7 +4069,7 @@ export class InkSurface {
       this.requestFrame();
     },
     onPinchStart: (centerX, centerY) => {
-      if (this.isInlineLocked) return;
+      if (this.isInlineLocked || this.fixedNotebookWidth) return;
       this.fingerTap = null;
       if (!this.circlePress) this.stopPress();
       if (this.imageDrag || this.groupDrag) return;

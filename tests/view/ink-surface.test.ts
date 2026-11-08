@@ -42,7 +42,7 @@ type State = Record<string, unknown>;
 
 /** A surface with the class's methods and only the given state. */
 function surfaceWith(state: State): State {
-  return Object.assign(Object.create(InkSurface.prototype) as object, state) as State;
+  return Object.assign(Object.create(InkSurface.prototype) as object, { freeNotebookZoom: null, fitWidthBtn: { toggle: vi.fn() } }, state) as State;
 }
 
 /** Run one of the surface's own methods (private ones too) on `surface`. */
