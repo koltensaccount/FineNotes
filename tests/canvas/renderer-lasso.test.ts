@@ -216,3 +216,26 @@ describe("hidden strokes", () => {
     expect(fills()).toBe(2);
   });
 });
+
+it("refreshes the ink path after a rectangle resize that leaves its endpoints unchanged", () => {
+  const { renderer, wetLog } = setup();
+  const rect: Stroke = {
+    ...stroke("rectangle", 80),
+    shape: "rect",
+    pts: [80, 100, .5, 320, 100, .5, 320, 175, .5, 80, 175, .5, 80, 100, .5],
+  };
+  const drawPath = () => {
+    wetLog.length = 0;
+    renderer.renderSelectionDraft(0, [rect], [], 0, 0, false);
+    return wetLog.find(([method, path]) => method === "stroke" && path instanceof FakePath2D)?.[1];
+  };
+  const original = rect.pts;
+  const before = drawPath();
+  expect(before).toBeInstanceOf(FakePath2D);
+  rect.pts = original.map((value, index) => index % 3 === 1 && value === 175 ? 225 : value);
+  const resized = drawPath();
+  expect(resized).toBeInstanceOf(FakePath2D);
+  expect((resized as FakePath2D).d).not.toBe((before as FakePath2D).d);
+  rect.pts = original.slice();
+  expect((drawPath() as FakePath2D).d).toBe((before as FakePath2D).d);
+});

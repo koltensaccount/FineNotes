@@ -268,6 +268,7 @@ interface Preview {
 }
 
 interface PathEntry {
+  points: readonly number[];
   fingerprint: string;
   /** The stroke's runs, and a `Path2D` for each. */
   runs: InkRun[];
@@ -1113,7 +1114,9 @@ export class Renderer {
     const n = pts.length;
     const fingerprint = `${stroke.lineStyle ?? "solid"}|${stroke.dashOffset ?? 0}|${stroke.size}|${pressure ? 1 : 0}|${n}|${pts[0]}|${pts[1]}|${pts[n - 3]}|${pts[n - 2]}`;
     const cached = this.paths.get(stroke);
-    if (cached && cached.fingerprint === fingerprint) return cached;
+    // A resize can replace the middle vertices of a closed path while
+    // leaving its first and last points (and therefore its fingerprint) intact.
+    if (cached?.points === pts && cached.fingerprint === fingerprint) return cached;
     let runs: InkRun[] = [];
     let bounds: Bounds | null = null;
     if (n >= 3) {
@@ -1129,7 +1132,7 @@ export class Renderer {
         bounds = { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad };
       }
     }
-    const entry: PathEntry = { fingerprint, runs, paths: stroke.tool === "highlighter" ? [] : runs.map(pathOf), bounds };
+    const entry: PathEntry = { points: pts, fingerprint, runs, paths: stroke.tool === "highlighter" ? [] : runs.map(pathOf), bounds };
     this.paths.set(stroke, entry);
     return entry;
   }

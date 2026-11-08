@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 97 — Shape resizing
+
+- Redraw a resized shape even when the resize leaves its first and last points in place.
+
 ### Beta 96 — Fixed-width notebook viewing
 
 - Add a small Fixed width toggle for vertically scrolling notebooks. It fits the page to the pane and keeps scrolling vertical.
