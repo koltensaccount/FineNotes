@@ -7856,3 +7856,39 @@ img.finenotes-live-embed-image:hover {
 @media (prefers-reduced-motion: reduce) {
   .finenotes-icon-review * { scroll-behavior: auto !important; }
 }
+
+/* Icon Studio: simulate both paper-adjacent chrome themes without changing Obsidian itself. */
+.finenotes-icon-review-themes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.finenotes-icon-review-theme {
+  padding: 5px 8px;
+  font-size: var(--font-ui-smaller);
+}
+.finenotes-icon-review-theme[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--interactive-accent);
+  color: var(--text-normal);
+}
+.finenotes-icon-review-copy {
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+.finenotes-icon-review[data-preview-theme="light"] .finenotes-icon-review-stage {
+  color: #242832;
+  background: #f7f8fb;
+  border-color: #d4d7e0;
+}
+.finenotes-icon-review[data-preview-theme="light"] .finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-stage {
+  background: #eef0ff;
+}
+.finenotes-icon-review[data-preview-theme="dark"] .finenotes-icon-review-stage {
+  color: #f3f3f7;
+  background: #252833;
+  border-color: #464957;
+}
+.finenotes-icon-review[data-preview-theme="dark"] .finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-stage {
+  background: #34314c;
+}
