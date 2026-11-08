@@ -36,7 +36,7 @@ const INK_CHOICES = [
 ] as const;
 
 export class IconReviewModal extends Modal {
-  private inkColor = INK_CHOICES[0].value;
+  private inkColor: string = INK_CHOICES[0].value;
   private panel: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
   private readonly statuses = new Map<string, () => void>();
