@@ -8,43 +8,51 @@ import {
 
 vi.mock("obsidian", () => ({ addIcon: vi.fn() }));
 
-describe("FineNotes icon candidate review", () => {
-  it("has unique, namespaced ids and complete side-by-side originals", () => {
-    const ids = ICON_FAMILY_CANDIDATES.map((candidate) => candidate.id);
-    expect(ids.length).toBeGreaterThanOrEqual(25);
-    expect(new Set(ids).size).toBe(ids.length);
+const expectedIds = [
+  "pen-concept2",
+  "highlighter-concept2",
+  "eraser-concept2",
+];
+
+describe("FineNotes Concept #2 icon review", () => {
+  it("shows exactly three new instrument designs, not the rejected 28-icon pack", () => {
+    expect(ICON_FAMILY_CANDIDATES.map((candidate) => candidate.id)).toEqual(expectedIds);
+    expect(new Set(expectedIds).size).toBe(ICON_FAMILY_CANDIDATES.length);
+    expect(ICON_FAMILY_CANDIDATES.every(({category}) => category === "Writing tools")).toBe(true);
     for (const candidate of ICON_FAMILY_CANDIDATES) {
       expect(candidate.title).toBeTruthy();
       expect(candidate.original).toBeTruthy();
       expect(candidate.usage).toBeTruthy();
-      expect(candidate.svg).toMatch(/<(path|circle|rect)/);
-      expect(candidateIconName(candidate.id)).toBe(`finenotes-v2-${candidate.id}`);
+      expect(candidate.svg).toMatch(/<path d=/);
     }
   });
 
-  it("preserves explicit dynamic Lasso and Shapes behavior", () => {
-    const byId = new Map(ICON_FAMILY_CANDIDATES.map((icon) => [icon.id, icon]));
-    for (const id of ["lasso-free", "lasso-rect", "shapes"]) {
-      expect(byId.get(id)?.preserveState).toBeTruthy();
+  it("keeps the real original stroke or Obsidian icon in each comparison", () => {
+    const current = ICON_FAMILY_CANDIDATES.map(x => x.original);
+    expect(current).toEqual(["fn-original-pen", "fn-original-highlighter", "eraser"]);
+  });
+
+  it("limits selected ink to the two instrument tips, never the eraser body", () => {
+    expect(ICON_FAMILY_CANDIDATES[0].svg).toContain("fnv2-ink");
+    expect(ICON_FAMILY_CANDIDATES[1].svg).toContain("fnv2-ink");
+    expect(ICON_FAMILY_CANDIDATES[2].svg).not.toContain("fnv2-ink");
+    for (const candidate of ICON_FAMILY_CANDIDATES) {
+      expect(candidate.svg).not.toMatch(/stroke-width="(?:3|4|5)"/);
+      expect(candidate.svg).not.toContain("transform=");
+      expect(candidate.svg).not.toContain("<text");
     }
   });
 
-  it("reserves ink fills for meaningful tool-tip details", () => {
-    const byId = new Map(ICON_FAMILY_CANDIDATES.map((icon) => [icon.id, icon]));
-    for (const id of ["pen", "highlighter", "ballpoint", "brush", "handwrite-here"]) {
-      expect(byId.get(id)?.svg).toContain("fnv2-ink");
-    }
-    for (const id of ["eraser", "lasso-rect", "bookmark", "crop"]) {
-      expect(byId.get(id)?.svg).not.toContain("fnv2-ink");
-    }
-  });
-
-  it("registers original candidate glyphs without replacing native icon identifiers", () => {
+  it("registers only namespaced gallery icons, never overwriting live toolbar names", () => {
     vi.mocked(addIcon).mockClear();
     registerIconFamilyCandidates();
-    expect(addIcon).toHaveBeenCalledTimes(ICON_FAMILY_CANDIDATES.length);
-    for (const [name] of vi.mocked(addIcon).mock.calls) {
-      expect(name).toMatch(/^finenotes-v2-/);
+    expect(addIcon).toHaveBeenCalledTimes(3);
+    for (const [name, markup] of vi.mocked(addIcon).mock.calls) {
+      expect(name).toMatch(/^finenotes-concept2-/);
+      expect(markup).toContain('stroke-width="1.6"');
+      expect(markup).toContain("<g ");
+      expect(markup).toContain("</g>");
     }
+    expect(candidateIconName(expectedIds[0])).toBe("finenotes-concept2-pen-concept2");
   });
 });
