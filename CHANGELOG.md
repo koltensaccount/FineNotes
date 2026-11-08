@@ -8,6 +8,11 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 93 — Handwrite Here in Live Preview
+
+- Render newly inserted Handwrite Here blocks through FineNotes in Live Preview and Reading view.
+- Recognize previously inserted Handwrite Here block links in Live Preview without rewriting the note.
+
 ### Beta 92 — Notebook close and inline handwriting
 
 - Finish saving and release the inline handwriting lock when the full notebook closes.

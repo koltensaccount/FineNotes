@@ -14,6 +14,6 @@ The combined release is distributed under the
 [MIT notice](LICENSE-MIT) remains applicable to portions received under MIT.
 See [third-party notices](THIRD_PARTY_NOTICES.txt) for bundled libraries.
 
-The [1.5.1-beta.92 source tag](https://github.com/koltensaccount/FineNotes/tree/1.5.1-beta.92)
+The [1.5.1-beta.93 source tag](https://github.com/koltensaccount/FineNotes/tree/1.5.1-beta.93)
 contains the corresponding source, assets, lockfile, and build scripts.
 With Node.js 22.12 or later, run `npm ci` and `npm run build`.
