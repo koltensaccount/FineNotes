@@ -168,7 +168,7 @@ it("eraser filter choices expose All ink/Highlighter/Pen without resetting mode 
   const entries: Array<{ label: string; click?: () => void }> = [];
   const body = { createDiv: () => ({}), createEl: (_tag: string, options: { text: string }) => {
     const entry = { label: options.text, click: undefined as undefined | (() => void) }; entries.push(entry);
-    return { toggleClass: () => {}, addEventListener: (_type: string, click: () => void) => { entry.click = click; } };
+    return { setAttribute: () => {}, toggleClass: () => {}, createSpan: () => ({ querySelector: () => ({ childElementCount: 1 }) }), addEventListener: (_type: string, click: () => void) => { entry.click = click; } };
   } };
   const state = { eraserMode: "stroke", eraserSize: 17.5, eraserFilter: "all" };
   const changed = vi.fn();
@@ -193,7 +193,7 @@ describe("pen gestures pressure controls", () => {
   });
   it("keeps the shared pressure preference in Pen settings and gestures on their own page", () => {
     const inputs: { value: string; listeners: Record<string, () => void> }[] = [];
-    const node = (): any => ({ addClass: () => {}, append: () => {}, toggleClass: () => {}, querySelector: () => ({ childElementCount: 1 }), createDiv: () => node(), createSpan: () => node(), setAttribute: () => {}, addEventListener: () => {}, createEl: (tag: string, options: { type?: string }) => {
+    const node = (): any => ({ addClass: () => {}, append: () => {}, toggleClass: () => {}, querySelector: () => null, empty: () => {}, setText: () => {}, createDiv: () => node(), createSpan: () => node(), setAttribute: () => {}, addEventListener: () => {}, createEl: (tag: string, options: { type?: string }) => {
       const child = node(); child.value = ""; child.listeners = {}; child.addEventListener = (name: string, fn: () => void) => { child.listeners[name] = fn; };
       if (tag === "input" && options.type === "range") inputs.push(child);
       return child;

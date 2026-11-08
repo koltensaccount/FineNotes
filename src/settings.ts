@@ -287,7 +287,7 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
           PDF_QUALITY_LABELS,
         ),
       ]),
-      ...this.recognitionRows(),
+      group("Handwriting recognition", this.recognitionRows()),
       this.aiGroup(),
       this.supportGroup(),
     ];
@@ -324,96 +324,100 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
   // --- Sections --------------------------------------------------------------
 
   /** Pen, paper and the defaults an ink note opens with. */
-  private writingRows(): SettingDefinition[] {
+  private writingRows(): SettingDefinitionItem[] {
     const widths = Object.fromEntries(SIZES.map((size) => [String(size), String(size)]));
     return [
-      callout(CALLOUTS.scribble, Platform.isIosApp && Platform.isTablet),
-      toggle("drawAndHold", "Draw and hold to make shapes", DESC.drawAndHold, [
-        "shape recognition",
-        "straighten",
-        "snap",
+      group("Writing and tools", [
+        callout(CALLOUTS.scribble, Platform.isIosApp && Platform.isTablet),
+        toggle("drawAndHold", "Draw and hold to make shapes", DESC.drawAndHold, [
+          "shape recognition",
+          "straighten",
+          "snap",
+        ]),
+        toggle(
+          "returnToPenOnReselect",
+          "Select active tool again to return to pen",
+          "Select the active eraser, lasso, text or shape tool again to return to your previous pen or highlighter.",
+          ["tool", "eraser", "lasso", "text", "shape"],
+        ),
+        toggle(
+          "returnToPenAfterUse",
+          "Return to pen after one use",
+          "Return to your previous pen or highlighter after an eraser stroke, shape or finished text editing (even if Text is pinned). Lasso returns when you click outside its selection, or delete or cut it.",
+          ["tool", "eraser", "lasso", "text", "shape"],
+        ),
+        toggle("pressureWidth", "Pressure-sensitive pens (advanced)", DESC.pressure, [
+          "pressure sensitivity",
+          "stylus",
+          "Apple Pencil",
+          "fountain pen",
+          "brush pen",
+        ]),
+        callout(CALLOUTS.pressure, () => this.plugin.settings.pressureWidth),
       ]),
-      toggle(
-        "returnToPenOnReselect",
-        "Select active tool again to return to pen",
-        "Select the active eraser, lasso, text or shape tool again to return to your previous pen or highlighter.",
-        ["tool", "eraser", "lasso", "text", "shape"],
-      ),
-      toggle(
-        "returnToPenAfterUse",
-        "Return to pen after one use",
-        "Return to your previous pen or highlighter after an eraser stroke, shape or finished text editing (even if Text is pinned). Lasso returns when you click outside its selection, or delete or cut it.",
-        ["tool", "eraser", "lasso", "text", "shape"],
-      ),
-      toggle("desynchronizedCanvas", "Desynchronized canvas", DESC.desynchronized, [
-        "latency",
-        "glitch",
-        "artifacts",
+      group("New notebooks", [
+        drawnRow("Paper width", DESC.paperWidth, (s) => this.drawPaperWidth(s), [
+          "canvas size",
+          "page width",
+        ]),
+        callout(CALLOUTS.paperWidth, () => this.paperWidthRejected),
+        drawnRow(
+          "Default folder for new notebooks",
+          DESC.notebookFolder,
+          (s) => this.drawNotebookFolder(s),
+          ["folder", "location", "new notebook", "new page"],
+        ),
+        toggle(
+          "showNewNotebookInContextMenu",
+          "Show New notebook in right-click menu",
+          "Add New notebook to the file explorer menu. New notebooks start in the selected folder.",
+          ["context menu", "file explorer", "new notebook"],
+        ),
+        toggle(
+          "showNewNotebookInExplorer",
+          "Show New notebook in file explorer bar",
+          "Add a New notebook button beside New note and New folder in the file explorer.",
+          ["toolbar", "file explorer", "new notebook"],
+        ),
       ]),
-      toggle("pressureWidth", "Pressure-sensitive pens (advanced)", DESC.pressure, [
-        "pressure sensitivity",
-        "stylus",
-        "Apple Pencil",
-        "fountain pen",
-        "brush pen",
+      group("Handwrite Here storage", [
+        toggle(
+          "useManagedStorage",
+          "Use managed FineNotes storage",
+          "Store newly created Handwrite Here backing notebooks and region previews in a shared vault folder.",
+          ["storage", "managed", "attachments", "handwriting", "embeds"],
+        ),
+        drawnRow(
+          "Managed storage data root",
+          "Vault-relative folder path for managed FineNotes storage (default: FineNotes).",
+          (s) => this.drawManagedStorageFolder(s),
+          ["storage", "managed", "folder", "root"],
+          () => this.plugin.settings.useManagedStorage,
+        ),
       ]),
-      callout(CALLOUTS.pressure, () => this.plugin.settings.pressureWidth),
-      drawnRow("Paper width", DESC.paperWidth, (s) => this.drawPaperWidth(s), [
-        "canvas size",
-        "page width",
+      group("Ink defaults and colors", [
+        controlRow("Default ink color", DESC.inkColor, { type: "color", key: "defaultColor" }, [
+          "pen color",
+        ]),
+        dropdown("defaultTool", "Default tool", DESC.tool, TOOL_NAMES),
+        dropdown("defaultSize", "Default stroke size", DESC.strokeSize, widths, [
+          "pen size",
+          "line width",
+        ]),
+        controlRow(
+          "Highlighter opacity",
+          DESC.highlighter,
+          // In percent; data.json keeps 0–1 (settings-data.ts converts).
+          { type: "slider", key: "highlighterAlpha", min: 10, max: 100, step: 5 },
+          ["transparency", "alpha"],
+        ),
+        controlRow(
+          "Custom colors",
+          DESC.customColors,
+          { type: "text", key: "customColors", placeholder: "#ff8800, #00ccaa" },
+          ["palette"],
+        ),
       ]),
-      callout(CALLOUTS.paperWidth, () => this.paperWidthRejected),
-      drawnRow(
-        "Default folder for new notebooks",
-        DESC.notebookFolder,
-        (s) => this.drawNotebookFolder(s),
-        ["folder", "location", "new notebook", "new page"],
-      ),
-      toggle(
-        "useManagedStorage",
-        "Use managed FineNotes storage",
-        "Store newly created Handwrite Here backing notebooks and region previews in a shared vault folder.",
-        ["storage", "managed", "attachments", "handwriting", "embeds"],
-      ),
-      drawnRow(
-        "Managed storage data root",
-        "Vault-relative folder path for managed FineNotes storage (default: FineNotes).",
-        (s) => this.drawManagedStorageFolder(s),
-        ["storage", "managed", "folder", "root"],
-      ),
-      toggle(
-        "showNewNotebookInContextMenu",
-        "Show New notebook in right-click menu",
-        "Add New notebook to the file explorer menu. New notebooks start in the selected folder.",
-        ["context menu", "file explorer", "new notebook"],
-      ),
-      toggle(
-        "showNewNotebookInExplorer",
-        "Show New notebook in file explorer bar",
-        "Add a New notebook button beside New note and New folder in the file explorer.",
-        ["toolbar", "file explorer", "new notebook"],
-      ),
-      controlRow("Default ink color", DESC.inkColor, { type: "color", key: "defaultColor" }, [
-        "pen color",
-      ]),
-      dropdown("defaultTool", "Default tool", DESC.tool, TOOL_NAMES),
-      dropdown("defaultSize", "Default stroke size", DESC.strokeSize, widths, [
-        "pen size",
-        "line width",
-      ]),
-      controlRow(
-        "Highlighter opacity",
-        DESC.highlighter,
-        // In percent; data.json keeps 0–1 (settings-data.ts converts).
-        { type: "slider", key: "highlighterAlpha", min: 10, max: 100, step: 5 },
-        ["transparency", "alpha"],
-      ),
-      controlRow(
-        "Custom colors",
-        DESC.customColors,
-        { type: "text", key: "customColors", placeholder: "#ff8800, #00ccaa" },
-        ["palette"],
-      ),
     ];
   }
 
@@ -517,6 +521,11 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
 
   private supportGroup(): SettingDefinitionItem {
     return group("Support and diagnostics", [
+      toggle("desynchronizedCanvas", "Desynchronized canvas", DESC.desynchronized, [
+        "latency",
+        "glitch",
+        "artifacts",
+      ]),
       toggle("debugHud", "Input debug overlay", DESC.debugHud, [
         "diagnostics",
         "HUD",

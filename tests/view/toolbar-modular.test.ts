@@ -540,8 +540,7 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
 
     // Check heading
     const headings = moreEl!.querySelectorAll(".goodobsidian-more-heading");
-    const hiddenHeading = headings.find((h) => h.textContent === "Hidden tools");
-    expect(hiddenHeading).toBeDefined();
+    expect(headings.map((h) => h.textContent)).toEqual(["Current page", "Copy page", "Clear or delete page", "Toolbar"]);
 
     // Check hidden tool rows
     const hiddenRows = moreEl!.querySelectorAll(".goodobsidian-more-hidden-tool");

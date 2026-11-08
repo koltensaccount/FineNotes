@@ -1874,9 +1874,8 @@ export class Toolbar {
   }
 
   /**
-   * GoodNotes' "Lasso Tool" popover, from a screenshot Joost supplied
-   * (2026-09-22): the lasso type as two cards, then a switch per kind of
-   * element the lasso picks up. It hangs from the lasso button with an arrow.
+   * The lasso's shape, overlap rule and content filters belong together.
+   * The popover hangs from the lasso button with an arrow.
    */
   private toggleLassoPopover(anchor: HTMLElement): void {
     if (this.popoverKind === "lasso" && this.popoverAnchor === anchor) {
@@ -1886,7 +1885,7 @@ export class Toolbar {
     const body = this.openPopover("lasso", anchor);
     this.popover?.addClass("is-lasso-popover");
     this.popover?.addClass("has-arrow");
-    body.addClass("goodobsidian-lasso-popover");
+    body.addClass("goodobsidian-tool-menu");
     this.popoverRender = () => {
       body.empty();
       this.renderLassoOptions(body);
@@ -1898,39 +1897,41 @@ export class Toolbar {
   private renderLassoOptions(body: HTMLElement): void {
     body.createDiv({ cls: "goodobsidian-popover-title", text: "Lasso tool" });
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Lasso type" });
-    const types = body.createDiv({ cls: "goodobsidian-lasso-types" });
     const mode = lassoModeFor(this.state);
     for (const option of [...LASSO_MODES].reverse()) {
-      // Rectangular first, as GoodNotes lays them out.
-      const card = types.createEl("button", { cls: "goodobsidian-lasso-type clickable-icon" });
-      card.append(lassoGlyph(option));
-      card.createSpan({ cls: "goodobsidian-lasso-type-label", text: LASSO_MODE_LABELS[option] });
-      card.toggleClass("is-active", option === mode);
-      card.setAttribute("aria-pressed", String(option === mode));
-      card.addEventListener("click", () => {
+      const button = body.createEl("button", { cls: "goodobsidian-tool-menu-choice clickable-icon" });
+      button.append(lassoGlyph(option));
+      button.createSpan({ cls: "goodobsidian-tool-menu-caption", text: LASSO_MODE_LABELS[option] });
+      this.markToolMenuChoice(button, option === mode);
+      button.addEventListener("click", () => {
         this.state.lassoMode = option;
         this.saveLasso();
         this.popoverRender?.();
       });
     }
 
-    body.createDiv({ cls: "goodobsidian-popover-label", text: "Selection behavior" });
-    const behavior = body.createDiv({ cls: "goodobsidian-lasso-types" });
-    for (const [value, label] of [["default", "Default"], ["overlap", "Any overlap"]] as const) {
-      const button = behavior.createEl("button", { cls: "goodobsidian-lasso-type clickable-icon", text: label });
-      const active = lassoBehaviorOf(this.state.lassoBehavior) === value;
-      button.toggleClass("is-active", active); button.setAttribute("aria-pressed", String(active));
-      button.addEventListener("click", () => { this.state.lassoBehavior = value; this.saveLasso(); this.popoverRender?.(); });
-    }
-    body.createDiv({ cls: "goodobsidian-popover-label", text: "What to include in the selection" });
-    const list = body.createDiv({ cls: "goodobsidian-switch-list" });
+    body.createDiv({ cls: "goodobsidian-popover-divider" });
+    this.switchRow(body, "Select items that overlap the lasso", lassoBehaviorOf(this.state.lassoBehavior) === "overlap", (on) => {
+      this.state.lassoBehavior = on ? "overlap" : "default";
+      this.saveLasso();
+      this.popoverRender?.();
+    });
+    body.createDiv({ cls: "goodobsidian-popover-label", text: "Include in selection" });
     const filter = lassoFilterFor(this.state);
     for (const key of LASSO_FILTER_KEYS) {
-      this.switchRow(list, LASSO_FILTER_LABELS[key], filter[key], (on) => {
+      this.switchRow(body, LASSO_FILTER_LABELS[key], filter[key], (on) => {
         this.state.lassoFilter = { ...lassoFilterFor(this.state), [key]: on };
         this.saveLasso();
         this.popoverRender?.();
       });
+    }
+  }
+
+  private markToolMenuChoice(button: HTMLButtonElement, selected: boolean): void {
+    button.setAttribute("aria-pressed", String(selected));
+    button.toggleClass("is-active", selected);
+    if (selected) {
+      iconOrText(button.createSpan({ cls: "goodobsidian-tool-menu-check", attr: { "aria-hidden": "true" } }), "check", "✓");
     }
   }
 
@@ -2200,14 +2201,15 @@ export class Toolbar {
   }
 
   private renderTextFonts(body: HTMLElement): void {
+    body.addClass("goodobsidian-tool-menu");
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Font" });
     const current = fontOf(this.shownTextStyle());
     for (const font of TEXT_FONTS) {
-      const button = this.textOption(body, "is-wide", TEXT_FONT_LABELS[font], () =>
+      const button = this.textOption(body, "goodobsidian-tool-menu-choice", TEXT_FONT_LABELS[font], () =>
         this.pickText({ font }),
       );
       button.setCssStyles({ fontFamily: TEXT_FONT_STACKS[font] });
-      button.toggleClass("is-active", font === current);
+      this.markToolMenuChoice(button, font === current);
     }
   }
 
@@ -2248,6 +2250,7 @@ export class Toolbar {
   }
 
   private renderTextSpacing(body: HTMLElement): void {
+    body.addClass("goodobsidian-tool-menu");
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Line spacing" });
     const current = lineHeightOf(this.shownTextStyle());
     for (const lineHeight of LINE_HEIGHTS) {
@@ -2256,10 +2259,8 @@ export class Toolbar {
         lineHeight === DEFAULT_LINE_HEIGHT
           ? `${formatLineHeight(lineHeight)} (default)`
           : formatLineHeight(lineHeight);
-      this.textOption(body, "is-wide", label, () => this.pickText({ lineHeight })).toggleClass(
-        "is-active",
-        Math.abs(lineHeight - current) < 1e-9,
-      );
+      const button = this.textOption(body, "goodobsidian-tool-menu-choice", label, () => this.pickText({ lineHeight }));
+      this.markToolMenuChoice(button, Math.abs(lineHeight - current) < 1e-9);
     }
   }
 
@@ -2561,10 +2562,11 @@ export class Toolbar {
       return;
     }
     const body = this.openPopover("eraser-mode", anchor);
-    body.createDiv({ cls: "goodobsidian-popover-label", text: "Eraser" });
+    body.addClass("goodobsidian-tool-menu");
+    body.createDiv({ cls: "goodobsidian-popover-label", text: "Eraser mode" });
     for (const mode of ERASER_MODES) {
-      const button = body.createEl("button", { cls: "goodobsidian-wide clickable-icon", text: mode.label });
-      button.toggleClass("is-active", mode.id === eraserModeFor(this.state));
+      const button = body.createEl("button", { cls: "goodobsidian-tool-menu-choice clickable-icon", text: mode.label });
+      this.markToolMenuChoice(button, mode.id === eraserModeFor(this.state));
       button.addEventListener("click", () => {
         this.closePopover();
         this.state.eraserMode = mode.id;
@@ -2579,8 +2581,8 @@ export class Toolbar {
   private renderEraserFilters(body: HTMLElement): void {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "What to erase" });
     for (const filter of ["all", "highlighter", "pen"] as const) {
-      const button = body.createEl("button", { cls: "goodobsidian-wide clickable-icon", text: ERASER_FILTER_LABELS[filter], attr: { "aria-pressed": String(filter === eraserFilterFor(this.state)) } });
-      button.toggleClass("is-active", filter === eraserFilterFor(this.state));
+      const button = body.createEl("button", { cls: "goodobsidian-tool-menu-choice clickable-icon", text: ERASER_FILTER_LABELS[filter] });
+      this.markToolMenuChoice(button, filter === eraserFilterFor(this.state));
       button.addEventListener("click", () => {
         this.state.eraserFilter = filter;
         this.callbacks.onEraserFilterChange?.(filter);
@@ -2595,6 +2597,7 @@ export class Toolbar {
   private toggleEraserFilterList(anchor: HTMLElement): void {
     if (this.popoverKind === "eraser-filter" && this.popoverAnchor === anchor) { this.closePopover(); return; }
     const body = this.openPopover("eraser-filter", anchor);
+    body.addClass("goodobsidian-tool-menu");
     this.renderEraserFilters(body);
     this.keepPopoverInside(anchor);
   }
@@ -2627,22 +2630,17 @@ export class Toolbar {
   }
 
   private renderPenTypes(body: HTMLElement, openGestures: () => void): void {
-    body.addClass("goodobsidian-pen-menu");
+    body.addClass("goodobsidian-tool-menu");
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Pen type" });
     for (const spec of PEN_MENU_TYPES) {
       if (spec.pressure && this.callbacks.pressureAllowed?.() !== true) continue;
       const button = body.createEl("button", {
-        cls: "goodobsidian-pen-choice clickable-icon",
+        cls: "goodobsidian-tool-menu-choice clickable-icon",
         attr: { "aria-label": spec.label, title: `${spec.label} — ${TOOL_HINTS[spec.id]}` },
       });
       button.append(this.penTypeGraphic(spec));
-      button.createSpan({ cls: "goodobsidian-pen-caption", text: spec.label });
-      const selected = spec.id === this.activePenType().id;
-      button.setAttribute("aria-pressed", String(selected));
-      button.toggleClass("is-active", selected);
-      if (selected) {
-        iconOrText(button.createSpan({ cls: "goodobsidian-pen-check", attr: { "aria-hidden": "true" } }), "check", "✓");
-      }
+      button.createSpan({ cls: "goodobsidian-tool-menu-caption", text: spec.label });
+      this.markToolMenuChoice(button, spec.id === this.activePenType().id);
       button.addEventListener("click", () => {
         this.closePopover();
         this.choosePenType(spec);
@@ -2698,7 +2696,7 @@ export class Toolbar {
   }
 
   private renderPenGestures(body: HTMLElement, back: () => void): void {
-    body.addClass("goodobsidian-pen-menu");
+    body.addClass("goodobsidian-tool-menu");
     const head = body.createDiv({ cls: "goodobsidian-popover-head" });
     const backButton = head.createEl("button", {
       cls: "goodobsidian-popover-back clickable-icon",

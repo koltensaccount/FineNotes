@@ -124,8 +124,7 @@ export class MorePanel {
     const { page, actions } = this;
     this.el.createDiv({ cls: "goodobsidian-more-title", text: "More" });
 
-    if (page.total > 1) {this.heading("Navigation"); this.goToRow(this.group());}
-    this.heading("Current Page");
+    this.heading("Current page");
     const card = this.group();
     const head = card.createDiv({ cls: "goodobsidian-more-pagehead" });
     head.createSpan({ cls: "goodobsidian-more-pagename", text: `Page ${page.index + 1}` });
@@ -143,18 +142,6 @@ export class MorePanel {
       text: page.titled ? "Rename in contents" : "Add to contents",
       run: () => actions.editTitle(page.index),
     });
-    this.row(card, {
-      icon: "link",
-      text: "Copy link to page",
-      run: () => actions.copyLink(page.index),
-    });
-    if (actions.copyPageEmbed) {
-      this.row(card, {
-        icon: "file-code-2",
-        text: "Copy page embed",
-        run: () => actions.copyPageEmbed?.(page.index),
-      });
-    }
     if (!page.single) {
       this.row(card, {
         icon: "copy",
@@ -169,43 +156,21 @@ export class MorePanel {
       run: (button) => actions.changeTemplate(page.index, button),
     });
 
-    if (actions.hiddenTools && actions.hiddenTools.length > 0) {
-      this.heading("Hidden tools");
-      const hiddenGroup = this.group();
-      for (const item of actions.hiddenTools) {
-        this.hiddenToolRow(hiddenGroup, item);
-      }
-      if (actions.resetToolbarLayout) {
-        this.row(hiddenGroup, {
-          icon: "rotate-ccw",
-          text: "Reset toolbar layout",
-          run: () => actions.resetToolbarLayout?.(),
-        });
-      }
-    }
+    if (page.total > 1) this.goToRow(card);
 
-    if (actions.onToolbarPositionChange) {
-      this.heading("Toolbar position");
-      const posGroup = this.group();
-      const posRow = posGroup.createDiv({ cls: "goodobsidian-more-pos-row" });
-      const positions: Array<{ id: ToolbarPosition; label: string; icon: string }> = [
-        { id: "top", label: "Top", icon: "panel-top" },
-        { id: "bottom", label: "Bottom", icon: "panel-bottom" },
-        { id: "left", label: "Left", icon: "panel-left" },
-        { id: "right", label: "Right", icon: "panel-right" },
-      ];
-      const current = actions.toolbarPosition ?? "top";
-      for (const pos of positions) {
-        const btn = posRow.createEl("button", {
-          cls: `goodobsidian-more-pos-button clickable-icon${pos.id === current ? " is-active" : ""}`,
-        });
-        setIcon(btn.createSpan({ cls: "goodobsidian-more-pos-icon" }), pos.icon);
-        btn.createSpan({ text: pos.label });
-        btn.addEventListener("click", () => {
-          this.close();
-          actions.onToolbarPositionChange?.(pos.id);
-        });
-      }
+    this.heading("Copy page");
+    const links = this.group();
+    this.row(links, {
+      icon: "link",
+      text: "Copy link to page",
+      run: () => actions.copyLink(page.index),
+    });
+    if (actions.copyPageEmbed) {
+      this.row(links, {
+        icon: "file-code-2",
+        text: "Copy page embed",
+        run: () => actions.copyPageEmbed?.(page.index),
+      });
     }
 
     this.heading("Clear or delete page");
@@ -224,6 +189,45 @@ export class MorePanel {
       enabled: page.total > 1,
       run: () => actions.remove(page.index),
     });
+
+    if (actions.hiddenTools?.length || actions.onToolbarPositionChange) this.heading("Toolbar");
+    if (actions.hiddenTools?.length) {
+      const hiddenGroup = this.group();
+      for (const item of actions.hiddenTools) {
+        this.hiddenToolRow(hiddenGroup, item);
+      }
+      if (actions.resetToolbarLayout) {
+        this.row(hiddenGroup, {
+          icon: "rotate-ccw",
+          text: "Reset toolbar layout",
+          run: () => actions.resetToolbarLayout?.(),
+        });
+      }
+    }
+
+    if (actions.onToolbarPositionChange) {
+      const posGroup = this.group();
+      const posRow = posGroup.createDiv({ cls: "goodobsidian-more-pos-row" });
+      const positions: Array<{ id: ToolbarPosition; label: string; icon: string }> = [
+        { id: "top", label: "Top", icon: "panel-top" },
+        { id: "bottom", label: "Bottom", icon: "panel-bottom" },
+        { id: "left", label: "Left", icon: "panel-left" },
+        { id: "right", label: "Right", icon: "panel-right" },
+      ];
+      const current = actions.toolbarPosition ?? "top";
+      for (const pos of positions) {
+        const btn = posRow.createEl("button", {
+          cls: `goodobsidian-more-pos-button clickable-icon${pos.id === current ? " is-active" : ""}`,
+          attr: { "aria-pressed": String(pos.id === current) },
+        });
+        setIcon(btn.createSpan({ cls: "goodobsidian-more-pos-icon" }), pos.icon);
+        btn.createSpan({ text: pos.label });
+        btn.addEventListener("click", () => {
+          this.close();
+          actions.onToolbarPositionChange?.(pos.id);
+        });
+      }
+    }
   }
 
   private group(): HTMLElement {

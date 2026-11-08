@@ -119,13 +119,21 @@ export class NoteSettingsModal extends Modal {
     this.keyboard.end();
     this.disposeGuides?.(); this.disposeGuides = null;
     contentEl.empty();
-    if (this.host.writingGuides) {
-      const details = contentEl.createEl("details", { cls: "goodobsidian-guide-details" });
-      details.createEl("summary", { text: "Writing guides" });
-      details.addEventListener("toggle", () => { if (details.open && !this.disposeGuides) this.disposeGuides = renderWritingGuideControls(details, this.host.writingGuides!); });
-    }
     // A single page has nowhere to scroll to.
-    if (!this.host.single) this.renderScroll(contentEl);
+    if (!this.host.single || this.host.writingGuides) {
+      new Setting(contentEl).setName("Page view").setHeading();
+      if (!this.host.single) this.renderScroll(contentEl);
+      if (this.host.writingGuides) {
+        const details = contentEl.createEl("details", { cls: "goodobsidian-guide-details" });
+        details.createEl("summary", { text: "Writing guides" });
+        details.addEventListener("toggle", () => {
+          if (details.open && !this.disposeGuides) {
+            this.disposeGuides = renderWritingGuideControls(details, this.host.writingGuides!);
+          }
+        });
+      }
+    }
+    if (this.host.companion) this.renderCompanion(contentEl);
     new Setting(contentEl).setName("Where new files are saved").setHeading();
     contentEl.createDiv({
       cls: "setting-item-description goodobsidian-note-settings-intro",
@@ -137,7 +145,6 @@ export class NoteSettingsModal extends Modal {
     });
     const folders = this.host.folders();
     for (const row of ROWS) this.renderRow(contentEl, row, folders[row.kind]);
-    if (this.host.companion) this.renderCompanion(contentEl);
   }
 
   private renderCompanion(parent: HTMLElement): void {
@@ -154,11 +161,6 @@ export class NoteSettingsModal extends Modal {
       if (this.showing) this.render();
     };
     new Setting(parent).setName("Companion PDF").setHeading();
-    new Setting(parent).setName("Quality").addDropdown(dropdown => {
-      dropdown.addOption("global", "Use global default");
-      for (const [value,label] of Object.entries(PDF_QUALITY_LABELS)) dropdown.addOption(value,label);
-      dropdown.setValue(state.pdfQuality ?? "global").onChange(value => void run(() => host.configure({pdfQuality: value === "global" ? null : value as PdfQuality})));
-    });
     new Setting(parent)
       .setName("Maintain an up-to-date PDF copy")
       .setDesc(
@@ -170,6 +172,11 @@ export class NoteSettingsModal extends Modal {
           .onChange((enabled) => void run(() => host.configure({ enabled }))),
       );
 
+    new Setting(parent).setName("Quality").addDropdown(dropdown => {
+      dropdown.addOption("global", "Use global default");
+      for (const [value,label] of Object.entries(PDF_QUALITY_LABELS)) dropdown.addOption(value,label);
+      dropdown.setValue(state.pdfQuality ?? "global").onChange(value => void run(() => host.configure({pdfQuality: value === "global" ? null : value as PdfQuality})));
+    });
     new Setting(parent)
       .setName("PDF path / custom filename")
       .setDesc(
@@ -217,7 +224,6 @@ export class NoteSettingsModal extends Modal {
   }
 
   private renderScroll(parent: HTMLElement): void {
-    new Setting(parent).setName("Pages").setHeading();
     new Setting(parent)
       .setName("Scroll direction")
       .setDesc(

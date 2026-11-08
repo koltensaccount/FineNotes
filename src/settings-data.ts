@@ -383,6 +383,7 @@ export function changesTabLayout(key: string): boolean {
     key === "llmVendor" ||
     key === "imageVendor" ||
     key === "pressureWidth" ||
+    key === "useManagedStorage" ||
     key === "defaultTool"
   );
 }

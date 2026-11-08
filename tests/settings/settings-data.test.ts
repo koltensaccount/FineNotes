@@ -268,6 +268,7 @@ describe("control values", () => {
       "imageVendor",
       "pressureWidth",
       "defaultTool",
+      "useManagedStorage",
     ]) {
       expect(changesTabLayout(key)).toBe(true);
     }

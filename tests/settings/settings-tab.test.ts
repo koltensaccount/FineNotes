@@ -207,29 +207,28 @@ describe("the rows", () => {
     const { tab } = makeTab(makePlugin());
     const label = VENDORS.anthropic.label;
     expect(rows(tab).map((r) => [r.heading, r.def.name || "(block)", kind(r.def)])).toEqual([
-      ["", "(block)", "render"],
-      ["", "Draw and hold to make shapes", "toggle:drawAndHold"],
-      ["", "Select active tool again to return to pen", "toggle:returnToPenOnReselect"],
-      ["", "Return to pen after one use", "toggle:returnToPenAfterUse"],
-      ["", "Desynchronized canvas", "toggle:desynchronizedCanvas"],
-      ["", "Pressure-sensitive pens (advanced)", "toggle:pressureWidth"],
-      ["", "(block)", "render"],
-      ["", "Paper width", "render"],
-      ["", "(block)", "render"],
-      ["", "Default folder for new notebooks", "render"],
-      ["", "Use managed FineNotes storage", "toggle:useManagedStorage"],
-      ["", "Managed storage data root", "render"],
-      ["", "Show New notebook in right-click menu", "toggle:showNewNotebookInContextMenu"],
-      ["", "Show New notebook in file explorer bar", "toggle:showNewNotebookInExplorer"],
-      ["", "Default ink color", "color:defaultColor"],
-      ["", "Default tool", "dropdown:defaultTool"],
-      ["", "Default stroke size", "dropdown:defaultSize"],
-      ["", "Highlighter opacity", "slider:highlighterAlpha"],
-      ["", "Custom colors", "text:customColors"],
+      ["Writing and tools", "(block)", "render"],
+      ["Writing and tools", "Draw and hold to make shapes", "toggle:drawAndHold"],
+      ["Writing and tools", "Select active tool again to return to pen", "toggle:returnToPenOnReselect"],
+      ["Writing and tools", "Return to pen after one use", "toggle:returnToPenAfterUse"],
+      ["Writing and tools", "Pressure-sensitive pens (advanced)", "toggle:pressureWidth"],
+      ["Writing and tools", "(block)", "render"],
+      ["New notebooks", "Paper width", "render"],
+      ["New notebooks", "(block)", "render"],
+      ["New notebooks", "Default folder for new notebooks", "render"],
+      ["New notebooks", "Show New notebook in right-click menu", "toggle:showNewNotebookInContextMenu"],
+      ["New notebooks", "Show New notebook in file explorer bar", "toggle:showNewNotebookInExplorer"],
+      ["Handwrite Here storage", "Use managed FineNotes storage", "toggle:useManagedStorage"],
+      ["Handwrite Here storage", "Managed storage data root", "render"],
+      ["Ink defaults and colors", "Default ink color", "color:defaultColor"],
+      ["Ink defaults and colors", "Default tool", "dropdown:defaultTool"],
+      ["Ink defaults and colors", "Default stroke size", "dropdown:defaultSize"],
+      ["Ink defaults and colors", "Highlighter opacity", "slider:highlighterAlpha"],
+      ["Ink defaults and colors", "Custom colors", "text:customColors"],
       ["Notebook Embeds", "Embed paper background", "toggle:embedBackground"],
       ["PDF Export", "Default quality", "dropdown:pdfExportQuality"],
-      ["", "Handwriting recognition", "dropdown:recognitionProviderId"],
-      ["", "Recognize automatically", "toggle:autoRecognize"],
+      ["Handwriting recognition", "Handwriting recognition", "dropdown:recognitionProviderId"],
+      ["Handwriting recognition", "Recognize automatically", "toggle:autoRecognize"],
       [AI, "AI service", "dropdown:llmVendor"],
       [AI, "Endpoint URL", "render"],
       [AI, "(block)", "render"],
@@ -242,6 +241,7 @@ describe("the rows", () => {
       [AI, "(block)", "render"],
       [AI, "Image model", "text:imageModel"],
       [AI, `${label} API key for images`, "render"],
+      [SUPPORT, "Desynchronized canvas", "toggle:desynchronizedCanvas"],
       [SUPPORT, "Input debug overlay", "toggle:debugHud"],
       [SUPPORT, "(block)", "render"],
     ]);
@@ -371,7 +371,7 @@ describe("which rows show", () => {
     const on = visibleNames(makePlugin({ pressureWidth: true }));
     const toggle = "Pressure-sensitive pens (advanced)";
     expect(off[off.indexOf(toggle) + 1]).toBe("Paper width");
-    expect(on[on.indexOf(toggle) + 1]).toBe("(block 6)");
+    expect(on[on.indexOf(toggle) + 1]).toBe("(block 5)");
   });
 
   it("by default: no iPad tip, Manual recognition, Claude, keys in the keychain", () => {
@@ -380,14 +380,13 @@ describe("which rows show", () => {
       "Draw and hold to make shapes",
       "Select active tool again to return to pen",
       "Return to pen after one use",
-      "Desynchronized canvas",
       "Pressure-sensitive pens (advanced)",
       "Paper width",
       "Default folder for new notebooks",
-      "Use managed FineNotes storage",
-      "Managed storage data root",
       "Show New notebook in right-click menu",
       "Show New notebook in file explorer bar",
+      "Use managed FineNotes storage",
+      "Managed storage data root",
       "Default ink color",
       "Default tool",
       "Default stroke size",
@@ -400,10 +399,16 @@ describe("which rows show", () => {
       "AI model",
       `${label} API key`,
       "Image generation",
-      "(block 32)",
+      "(block 31)",
+      "Desynchronized canvas",
       "Input debug overlay",
       "(block 36)",
     ]);
+  });
+
+  it("shows the managed folder only while managed storage is enabled", () => {
+    expect(visibleNames(makePlugin({ useManagedStorage: false }))).not.toContain("Managed storage data root");
+    expect(visibleNames(makePlugin({ useManagedStorage: true }))).toContain("Managed storage data root");
   });
 
   it("shows the Scribble tip on an iPad only", () => {
