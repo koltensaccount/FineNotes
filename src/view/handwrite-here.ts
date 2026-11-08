@@ -26,6 +26,11 @@ import {
   parseNotebookChoices,
   stripInkSuffix,
 } from "../model/new-notebook";
+import {
+  isManagedStorageEnabled,
+  getManagedSubdirectory,
+  ensureFolderExists,
+} from "../model/storage-resolver";
 import { InkView } from "./ink-view";
 
 export type NotebookChoiceItem =
@@ -62,7 +67,9 @@ export class NotebookSuggestModal extends SuggestModal<NotebookChoiceItem> {
     const trimmed = query.trim();
     const sourceFolder =
       this.source.parent && !this.source.parent.isRoot() ? this.source.parent.path : "";
-    const defaultFolder = sourceFolder || this.plugin.settings?.newNotebookFolder || "";
+    const defaultFolder = isManagedStorageEnabled(this.plugin.settings)
+      ? getManagedSubdirectory("handwriting", this.plugin.settings)
+      : sourceFolder || this.plugin.settings?.newNotebookFolder || "";
     const defaultTitle = stripInkSuffix(this.source.basename) || "Notebook";
     const createTitle = trimmed.length > 0 ? trimmed : defaultTitle;
 
@@ -160,9 +167,11 @@ export async function createNotebookForNote(
   title: string,
   folder?: string,
 ): Promise<TFile> {
-  const dir = normalizeFolder(
-    folder ?? (source.parent && !source.parent.isRoot() ? source.parent.path : ""),
-  );
+  const defaultDir = isManagedStorageEnabled(plugin.settings)
+    ? getManagedSubdirectory("handwriting", plugin.settings)
+    : (source.parent && !source.parent.isRoot() ? source.parent.path : "");
+  const dir = normalizeFolder(folder ?? defaultDir);
+  await ensureFolderExists(plugin.app, dir);
   const parent = dir ? plugin.app.vault.getFolderByPath(dir) : plugin.app.vault.getRoot();
   const taken = new Set(parent?.children?.map((child) => child.name) ?? []);
   const choices = parseNotebookChoices(plugin.settings?.lastNotebookChoices);

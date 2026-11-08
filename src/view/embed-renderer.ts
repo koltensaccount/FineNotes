@@ -1,5 +1,6 @@
 import { relinkDocument } from "../model/moved-files";
 import { renderClipPng } from "./clip-png";
+import { startInlineHandwriteSession } from "./inline-handwrite";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkView } from "./ink-view";
 import { PdfBackdropCache } from "./pdf-backdrop";
@@ -118,7 +119,7 @@ export class FineNotesEmbedManager {
   }
 
   constructor(
-    private readonly plugin: GoodObsidianPlugin,
+    readonly plugin: GoodObsidianPlugin,
     private readonly app: App,
   ) {
     this.pdfCache = new PdfBackdropCache(app);
@@ -818,6 +819,9 @@ export class FineNotesEmbedView {
   private canvas: HTMLCanvasElement | null = null;
   private containerEl: HTMLElement | null = null;
   private isDestroyed = false;
+  private resolvedPageIndex = 0;
+  private resolvedCropBounds: Bounds | null = null;
+  private resolvedClip: NotebookClip | null = null;
 
   constructor(
     private readonly manager: FineNotesEmbedManager,
@@ -849,23 +853,43 @@ export class FineNotesEmbedView {
       },
     });
 
-    // Clicking anywhere on the embed navigates directly to the source notebook & region
+    // Clicking anywhere on the embed activates inline editing; Alt/Meta-click opens full notebook
     this.containerEl.addEventListener("click", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
-      const linkText = `${this.file.path}${this.subpath}`;
-      void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
+      if (evt.altKey || evt.metaKey || evt.ctrlKey) {
+        const linkText = `${this.file.path}${this.subpath}`;
+        void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
+        return;
+      }
+      this.activateInlineEditing();
     });
 
     this.containerEl.addEventListener("keydown", (evt) => {
       if (evt.key === "Enter" || evt.key === " ") {
         evt.preventDefault();
-        const linkText = `${this.file.path}${this.subpath}`;
-        void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
+        this.activateInlineEditing();
       }
     });
 
     await this.paintContent();
+  }
+
+  private activateInlineEditing(): void {
+    if (this.isDestroyed || !this.containerEl) return;
+    startInlineHandwriteSession({
+      plugin: this.manager.plugin,
+      app: this.app,
+      containerEl: this.containerEl,
+      notebookFile: this.file,
+      pageIndex: this.resolvedPageIndex,
+      clip: this.resolvedClip,
+      cropBounds: this.resolvedCropBounds ?? { minX: 0, minY: 0, maxX: 800, maxY: 360 },
+      sourcePath: this.sourcePath,
+      onClosed: () => {
+        void this.paintContent();
+      },
+    });
   }
 
   async refresh(): Promise<void> {
@@ -947,6 +971,10 @@ export class FineNotesEmbedView {
         maxY: Math.max(1, Math.min(pH, cropBounds.maxY)),
       };
     }
+
+    this.resolvedPageIndex = pageIndex;
+    this.resolvedCropBounds = cropBounds;
+    this.resolvedClip = clip;
 
     const cropW = Math.max(1, cropBounds.maxX - cropBounds.minX);
     const cropH = Math.max(1, cropBounds.maxY - cropBounds.minY);

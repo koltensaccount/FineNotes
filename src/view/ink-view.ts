@@ -1,4 +1,9 @@
 import { referencedEmbedImages } from "./embed-references";
+import {
+  isManagedStorageEnabled,
+  ensureManagedDirectory,
+  resolveManagedFilePath,
+} from "../model/storage-resolver";
 import { AddHandwritingRegion, allocateHandwritingRegion, updateHandwritingReferences } from "../model/region-allocation";
 import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
 import { writingGuidesOf, type WritingGuideStyle } from "../model/writing-guides";
@@ -2121,7 +2126,15 @@ export class InkView extends TextFileView {
     const allocation = allocateHandwritingRegion(doc, preferredPage, reusableReferences);
     if (allocation.newPage && this.isSinglePage) throw new Error("This single-page note has no room for another region.");
     const clipId = allocation.reusableClip?.id ?? `clip-${crypto.randomUUID()}`;
-    const targetPath = allocation.reusableClip?.imagePath ?? await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
+    let targetPath = allocation.reusableClip?.imagePath;
+    if (!targetPath) {
+      if (isManagedStorageEnabled(this.settings)) {
+        await ensureManagedDirectory(this.app, "embeds", this.settings);
+        targetPath = resolveManagedFilePath("embeds", `${file.basename}-${clipId}.png`, this.settings);
+      } else {
+        targetPath = await this.app.fileManager.getAvailablePathForAttachment(`${file.basename}-${clipId}.png`, file.path);
+      }
+    }
     this.clipsDirty = true;
     const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
     const buffer = await renderClipPng(allocation.page, allocation.bounds, {

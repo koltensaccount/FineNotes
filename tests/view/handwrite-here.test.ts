@@ -663,6 +663,7 @@ it("provides inline notebook creation and smart suggestions in NotebookSuggestMo
     },
     settings: {
       paperWidth: 800,
+      useManagedStorage: false,
     },
   } as any;
 

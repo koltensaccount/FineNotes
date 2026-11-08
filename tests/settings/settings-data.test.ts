@@ -45,6 +45,8 @@ const FRESH_INSTALL = {
   highlighterAlpha: 0.4,
   paperWidth: 1024,
   newNotebookFolder: "",
+  useManagedStorage: true,
+  managedStorageRoot: "FineNotes",
   lastNotebookChoices: null,
   recognitionProviderId: "manual",
   desynchronizedCanvas: true,
