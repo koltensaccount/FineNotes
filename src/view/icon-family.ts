@@ -48,7 +48,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
     svg: `<path d="m6.8 14.9 8.5-9.7c.6-.7 1.6-.8 2.3-.2l2 1.8c.7.6.8 1.6.2 2.3L11 18.9"/><path d="m6.8 14.9 4.2 4-3.5 3-4.4-4.1zM15 9.2l3.4 3.1"/>${ink("m3.1 17.8 4.4 4.1-4.1.1z")}`,
   },
   {
-    id: "ballpoint", title: "Ballpoint", category: "Writing tools", original: "fn-original-pen",
+    id: "ballpoint", title: "Ballpoint", category: "Writing tools", original: "fn-original-ball",
     usage: "Pen type chooser; representative instrument artwork, not a second toolbar preview",
     svg: `<path d="m5.9 17.3 9.4-11.9 3.3 2.6-9.3 11.9-4.3 2zM15.3 5.4l1-1.2a1.8 1.8 0 0 1 2.6-.3l1.6 1.2a1.8 1.8 0 0 1 .2 2.6l-2.1 2.2"/><path d="m6 17.3 3.3 2.6"/>${ink("m5 21.9 1-4.6 3.3 2.6z")}`,
   },
