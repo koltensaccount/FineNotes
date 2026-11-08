@@ -1,51 +1,35 @@
-# FineNotes Icon Studio — review and implementation gate
+# FineNotes Icon Studio — Concept #2 refinement
 
-Branch: `work/icon-family-approval-gallery-20261107` (separate from `integration/kolten`).
+## Current design target
 
-## Purpose
+This replaces the **rejected 28-icon replacement proposal** with **three** deliberately designed candidate instruments: **Pen, Highlighter, Eraser**. The second mockup ("Lecture Notes", light interface, slim tilted stylus with a blue tip, yellow highlighter) is the approved visual reference.
 
-Original, Swiss-technical icon candidates based on the **second approved visual concept**: a slim angled digital stylus, restrained neutral instrument outline, a tiny live ink-coloured tip where meaningful, theme-adaptive surface and selected state. This artwork is independent of the newest upstream FineNotes pen glyphs. No new drawing tools are created.
+The old 28 SVG concepts are *not* endorsed. They have been removed from the candidate registry, and their previous per-item review decisions are not reused; the three revised candidates have new ids (`*-concept2`).
 
-**This is a design review feature, not a production icon replacement.** Existing toolbars, shortcuts, command IDs, Lasso/Shapes dynamic behavior, notebook content, and Copy Embed remain untouched. Decisions are stored per icon in `settings.iconReviewDecisions`, not used by live icon dispatch. Approving an item does not activate it.
+### Candidate behavior
 
-## Where to open
-
-- In Obsidian, **Settings → FineNotes → Support and diagnostics → FineNotes Icon Studio → Review icons…**
-- Or command palette: **FineNotes: Review proposed icons side by side…**.
-- Each row renders the old icon **next to** the new original SVG at native toolbar size, its proposed usage, and **Approve**, **Reject**, or **Clear decision**.
-- Test blue, red, green, black and white ink before deciding. Switch the comparison between Obsidian's current theme, a light sample surface, and a dark sample surface without changing the real app theme.
-- Use **Copy decisions** to export every candidate's id/title/approved/rejected/undecided status as JSON for a follow-up agent or chat. This does not export notes or any private vault content.
-- Decisions persist in the vault's plugin settings; review choices do **not** affect live notebook rendering.
-
-## Candidate inventory (28)
-
-| Area | Candidate ids | Existing sources to integrate after approval |
+| Candidate | Original shown in review | Revised artwork |
 | --- | --- | --- |
-| Main writing tools | `pen`, `highlighter`, `eraser`, `shapes`, `text` | `src/view/toolbar.ts`, pen options, `styles.css` |
-| Pen-type and eraser options | `ballpoint`, `brush`, `erase-stroke` | `toolbar.ts`, `stroke-preview.ts` — keep functional stroke-width samples |
-| Selection | `lasso-free`, `lasso-rect`, `crop`, `move` | `toolbar.ts`, `ink-surface.ts`, `selection-bar.ts` |
-| Media insertion | `image`, `record`, `scan`, `pdf` | `image-menu.ts`, `audio-ui.ts`, PDF import/export |
-| Notebooks and Markdown | `new-notebook`, `new-page`, `bookmark`, `contents`, `templates`, `writing-guides`, `copy-embed`, `handwrite-here` | `main.ts`, `page-sidebar.ts`, `more-panel.ts`, `new-notebook-modal.ts`, `note-settings-modal.ts`, `handwrite-here.ts` |
-| PDF lifecycle | `companion-pdf` | `companion-pdf.ts`, `note-settings-modal.ts` |
-| Custom circuit editor | `circuit`, `circuit-wire`, `circuit-component` | `circuit-modal.ts`, selection/action menus |
+| Pen | Existing live-style FineNotes stroke preview, reflecting configured pen type and width | Slim tilted digital stylus, neutral outline, tiny live-color tip, quiet end cap |
+| Highlighter | Existing FineNotes highlighter stroke preview | Same tilted axis, wider barrel, squared chisel tip, live-color nib |
+| Eraser | Obsidian `eraser` icon used by current primary toolbar | Simple two-part eraser block with one seam, no ink coloration |
 
-Utility icons remain native and familiar: Undo, Redo, Close, Settings, Search, Help, navigation arrows, disclosure, checkboxes, add/remove generic commands, etc. They use Obsidian's standard appearance and shared optical sizing rather than individually bespoke pictograms. The newer upstream Home/Library, OCR, sticky notes, tape, fill, tables and other **not yet merged** features should use this same system once brought into the fork; don't silently invent unavailable tools or icons for them today.
+All three use one 24×24 grid, a 1.6-unit neutral outline, rounded joins and caps, and minimal detail. Test at displayed tool size, not just enlarged.
 
-## Design and implementation requirements
+**Existing behavior stays untouched.** Pen presets, highlighter opacity, pressure rules, lasso modes, shape-specific previews, color swatches, record, text, notebook layout, circuit tools and Obsidian utility icons are unchanged. SVG registrations are review-only and use `finenotes-concept2-*` ids. Approval stores a decision and does not apply icons to the toolbar.
 
-- The candidates register under `finenotes-v2-*` identifiers to avoid any changes to existing Obsidian/Lucide names.
-- A 24×24 drawing grid, rounded line ends and joins, 1.8-unit principal stroke and carefully optical-balanced icon geometries.
-- Neutral outline inherits `currentColor` from the Obsidian theme. Ink is a separate CSS-var material `--fn-review-ink`, not the entire icon. Ink-coloured details receive a fine neutral rim so white and black don't vanish.
-- The actual app should eventually bind `--fn-review-ink` to the currently selected ink colour (including when a preset or pen type changes); the gallery's swatches are a visual test only.
-- Existing lasso mode-sensitive button and existing Shapes specific-outline previews are *authoritative*; replacement candidates may improve silhouette but must **not** create redundant indicator strokes or override contextual state.
-- Actual stroke-width choices, dash patterns, highlighter opacity and every working setting need to remain exact. Dynamic ink- and pressure-based rendering is separate from static pictograms.
-- No hard-coded light/dark chrome backgrounds, no decorative loops, gradients, emoji, or larger-than-native tool glyphs.
-- Accessible labels, 44pt iPad touch targets where actionable, reduced-motion setting and focus/keyboard interactions remain functional.
-- Full review of all affected UI surfaces before activation: primary and secondary toolbars; in-tool popovers; selection bars; page sidebar/contents; New Notebook; notebook settings; file explorer and ribbon; Markdown Handwrite Here; image, scan, audio, PDF and Companion PDF; circuit editor; command palette; newer upstream Home/Library when ported.
-- Preserve the previous icon as a fallback when an unapproved icon is not available.
+## Side-by-side review
 
-## Validation
+Open **FineNotes settings → Support and diagnostics → FineNotes Icon Studio → Review icons…**, or command palette **FineNotes: Review proposed icons side by side…** on a build of this branch.
 
-Automated tests added: `tests/view/icon-family.test.ts` checks inventory uniqueness, namespaced registration, meaningful ink fills, and retained Lasso/Shapes behavior metadata. CI (once the draft PR is opened) should run lint, plugin-review lint, TypeScript, Vitest and production build. **Physical iPad legibility, color contrast, dynamic ink state and tap behavior still require device review.**
+For each of the **three** proposed replacements, the gallery shows **Current** and **New** side by side, at native toolbar size. **Approve**, **Reject** and **Clear decision** persist review choices per icon. Test pen ink colors blue, red, green, yellow, black, and white. Switch theme previews between Obsidian, Light, and Dark. **Copy decisions** exports the three choices as a JSON list; it does not include vault content.
 
-The gallery is not an icon-switching feature. In the next stage, implement only individually **approved** candidates through a centralized semantic icon registry while preserving rejected icons and existing behavior. This stage must be separately verified and explicitly approved before merging into `integration/kolten`.
+## Rollout and verification gates
+
+1. The code in this branch is only the icon review studio, not actual toolbar activation. Do not merge this draft without acceptance of the visible artwork.
+2. Run `npm ci && npm run lint && npm run lint:review && npm run typecheck && npm test && npm run build`, then inspect it in Obsidian desktop and iPad. In particular, ensure the comparison modal opens, light/dark and swatches function, all three icons render without clipping, and decisions persist without toggling live icons.
+3. Once approved, implement a **small, separate approved-only integration**. Pen icon must remain responsive to pen type and selected ink. Highlighter stays a subtype of Pen, not a new top-level tool. Preserve existing stroke previews in width menus and shape-selection contexts.
+4. The upstream modernization branch / PR #1 is separate. Reconcile the approved icon work with that architecture after PR #1 is reviewed rather than assuming independent branches are already integrated.
+5. If any of these three redraws looks worse at real size, **keep the original**.
+
+No new tools, no ruler and no decorative previews.
