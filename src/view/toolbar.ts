@@ -2639,9 +2639,7 @@ export class Toolbar {
         cls: "goodobsidian-tool-menu-choice clickable-icon",
         attr: { "aria-label": spec.label, title: `${spec.label} — ${TOOL_HINTS[spec.id]}` },
       });
-      if (spec.id !== "highlighter" || !this.setWritingIcon(button, "highlighter")) {
-        button.append(this.penTypeGraphic(spec));
-      }
+      button.append(this.penTypeGraphic(spec));
       button.createSpan({ cls: "goodobsidian-tool-menu-caption", text: spec.label });
       this.markToolMenuChoice(button, spec.id === this.activePenType().id);
       button.addEventListener("click", () => {

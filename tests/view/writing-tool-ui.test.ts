@@ -179,8 +179,10 @@ describe("pen choice state", () => {
           size: 3,
         };
       const chosen = vi.fn(),
+        setWritingIcon = vi.fn(() => true),
         toolbar = Object.assign(Object.create(Toolbar.prototype) as object, {
           host: new El(),
+          setWritingIcon,
           options: {},
           state,
           callbacks: {
@@ -193,6 +195,7 @@ describe("pen choice state", () => {
           syncActive: vi.fn(),
         }) as unknown as { renderPenTypes(body: HTMLElement, back: () => void): void };
       toolbar.renderPenTypes(body as unknown as HTMLElement, vi.fn());
+      expect(setWritingIcon).not.toHaveBeenCalled();
       const option = body.find(spec.label);
       expect(option.children[0].attrs["data-preview-tool"]).toBe(spec.id);
       option.click();
