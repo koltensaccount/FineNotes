@@ -7,7 +7,7 @@ import { copyArtifacts, resolveDeployDir } from "./scripts/deploy-target.mjs";
 const banner = `/*
 FineNotes fork — bundled plugin output.
 License: GPL-3.0-or-later.
-Source: https://github.com/koltensaccount/FineNotes/tree/1.5.1-beta.91
+Source: https://github.com/koltensaccount/FineNotes/tree/1.5.1-beta.92
 
 ${readFileSync(new URL("./LICENSE-MIT", import.meta.url), "utf8")}
 

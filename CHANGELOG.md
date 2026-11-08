@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 92 — Notebook close and inline handwriting
+
+- Finish saving and release the inline handwriting lock when the full notebook closes.
+
 ### Beta 91 — Slider thumbs, ink swatches, and Highlighter preview
 
 - Center adjustment slider thumbs on their tracks in Obsidian.
