@@ -194,6 +194,7 @@ import {
 import {
   type Bounds,
   type CircuitElement,
+  type EquationElement,
   type ImageCrop,
   type ImageElement,
   type InkDocument,
@@ -214,7 +215,9 @@ import {
   UpdateCircuitCommand,
 } from "../circuit/circuit-commands";
 import { CircuitModal } from "./circuit-modal";
+import { insideShape, takesLabel, labelArea, labelOf } from "../model/shape-label";
 import { DUPLICATE_OFFSET, duplicateImage, nextImageId } from "../model/images";
+import { RecolorEquations } from "../model/equation";
 import {
   AddElements,
   type ElementLists,
@@ -447,6 +450,7 @@ export interface InkSurfaceCallbacks {
   onChange: () => void;
   /** Open an internal vault note or external link tapped in a text box. */
   onOpenLink?: (target: string) => void;
+  onEquation?: (pageId: string, at: Pt, equation: EquationElement | null) => void;
   onCopyPdfRegion?: (page: Page, region: PdfRegion) => Promise<File>;
   onCopyPdfClipboard?: (png: Promise<File>, marker: string) => void;
   onCopySelection?: (png: Promise<Blob>, marker: string) => void;
@@ -758,6 +762,7 @@ interface GroupDrag {
 }
 
 export class InkSurface {
+  practice?: object | null;
   private resetMultiTouch: () => void = () => {};
   readonly surfaceEl: HTMLElement;
   private readonly scrollEl: HTMLElement;
@@ -4395,6 +4400,7 @@ export class InkSurface {
     if (!rect || !drag) return;
 
     if (!this.dragSizesText() || Math.max(rect.w, rect.h) < this.atFitZoom(TEXT_TAP_SLOP)) {
+      if (this.equationAt(box, drag.origin)) return;
       // GoodNotes' default: the box starts where the pen went down, as small
       // as it can be, and grows with the text (the sync sets its width).
       const x = clamp(drag.origin.x, 0, Math.max(0, box.width - TEXT_MIN_W));
@@ -4440,6 +4446,25 @@ export class InkSurface {
     // the pointerup, because iPadOS only raises the keyboard for a focus made
     // during a user gesture.
     if (view) this.focusTextBox(view.input);
+  }
+
+  /**
+   * A Text-tool tap at page point `at`: on an equation, it opens for
+   * editing; elsewhere, with the Text tool's Equation on, a new one is
+   * written there. Whether the tap was taken.
+   */
+  private equationAt(box: PageBox, at: Pt): boolean {
+    const onEquation = this.callbacks.onEquation;
+    const page = this.pageAt(box.index);
+    if (!onEquation || !page || this.practice || this.callbacks.isLocked?.()) return false;
+    const hit = this.ownEquationAt(page, at);
+    if (hit) {
+      this.select(page.id, { strokes: [], images: [], textBoxes: [], equations: [hit] });
+      return true;
+    }
+    if (this.toolState.textEquation !== true) return false;
+    onEquation(page.id, at, null);
+    return true;
   }
 
   /**
@@ -5298,6 +5323,11 @@ export class InkSurface {
     if (!page) return;
     const tolerance = tolerancePx / this.unitScale;
     const filter = lassoFilterFor(this.toolState);
+    this.tapSelectOn(page, p, tolerance, filter);
+  }
+
+  /** Select what a tap at page point `p` lands on, on `page`; whether anything was. */
+  private tapSelectOn(page: Page, p: Pt, tolerance: number, filter: LassoFilter): boolean {
     if (filter.textBoxes) {
       const frames = page.textBoxes.map((textBox) => ({
         textBox,
@@ -5306,25 +5336,66 @@ export class InkSurface {
       const hit = topImageAt(frames, p, tolerance);
       if (hit) {
         this.select(page.id, { strokes: [], images: [], textBoxes: [hit.textBox] });
-        return;
+        return true;
       }
     }
     const stroke = this.strokeAt(page, p, tolerance, filter);
     if (stroke) {
       this.select(page.id, { strokes: [stroke], images: [], textBoxes: [] });
-      return;
+      return true;
+    }
+    // An equation lies over the pictures; it is picked up on its own, as typed text.
+    const equation = filter.textBoxes ? this.ownEquationAt(page, p) : null;
+    if (equation) {
+      this.select(page.id, { strokes: [], images: [], textBoxes: [], equations: [equation] });
+      return true;
     }
     // A tap on an editable circuit selects it
     const unlockedCircuits = (page.circuits ?? []).filter((candidate) => candidate.locked !== true);
     const circuit = filter.images ? topImageAt(unlockedCircuits, p, tolerance) : null;
     if (circuit) {
       this.select(page.id, { strokes: [], images: [], textBoxes: [], circuits: [circuit] });
-      return;
+      return true;
     }
     // A locked picture is passed over, as if it were part of the paper.
     const unlocked = page.images.filter((candidate) => candidate.locked !== true);
     const image = filter.images ? topImageAt(unlocked, p, tolerance) : null;
-    if (image) this.setImageSelection(page.id, image);
+    if (image) {
+      this.setImageSelection(page.id, image);
+      return true;
+    }
+    // Last, the inside of a closed shape: empty paper there picks the shape up.
+    const shape = this.shapeInsideAt(page, p, filter);
+    if (shape) {
+      this.select(page.id, { strokes: [shape], images: [], textBoxes: [] });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * The topmost closed shape whose inside holds page point `p` (a rectangle,
+   * circle, triangle …, filled or not), as far as `filter` allows. Asked only
+   * after everything drawn there missed, so ink, text, and pictures
+   * inside a shape are still picked up on their own.
+   */
+  private shapeInsideAt(page: Page, p: Pt, filter: LassoFilter): Stroke | null {
+    for (let i = page.strokes.length - 1; i >= 0; i--) {
+      const stroke = page.strokes[i];
+      if (!takesLabel(stroke) || !lassoTakesStroke(stroke, filter)) continue;
+      if (insideShape(stroke, p.x, p.y)) return stroke;
+    }
+    return null;
+  }
+
+  /** The topmost equation at `p`. */
+  private ownEquationAt(page: Page, p: Pt): EquationElement | null {
+    const list = page.equations ?? [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const f = list[i];
+      if (p.x >= f.x && p.x <= f.x + f.w && p.y >= f.y && p.y <= f.y + f.h) return f;
+    }
+    return null;
   }
 
   /** The topmost stroke whose ink passes within `tolerance` of a page point. */
@@ -5851,8 +5922,8 @@ export class InkSurface {
         actions.push({id:`line-style-${style}`,icon: chosen ? "check" : "minus",label:`Line: ${name}`,group:"line-style",run:()=>this.setSelectionLineStyle(style)});
       }
     }
-    if (sel.strokes.length > 0) {
-      const first = sel.strokes[0].color;
+    if (sel.strokes.length > 0 || (sel.equations && sel.equations.length > 0)) {
+      const first = sel.strokes[0]?.color ?? sel.equations?.[0]?.color ?? "#000000";
       actions.push({
         id: "colour",
         icon: "palette",
@@ -5866,7 +5937,8 @@ export class InkSurface {
               (color) => !this.palette.some((p) => sameColor(p, color)),
             ),
           ],
-          current: sel.strokes.every((stroke) => stroke.color === first) ? first : null,
+          current: (sel.strokes.length === 0 || sel.strokes.every((stroke) => stroke.color === first)) &&
+                   (!sel.equations || sel.equations.every((e) => e.color === first)) ? first : null,
           pick: (color) => this.recolorSelection(color),
           custom: (color) => {
             const recent = pushRecentColor(this.toolState.recentColors ?? [], color);
@@ -5899,6 +5971,20 @@ export class InkSurface {
         bar: true,
         run: () => {
           this.openCircuitEditor(sel.pageId, circuit);
+        },
+      });
+    }
+    if (sel.equations && sel.equations.length === 1 && this.callbacks.onEquation) {
+      const equation = sel.equations[0];
+      actions.push({
+        id: "edit-equation",
+        icon: "sigma",
+        label: "Edit Equation",
+        group: "edit",
+        bar: true,
+        run: () => {
+          this.clearSelection();
+          this.callbacks.onEquation?.(sel.pageId, { x: equation.x, y: equation.y }, equation);
         },
       });
     }
@@ -6770,9 +6856,16 @@ export class InkSurface {
 
   private recolorSelection(color: string): void {
     const sel = this.liveSelection();
-    if (!sel || sel.strokes.length === 0 || this.callbacks.isLocked?.()) return;
-    if (sel.strokes.every((stroke) => stroke.color === color)) return;
-    this.history.push(this.doc, new RecolorStrokes(sel.pageId, sel.strokes, color));
+    if (!sel || this.callbacks.isLocked?.()) return;
+    const hasStrokes = sel.strokes.length > 0 && !sel.strokes.every((stroke) => stroke.color === color);
+    const hasEquations = !!sel.equations && sel.equations.length > 0 && !sel.equations.every((e) => e.color === color);
+    if (!hasStrokes && !hasEquations) return;
+    if (hasStrokes) {
+      this.history.push(this.doc, new RecolorStrokes(sel.pageId, sel.strokes, color));
+    }
+    if (hasEquations && sel.equations) {
+      this.history.push(this.doc, new RecolorEquations(sel.pageId, sel.equations, color));
+    }
     const box = this.boxForPage(sel.pageId);
     const bounds = selectionBounds(sel.strokes, [], []);
     // A colour is not part of a stroke's cached outline: re-rasterise.
@@ -7119,26 +7212,179 @@ export class InkSurface {
     if (this.toolState.tool !== "select") this.deselectImage();
     const at = this.toLayout(clientX, clientY);
     const box = boxAtPoint(this.pageLayout, at.x, at.y);
-    if (this.toolState.tool === "shape") {
-      this.clearSelection();
-      if (box) {
-        const page = this.doc.pages[box.index];
-        const stroke = this.shapeAt(page, this.toPage(box, at), FINGER_TAP_TOLERANCE_PX / this.unitScale);
-        if (stroke?.shape && this.editableShape({ pageId: page.id, strokes: [stroke], images: [], textBoxes: [] })) this.select(page.id, { strokes: [stroke], images: [], textBoxes: [] });
-      }
-      return;
-    }
     if (box && this.offerStrokeTap(box, this.toPage(box, at), FINGER_TAP_TOLERANCE_PX)) {
       this.clearSelection();
       return;
     }
-    if (this.toolState.tool !== "select") return;
+    if (this.toolState.tool !== "select") {
+      if (box) {
+        const page = this.doc.pages[box.index];
+        const p = this.toPage(box, at);
+        if (
+          this.fingerPicksShape(page, p) ||
+          this.fingerPicksEquation(page, p) ||
+          this.fingerPicksCircuit(page, p) ||
+          this.fingerPicksTable(page, p) ||
+          this.fingerPicksPicture(page, p) ||
+          this.fingerPicksShapeInside(page, p)
+        ) {
+          return;
+        }
+      }
+      return;
+    }
     if (!box) {
       this.clearSelection();
       this.deselectImage();
       return;
     }
     this.tapSelect(box, this.toPage(box, at), FINGER_TAP_TOLERANCE_PX);
+  }
+
+  /** Hand the lasso to a finger's selection, as the toolbar would. */
+  private pickLasso(): void {
+    this.setTool("select");
+    this.callbacks.onToolChange?.("select");
+  }
+
+  /**
+   * A finger tapped a shape (a snapped shape or an arrow) with a pen, or any
+   * tool but the lasso and Text: the lasso is picked and the shape selected
+   * as a lasso tap selects it.
+   */
+  private fingerPicksShape(page: Page, p: Pt): boolean {
+    if (this.practice || this.toolState.tool === "text") return false;
+    const filter = { ...lassoFilterFor(this.toolState), handwriting: false };
+    const stroke = this.strokeAt(page, p, FINGER_TAP_TOLERANCE_PX / this.unitScale, filter);
+    if (!stroke) return false;
+    // The shape already picked up on its own: this second tap types in it.
+    const sel = this.liveSelection();
+    if (sel && sel.pageId === page.id && this.loneLabelShape(sel) === stroke) {
+      this.editShapeLabel(page.id, stroke);
+      return true;
+    }
+    this.pickLasso();
+    this.select(page.id, { strokes: [stroke], images: [], textBoxes: [] });
+    return true;
+  }
+
+  /**
+   * A finger tapped empty paper inside a closed shape: the shape is picked
+   * up as a tap on its outline picks it (`fingerPicksShape`), and a second
+   * tap there types in it.
+   */
+  private fingerPicksShapeInside(page: Page, p: Pt): boolean {
+    if (this.practice || this.toolState.tool === "text") return false;
+    const filter = { ...lassoFilterFor(this.toolState), handwriting: false };
+    const stroke = this.shapeInsideAt(page, p, filter);
+    if (!stroke) return false;
+    const sel = this.liveSelection();
+    if (sel && sel.pageId === page.id && this.loneLabelShape(sel) === stroke) {
+      this.editShapeLabel(page.id, stroke);
+      return true;
+    }
+    this.pickLasso();
+    this.select(page.id, { strokes: [stroke], images: [], textBoxes: [] });
+    return true;
+  }
+
+  /** A finger tapped a table: it is selected with the ink in its cells. */
+  private fingerPicksTable(page: Page, p: Pt): boolean {
+    if (this.practice || this.toolState.tool === "text") return false;
+    const filter = lassoFilterFor(this.toolState);
+    const table = filter.tables ? (this as any).tableAt?.(page, p)?.table : undefined;
+    if (!table) return false;
+    this.pickLasso();
+    this.select(page.id, (this as any).tableWithInk(page, table, filter));
+    return true;
+  }
+
+  private fingerPicksCircuit(page: Page, p: Pt): boolean {
+    if (this.practice || this.toolState.tool === "text") return false;
+    const circuit = topImageAt(
+      (page.circuits ?? []).filter((candidate) => candidate.locked !== true),
+      p,
+      0,
+    );
+    if (!circuit) return false;
+    this.pickLasso();
+    this.select(page.id, { strokes: [], images: [], textBoxes: [], circuits: [circuit] });
+    return true;
+  }
+
+  private fingerPicksEquation(page: Page, p: Pt): boolean {
+    if (this.practice) return false;
+    const equation = this.ownEquationAt(page, p);
+    if (!equation) return false;
+    if (this.toolState.tool === "text") {
+      this.select(page.id, { strokes: [], images: [], textBoxes: [], equations: [equation] });
+      return true;
+    }
+    this.pickLasso();
+    this.select(page.id, { strokes: [], images: [], textBoxes: [], equations: [equation] });
+    return true;
+  }
+
+  private fingerPicksPicture(page: Page, p: Pt): boolean {
+    if (this.practice || this.toolState.tool === "text") return false;
+    const image = topImageAt(
+      page.images.filter((candidate) => candidate.locked !== true),
+      p,
+      0,
+    );
+    if (!image) return false;
+    this.pickLasso();
+    this.setImageSelection(page.id, image);
+    return true;
+  }
+
+  /** The selection's one closed shape, when it holds nothing else and text can be typed in it. */
+  private loneLabelShape(sel: GroupSelection): Stroke | null {
+    if (this.practice || this.callbacks.isLocked?.()) return null;
+    const others =
+      sel.images.length +
+      sel.textBoxes.length +
+      (sel.circuits?.length ?? 0) +
+      (sel.equations?.length ?? 0);
+    const stroke = sel.strokes.length === 1 && others === 0 ? sel.strokes[0] : null;
+    return stroke && takesLabel(stroke) ? stroke : null;
+  }
+
+  /**
+   * Type in a closed shape: in its text, or in a new box made for it,
+   * centred, in the shape's colour, wrapping inside it.
+   */
+  private editShapeLabel(pageId: string, stroke: Stroke): void {
+    const page = this.doc.pages.find((candidate) => candidate.id === pageId);
+    const area = labelArea(stroke);
+    if (!page || !area) return;
+    this.clearSelection();
+    const existing = labelOf(page.textBoxes, stroke.id);
+    if (existing) {
+      this.syncTextBoxes();
+      const view = this.textBoxInputs.get(`${page.id}:${existing.id}`);
+      if (view) this.focusTextBox(view.input);
+      return;
+    }
+    const style = textStyleOf(this.toolState.textStyle ?? DEFAULT_TEXT_STYLE);
+    const textBox: TextBoxElement = {
+      id: this.textBoxIds.next(),
+      x: area.x,
+      y: area.y,
+      w: area.w,
+      text: "",
+      ...style,
+      color: stroke.color,
+      align: "center",
+      onShape: stroke.id,
+    };
+    const add = new AddTextBoxToPage(page.id, textBox);
+    this.history.push(this.doc, add);
+    this.lastTextBoxAdd = { key: `${page.id}:${textBox.id}`, command: add, followers: [] };
+    this.syncTextBoxes();
+    this.changed();
+    const view = this.textBoxInputs.get(`${page.id}:${textBox.id}`);
+    if (view) this.focusTextBox(view.input);
   }
 
   // --- Placed images --------------------------------------------------------

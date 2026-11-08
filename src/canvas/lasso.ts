@@ -54,6 +54,10 @@ export interface LassoFilter {
   /** Strokes with `shape: "arrow"`. */
   arrows: boolean;
   textBoxes: boolean;
+  /** Table elements, taken whole with the ink inside them. */
+  tables: boolean;
+  /** Graph elements from the calculator. */
+  graphs: boolean;
 }
 
 export const LASSO_FILTER_KEYS: readonly (keyof LassoFilter)[] = [
@@ -62,6 +66,8 @@ export const LASSO_FILTER_KEYS: readonly (keyof LassoFilter)[] = [
   "shapes",
   "arrows",
   "textBoxes",
+  "tables",
+  "graphs",
 ];
 
 /** Everything on, as GoodNotes ships it. */
@@ -71,6 +77,8 @@ export const DEFAULT_LASSO_FILTER: Readonly<LassoFilter> = {
   shapes: true,
   arrows: true,
   textBoxes: true,
+  tables: true,
+  graphs: true,
 };
 
 /**

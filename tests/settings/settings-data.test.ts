@@ -41,7 +41,7 @@ const FRESH_INSTALL = {
   eraserFilter: "all",
   lassoMode: "freehand",
   lassoBehavior: "default",
-  lassoFilter: { handwriting: true, images: true, shapes: true, arrows: true, textBoxes: true },
+  lassoFilter: { handwriting: true, images: true, shapes: true, arrows: true, textBoxes: true, tables: true, graphs: true },
   highlighterAlpha: 0.4,
   paperWidth: 1024,
   newNotebookFolder: "",

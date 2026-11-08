@@ -15,6 +15,7 @@
 
 import type { Command } from "./commands";
 import { type EquationElement, type InkDocument, pageById } from "./document";
+export type { EquationElement } from "./document";
 import { LATEX_MAX_CHARS } from "./latex";
 import { isHexColor } from "./text-style";
 

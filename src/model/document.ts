@@ -281,6 +281,8 @@ export interface TextBoxElement {
   lineHeight?: number;
   /** Background fill, `#rrggbb` or `#rrggbbaa`; absent means none. */
   fill?: string;
+  /** When text is typed inside a closed shape, the shape's stroke id. */
+  onShape?: string;
 }
 
 export interface CircuitElement {

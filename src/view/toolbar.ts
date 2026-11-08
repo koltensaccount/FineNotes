@@ -273,6 +273,8 @@ const LASSO_FILTER_LABELS: Record<keyof LassoFilter, string> = {
   shapes: "Shapes",
   arrows: "Arrows",
   textBoxes: "Text boxes",
+  tables: "Tables",
+  graphs: "Graphs",
 };
 
 /** The Shape tool's mode a toolbar state implies. `undefined` counts as auto. */
@@ -354,6 +356,8 @@ export interface ToolbarState {
   textStyle?: TextStyle;
   /** "Pin Text tool": Text stays the tool after a box is finished. `undefined` counts as unpinned. */
   textPinned?: boolean;
+  /** When true, a tap on the page with the Text tool inserts an equation. */
+  textEquation?: boolean;
   /**
    * "Drag to size": a drag with the Text tool draws the new box's size.
    * `undefined` counts as off, where every new box fits its text.
@@ -2045,6 +2049,18 @@ export class Toolbar {
     iconOrText(sizing.createSpan({ cls: "goodobsidian-text-pin-icon" }), "square-dashed", "Size");
     sizing.toggleClass("is-active", dragSize);
     sizing.setAttribute("aria-pressed", String(dragSize));
+
+    // Equation: while on, a tap on the page writes a typed equation instead of a text box.
+    if (this.state.tool === "text" && this.textTarget === null) {
+      const on = this.state.textEquation === true;
+      const equation = this.textControl("is-glyph is-equation", "Equation", () => {
+        this.state.textEquation = !on;
+        this.buildOptions();
+      });
+      equation.createSpan({ cls: "goodobsidian-text-sigma", text: "Σ" });
+      equation.toggleClass("is-active", on);
+      equation.setAttribute("aria-pressed", String(on));
+    }
 
     // GoodNotes' "Pin Text tool". Unpinned, finishing a box hands the page
     // back to the tool used before Text; pinned, Text stays.
