@@ -5,7 +5,7 @@
  * be implemented selectively after the design review.
  */
 import { Modal, Notice, setIcon, type App } from "obsidian";
-import { createStrokePreview } from "./stroke-preview";
+import { createStrokePreview, type PreviewTool } from "./stroke-preview";
 import {
   ICON_FAMILY_CANDIDATES,
   candidateIconName,
@@ -16,6 +16,7 @@ import {
 
 export interface IconReviewHost {
   decisions: () => Readonly<Record<string, IconReviewDecision>>;
+  currentPen: () => { type: PreviewTool; width: number };
   saveDecision: (id: string, value: IconReviewDecision | null) => Promise<void>;
 }
 
@@ -180,14 +181,19 @@ export class IconReviewModal extends Modal {
     const slot = stage.createSpan({ cls: "finenotes-icon-review-svg" });
     const doc = stage.ownerDocument;
     if (candidate.original.startsWith("fn-original-")) {
-      const type = candidate.original === "fn-original-highlighter"
-        ? "highlighter"
-        : candidate.original === "fn-original-brush"
-          ? "brush"
-          : "ball";
+      const current = this.host.currentPen();
+      const type = candidate.original === "fn-original-pen"
+        ? current.type
+        : candidate.original === "fn-original-highlighter"
+          ? "highlighter"
+          : candidate.original === "fn-original-brush"
+            ? "brush"
+            : "ball";
       const preview = createStrokePreview({
         type,
-        width: type === "highlighter" ? 8 : type === "brush" ? 5 : 3,
+        width: candidate.original === "fn-original-pen"
+          ? current.width
+          : type === "highlighter" ? 8 : type === "brush" ? 5 : 3,
         color: "currentColor",
         compact: true,
       }, doc);
