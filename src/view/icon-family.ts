@@ -136,7 +136,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
     svg: `<path d="M7 3.5h8.5l3.5 3.7v11.3H7zM15.5 3.5v3.7H19"/><path d="m11 11-2 2 2 2m4-4 2 2-2 2M4 7.5v13h10"/>`,
   },
   {
-    id: "handwrite-here", title: "Handwrite Here", category: "Notebooks and embeds", original: "pen-tool",
+    id: "handwrite-here", title: "Handwrite Here", category: "Notebooks and embeds", original: "fn-original-none",
     usage: "Markdown insertion command and future inline block control",
     svg: `<rect x="3.3" y="4.1" width="14.8" height="16" rx="1.9"/><path d="M6.2 8.3h8M6.2 11.9h5.5"/><path d="m11 17 7.1-8.1 2.4 2.1-7.1 8.1-3 .7z"/>${ink("m10.4 19.8.6-2.8 2.4 2.1z")}`,
   },
@@ -151,7 +151,7 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
     svg: `<path d="M5.8 3.3h8.5l4 4.2v13.2H5.8zM14.3 3.3v4.2h4"/><path d="M8.9 12.4h6.1M8.9 15.4h6.1M8.9 18.4h3.7"/>`,
   },
   {
-    id: "companion-pdf", title: "Companion PDF", category: "Media and PDF", original: "file-check",
+    id: "companion-pdf", title: "Companion PDF", category: "Media and PDF", original: "fn-original-none",
     usage: "Companion PDF settings/status and refresh actions",
     svg: `<path d="M5.1 3.3h8.8L18 7.5v13H5.1zM13.9 3.3v4.2H18"/><path d="m8.4 14.2 2.5 2.4 5-5.3"/>`,
   },
