@@ -541,4 +541,4 @@ helps more than anything else.
 
 ## License
 
-[MIT](LICENSE)
+This combined fork release is distributed under the [GNU General Public License v3 or later](LICENSE). The [original MIT notice](LICENSE-MIT) applies to portions received under MIT. See the [release notice](NOTICE.md) for attribution and build instructions.

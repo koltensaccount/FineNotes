@@ -63,6 +63,8 @@ export interface GoodObsidianSettings {
   embedBackground?: boolean;
   /** Markdown note path -> associated notebook path. */
   notebookAssociations?: Record<string, string>;
+  /** Per-icon Studio decisions; visual review only, never a production activation flag. */
+  iconReviewDecisions?: Record<string, "approved" | "rejected">;
   // What an ink note starts with. Tool state the toolbar remembers is further down.
   /** Draw a rough shape, hold the pen still at the end, and it snaps clean. */
   drawAndHold: boolean;

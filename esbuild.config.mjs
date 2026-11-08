@@ -5,8 +5,11 @@ import { builtinModules } from "node:module";
 import { copyArtifacts, resolveDeployDir } from "./scripts/deploy-target.mjs";
 
 const banner = `/*
-GoodObsidian — bundled plugin output. Do not edit directly.
-Source: https://github.com/Joost-8/GoodObsidian
+FineNotes fork — bundled plugin output.
+License: GPL-3.0-or-later.
+Source: https://github.com/koltensaccount/FineNotes/tree/1.5.1-beta.90
+
+${readFileSync(new URL("./LICENSE-MIT", import.meta.url), "utf8")}
 
 ${readFileSync(new URL("./THIRD_PARTY_NOTICES.txt", import.meta.url), "utf8")}
 */`;

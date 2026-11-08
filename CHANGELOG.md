@@ -8,6 +8,13 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 90 — Toolbar, settings, and handwriting
+
+- Align floating toolbar corners and use compact slider tracks with full-size touch targets.
+- Organize tool menus, page actions, and settings by what they control.
+- Save inline handwriting by stable block identity with conflict detection and recovery.
+- Includes the approved FineNotes icon rebrand.
+
 ### Beta 88 — Handwrite Here Box Stability and Inline Notebook Creation
 
 - Fix Handwrite Here region jumping: anchor handwriting region position (minY, minX, maxX) to allocated origin and margins so boxes never randomly shift coordinates when writing.

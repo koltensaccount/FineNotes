@@ -531,6 +531,16 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
         "HUD",
         "troubleshooting",
       ]),
+      drawnRow(
+        "FineNotes Icon Studio",
+        "Compare the original glyphs with the approved designs now used by FineNotes. Save comments and review decisions as feedback.",
+        (setting) => {
+          setting.addButton((button) =>
+            button.setButtonText("Review icons…").onClick(() => this.plugin.openIconReview()),
+          );
+        },
+        ["icons", "design", "rebrand", "approve", "reject"],
+      ),
       block((el) => {
         const footer = el.createDiv({ cls: "goodobsidian-support" });
         footer.appendText("Found a bug, or have a question? ");

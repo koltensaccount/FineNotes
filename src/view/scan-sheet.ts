@@ -1,3 +1,4 @@
+import { APPROVED_ICONS } from "./icon-family";
 /**
  * The scan sheet: a photo of a page, four corner handles to drag onto the
  * page's corners, and a live preview of the straightened, cleaned-up result
@@ -232,7 +233,7 @@ export class ScanSheet extends Modal {
     this.loupeEl.setCssStyles({ width: `${LOUPE_SIZE}px`, height: `${LOUPE_SIZE}px` });
 
     this.emptyEl = stage.createDiv({ cls: "goodobsidian-scan-empty" });
-    setIcon(this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-icon" }), "scan-line");
+    setIcon(this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-icon" }), APPROVED_ICONS.scanDocument);
     this.emptyText = this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-text" });
     const actions = this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-actions" });
     if (Platform.isMobile) this.button(actions, "camera", "Take photo", () => this.pickPhoto(true));

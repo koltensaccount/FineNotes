@@ -1,4 +1,6 @@
 import { registerHandwriteHere } from "./view/handwrite-here";
+import { APPROVED_ICONS, registerIconFamilyCandidates } from "./view/icon-family";
+import { IconReviewModal } from "./view/icon-review-modal";
 import { PdfImportModal } from "./view/pdf-import-modal";
 import { FineNotesEmbedManager } from "./view/embed-renderer";
 import { renderPdfSlides } from "./view/pdf-slides";
@@ -24,7 +26,7 @@ import {
   WorkspaceLeaf,
   normalizePath,
 } from "obsidian";
-import { ICON_NEW_NOTEBOOK, PREVIOUS_PLUGIN_ID, VIEW_TYPE_INK } from "./constants";
+import { PREVIOUS_PLUGIN_ID, VIEW_TYPE_INK } from "./constants";
 import { DEFAULT_SETTINGS, GoodObsidianSettingTab, type GoodObsidianSettings } from "./settings";
 import { buildInkFile } from "./model/serialize";
 import type { RecognitionProvider } from "./recognition/provider";
@@ -176,6 +178,7 @@ export default class GoodObsidianPlugin extends Plugin {
     this.providers.set(cloud.id, cloud);
 
     await this.loadSettings();
+    registerIconFamilyCandidates();
     await this.setUpKeyStore();
     this.companionPdfs.load(this.settings.companionPdfs);
     await this.companionPdfs.recoverAll();
@@ -201,7 +204,7 @@ export default class GoodObsidianPlugin extends Plugin {
     this.register(
       registerImageMenuEntry({
         id: "scan",
-        icon: "scan-line",
+        icon: APPROVED_ICONS.scanDocument,
         label: "Scan document",
         order: 40,
         run: () => this.app.workspace.getActiveViewOfType(InkView)?.scanDocument(),
@@ -214,7 +217,7 @@ export default class GoodObsidianPlugin extends Plugin {
           menu.addItem((item) =>
             item
               .setTitle("New notebook")
-              .setIcon(ICON_NEW_NOTEBOOK)
+              .setIcon(APPROVED_ICONS.newNotebook)
               .setSection("action-primary")
               .onClick(() =>
                 this.openNewNotebookDialog(folder && !folder.isRoot() ? folder.path : ""),
@@ -225,7 +228,7 @@ export default class GoodObsidianPlugin extends Plugin {
         menu.addItem((item) =>
           item
             .setTitle("New notebook from PDF")
-            .setIcon(ICON_NEW_NOTEBOOK)
+            .setIcon(APPROVED_ICONS.newNotebook)
             .onClick(() => void this.createNotebookFromPdf(file)),
         );
         const view = this.app.workspace.getActiveViewOfType(InkView);
@@ -233,7 +236,7 @@ export default class GoodObsidianPlugin extends Plugin {
         menu.addItem((item) =>
           item
             .setTitle("Import PDF into notebook")
-            .setIcon("file-text")
+            .setIcon(APPROVED_ICONS.importPdf)
             .onClick(() => void view.importVaultPdf(file.path)),
         );
       }),
@@ -274,7 +277,7 @@ export default class GoodObsidianPlugin extends Plugin {
       this.app.workspace.on("layout-change", () => this.syncExplorerNotebookButton()),
     );
     this.app.workspace.onLayoutReady(() => this.syncExplorerNotebookButton());
-    this.addRibbonIcon(ICON_NEW_NOTEBOOK, "New notebook", () => this.openNewNotebookDialog());
+    this.addRibbonIcon(APPROVED_ICONS.newNotebook, "New notebook", () => this.openNewNotebookDialog());
     this.addCommands();
 
     this.settingTab = new GoodObsidianSettingTab(this.app, this);
@@ -294,16 +297,24 @@ export default class GoodObsidianPlugin extends Plugin {
    * so an id never changes once shipped, even where its name has.
    */
   private addCommands(): void {
+    this.addCommand({
+      id: "review-finenotes-icon-candidates",
+      name: "Review proposed icons side by side…",
+      callback: () => this.openIconReview(),
+    });
+
     // The id predates the dialog; kept so existing hotkeys still work.
     this.addCommand({
       id: "create-handwriting-note",
       name: "New notebook or page…",
+      icon: APPROVED_ICONS.newNotebook,
       callback: () => this.openNewNotebookDialog(),
     });
 
     this.addCommand({
       id: "create-notebook-with-last-settings",
       name: "Create notebook with last settings",
+      icon: APPROVED_ICONS.newNotebook,
       callback: () =>
         void this.createNotebook("", parseNotebookChoices(this.settings.lastNotebookChoices)),
     });
@@ -311,6 +322,7 @@ export default class GoodObsidianPlugin extends Plugin {
     this.addCommand({
       id: "create-notebook-from-pdf",
       name: "New notebook from a PDF in the vault…",
+      icon: APPROVED_ICONS.newNotebook,
       callback: () =>
         new VaultPdfSuggestModal(this.app, (file) => void this.createNotebookFromPdf(file)).open(),
     });
@@ -320,13 +332,16 @@ export default class GoodObsidianPlugin extends Plugin {
       "Convert single page to notebook",
       (view) => view.convertToNotebook(),
       (view) => view.isSinglePage,
+      APPROVED_ICONS.convertNotebook,
     );
-    this.notebookCommand("scan-document", "Scan document into this notebook", (view) =>
-      view.scanDocument(),
+    this.notebookCommand(
+      "scan-document", "Scan document into this notebook",
+      (view) => view.scanDocument(), undefined, APPROVED_ICONS.scanDocument,
     );
-    this.notebookCommand("import-pdf", "Import PDF…", (view) => view.importPdf());
-    this.notebookCommand("import-vault-pdf", "Import PDF from vault…", (view) =>
-      view.importPdf(true),
+    this.notebookCommand("import-pdf", "Import PDF…", (view) => view.importPdf(), undefined, APPROVED_ICONS.importPdf);
+    this.notebookCommand(
+      "import-vault-pdf", "Import PDF from vault…",
+      (view) => view.importPdf(true), undefined, APPROVED_ICONS.importPdf,
     );
     this.notebookCommand("search-notebook", "Search this notebook…", (view) => view.openSearch());
     this.notebookCommand("copy-page-link", "Copy link to current page", (view) =>
@@ -338,6 +353,7 @@ export default class GoodObsidianPlugin extends Plugin {
       "Update companion PDF now",
       (view) => view.updateCompanionPdf(true),
       (view) => view.hasCompanionPdf,
+      APPROVED_ICONS.updateCompanionPdf,
     );
 
     this.addCommand({
@@ -392,10 +408,12 @@ export default class GoodObsidianPlugin extends Plugin {
     name: string,
     act: (view: InkView) => unknown,
     available: (view: InkView) => boolean = () => true,
+    icon?: string,
   ): void {
     this.addCommand({
       id,
       name,
+      icon,
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType(InkView);
         if (!view || !available(view)) return false;
@@ -403,6 +421,23 @@ export default class GoodObsidianPlugin extends Plugin {
         return true;
       },
     });
+  }
+
+  /** Opens the comparison gallery for the approved icon set. */
+  openIconReview(): void {
+    const pluginDir = this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+    const feedbackPath = normalizePath(`${pluginDir}/icon-studio-feedback.json`);
+    new IconReviewModal(this.app, {
+      decisions: () => this.settings.iconReviewDecisions ?? {},
+      currentPen: () => ({ type: this.settings.penType ?? "fountain", width: this.settings.defaultSize }),
+      saveDecision: async (id, value) => {
+        const next = { ...(this.settings.iconReviewDecisions ?? {}) };
+        if (value === null) delete next[id];
+        else next[id] = value;
+        this.settings.iconReviewDecisions = next;
+        await this.saveSettings();
+      },
+    }, feedbackPath).open();
   }
 
   private showChangelog(markdown: string): void {

@@ -1,3 +1,4 @@
+import { APPROVED_ICONS } from "./icon-family";
 export { referencedEmbedImages } from "./embed-references";
 import {
   type App,
@@ -230,6 +231,7 @@ export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
   plugin.addCommand({
     id: "handwrite-here",
     name: "Handwrite Here",
+    icon: APPROVED_ICONS.handwriteHere,
     editorCheckCallback: (checking, editor, context) => {
       if (!(context instanceof MarkdownView)) return false;
       const view = context;

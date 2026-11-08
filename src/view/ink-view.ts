@@ -1,4 +1,5 @@
 import { claimNotebook, releaseNotebook, waitForNotebookTransaction } from "./notebook-transaction";
+import { APPROVED_ICONS } from "./icon-family";
 import { referencedEmbedImages } from "./embed-references";
 import {
   isManagedStorageEnabled,
@@ -2724,7 +2725,7 @@ export class InkView extends TextFileView {
     menu.addItem((item) =>
       item
         .setTitle("Import PDF from device…")
-        .setIcon("file-text")
+        .setIcon(APPROVED_ICONS.importPdf)
         .onClick(() => this.importPdf(false)),
     );
     menu.addItem((item) =>
@@ -2986,7 +2987,7 @@ export class InkView extends TextFileView {
     if (this.isProtected() || !this.file) return;
     const entries = pdf
       ? [
-          { id: "files", icon: "file-text", label: "From files", run: () => this.importPdf() },
+          { id: "files", icon: APPROVED_ICONS.importPdf, label: "From files", run: () => this.importPdf() },
           {
             id: "vault",
             icon: "folder-open",

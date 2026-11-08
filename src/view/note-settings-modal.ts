@@ -1,3 +1,4 @@
+import { APPROVED_ICONS } from "./icon-family";
 import { renderWritingGuideControls, type WritingGuideHost } from "./writing-guides";
 import { PDF_QUALITY_LABELS, type PdfQuality } from "../export/pdf-quality";
 /**
@@ -22,7 +23,7 @@ import { PDF_QUALITY_LABELS, type PdfQuality } from "../export/pdf-quality";
  * dialog.
  */
 
-import { type App, Modal, Notice, Setting } from "obsidian";
+import { type App, Modal, Notice, Setting, setIcon } from "obsidian";
 import { cleanFolder, suggestFolders } from "../model/attachment-folders";
 import type { AttachmentFolders, AttachmentKind, ScrollDirection } from "../model/document";
 import { FolderSuggestModal } from "./folder-suggest";
@@ -215,12 +216,16 @@ export class NoteSettingsModal extends Modal {
     new Setting(parent)
       .setName("Update companion PDF now")
       .setDesc(state.status)
-      .addButton((button) =>
+      .addButton((button) => {
         button
           .setButtonText("Update PDF now")
           .setDisabled(!state.enabled)
-          .onClick(() => void run(host.update)),
-      );
+          .onClick(() => void run(host.update));
+        const icon = button.buttonEl.createSpan({ attr: { "aria-hidden": "true" } });
+        setIcon(icon, APPROVED_ICONS.updateCompanionPdf);
+        button.buttonEl.prepend(icon);
+        button.buttonEl.addClass("goodobsidian-companion-update");
+      });
   }
 
   private renderScroll(parent: HTMLElement): void {

@@ -1,6 +1,6 @@
 {
   "name": "finenotes",
-  "version": "1.5.1-beta.88",
+  "version": "1.5.1-beta.90",
   "description": "Handwriting notebooks for Apple Pencil and iPad, inspired by Goodnotes: real pages, paper templates, shapes that snap, PDF annotation and pictures, all kept as plain files in your vault.",
   "main": "main.js",
   "scripts": {
@@ -25,9 +25,9 @@
   "author": "Joost",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Joost-8/FineNotes.git"
+    "url": "https://github.com/koltensaccount/FineNotes.git"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "fflate": "0.8.3",
     "pdf-lib": "1.17.1"

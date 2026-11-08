@@ -332,7 +332,7 @@ describe("New notebook context menu", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       title: "New notebook",
-      icon: "notebook-pen",
+      icon: "finenotes-concept2-new-notebook-concept2",
       section: "action-primary",
     });
     items[0].click();
@@ -386,6 +386,7 @@ describe("registration", () => {
         "import-pdf",
         "import-vault-pdf",
         "recognize-handwriting",
+        "review-finenotes-icon-candidates",
         "scan-document",
         "search-notebook",
         "toggle-canvas-markdown-view",
@@ -402,7 +403,7 @@ describe("registration", () => {
   it("registers the notebook view, the ribbon button and the OpenRouter callback", async () => {
     await load();
     expect([...registered.views.keys()]).toEqual([INK]);
-    expect(registered.ribbon.map((r) => r.icon)).toEqual(["notebook-pen"]);
+    expect(registered.ribbon.map((r) => r.icon)).toEqual(["finenotes-concept2-new-notebook-concept2"]);
     expect(registered.ribbon[0].title).toBe("New notebook");
     expect([...registered.protocolHandlers.keys()]).toEqual(["goodobsidian-openrouter"]);
   });

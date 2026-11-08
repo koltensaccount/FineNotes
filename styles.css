@@ -7890,3 +7890,293 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
   position: relative;
 }
 
+
+/* FineNotes Icon Studio — opt-in visual comparison, not a production icon switch. */
+.finenotes-icon-review-modal {
+  --dialog-width: min(980px, calc(100vw - 32px));
+  width: min(980px, calc(100vw - 32px));
+  max-width: min(980px, calc(100vw - 32px));
+}
+.finenotes-icon-review-modal .modal-content {
+  max-height: min(76vh, 820px);
+  overflow-y: auto;
+}
+.finenotes-icon-review {
+  --fn-review-ink: #4184df;
+  --fn-review-size: 25px;
+  color: var(--text-normal);
+  padding-bottom: 8px;
+}
+.finenotes-icon-review-intro {
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 790px;
+  margin-bottom: 14px;
+}
+.finenotes-icon-review-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 10px 0 13px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.finenotes-icon-review-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.finenotes-icon-review-small-label,
+.finenotes-icon-review-progress,
+.finenotes-icon-review-stage-label,
+.finenotes-icon-review-legend {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.finenotes-icon-review-small-label { margin-right: 6px; }
+.finenotes-icon-review .finenotes-icon-review-swatch.clickable-icon {
+  box-sizing: border-box;
+  width: 25px;
+  min-width: 25px;
+  max-width: 25px;
+  height: 25px;
+  min-height: 25px;
+  max-height: 25px;
+  border-radius: 50%;
+  border: 1px solid var(--background-modifier-border-hover);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  padding: 0;
+  flex: 0 0 25px;
+}
+.finenotes-icon-review .finenotes-icon-review-swatch.clickable-icon[aria-pressed="true"] {
+  outline-color: var(--interactive-accent);
+}
+.finenotes-icon-review-progress {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.finenotes-icon-review-legend {
+  display: none;
+}
+.finenotes-icon-review-group {
+  margin: 18px 0 10px;
+}
+.finenotes-icon-review-group > h3 {
+  margin: 0 0 9px;
+  font-size: var(--font-ui-medium);
+  font-weight: 650;
+}
+.finenotes-icon-review-item {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 170px minmax(130px, 168px);
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.finenotes-icon-review-name {
+  font-weight: 600;
+  font-size: var(--font-ui-small);
+  margin-bottom: 2px;
+}
+.finenotes-icon-review-location,
+.finenotes-icon-review-preserve {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+.finenotes-icon-review-preserve {
+  color: var(--text-accent);
+  margin-top: 4px;
+}
+.finenotes-icon-review-pair {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+.finenotes-icon-review-example {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 54px;
+}
+.finenotes-icon-review-stage {
+  width: 56px;
+  height: max(52px, calc(var(--fn-review-size) + 8px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+.finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-stage {
+  background: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-secondary));
+}
+.finenotes-icon-review-svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--fn-review-size) + 1px);
+  height: calc(var(--fn-review-size) + 1px);
+}
+.finenotes-icon-review-svg > svg,
+.finenotes-icon-review-svg .svg-icon {
+  width: var(--fn-review-size);
+  height: var(--fn-review-size);
+  stroke-width: 1.8px;
+}
+.finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-svg > svg {
+  box-sizing: border-box;
+  min-width: var(--fn-review-size);
+  max-width: var(--fn-review-size);
+  min-height: var(--fn-review-size);
+  max-height: var(--fn-review-size);
+  flex: 0 0 var(--fn-review-size);
+}
+.finenotes-icon-review-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+.finenotes-icon-review-result {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+.finenotes-icon-review-item[data-decision="approved"] .finenotes-icon-review-result {
+  color: var(--text-success, var(--text-accent));
+}
+.finenotes-icon-review-item[data-decision="rejected"] .finenotes-icon-review-result {
+  color: var(--text-warning, var(--text-muted));
+}
+.finenotes-icon-review-buttons {
+  display: flex;
+  gap: 4px;
+}
+.finenotes-icon-review-buttons > button {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-ui-smaller);
+  padding: 5px 6px;
+}
+.finenotes-icon-review-approve[aria-pressed="true"] {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+.finenotes-icon-review-reject[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+.finenotes-icon-review-clear {
+  border: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: var(--font-ui-smaller);
+  padding: 2px 4px;
+  min-height: 20px;
+}
+.finenotes-icon-review-clear.is-hidden { visibility: hidden; }
+.finenotes-icon-review-feedback {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.finenotes-icon-review-feedback textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+  resize: vertical;
+}
+.finenotes-icon-review-footer {
+  padding: 16px 4px 8px;
+  line-height: 1.45;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+@media (max-width: 690px) {
+  .finenotes-icon-review-modal .modal-content { max-height: 80vh; }
+  .finenotes-icon-review-item {
+    grid-template-columns: minmax(0, 1fr) 132px;
+    column-gap: 8px;
+    padding: 12px 0;
+  }
+  .finenotes-icon-review-details { grid-column: 1 / -1; }
+  .finenotes-icon-review-pair { justify-content: flex-start; }
+  .finenotes-icon-review-actions { grid-column: 2; grid-row: 2; }
+  .finenotes-icon-review-buttons > button { min-height: 35px; }
+  .finenotes-icon-review-stage { height: max(50px, calc(var(--fn-review-size) + 8px)); width: 55px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .finenotes-icon-review * { scroll-behavior: auto !important; }
+}
+
+/* Icon Studio: simulate both paper-adjacent chrome themes without changing Obsidian itself. */
+.finenotes-icon-review-themes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.finenotes-icon-review-theme {
+  padding: 5px 8px;
+  font-size: var(--font-ui-smaller);
+}
+.finenotes-icon-review-theme[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--interactive-accent);
+  color: var(--text-normal);
+}
+.finenotes-icon-review-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+.finenotes-icon-review-size input {
+  width: 85px;
+}
+.finenotes-icon-review-size span:last-child {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+.finenotes-icon-review-copy {
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+.finenotes-icon-review[data-preview-theme="light"] .finenotes-icon-review-stage {
+  color: #242832;
+  background: #f7f8fb;
+  border-color: #d4d7e0;
+}
+.finenotes-icon-review[data-preview-theme="light"] .finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-stage {
+  background: #eef0ff;
+}
+.finenotes-icon-review[data-preview-theme="dark"] .finenotes-icon-review-stage {
+  color: #f3f3f7;
+  background: #252833;
+  border-color: #464957;
+}
+.finenotes-icon-review[data-preview-theme="dark"] .finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-stage {
+  background: #34314c;
+}
+
+.goodobsidian-companion-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.goodobsidian-companion-update > span {
+  display: inline-flex;
+}
