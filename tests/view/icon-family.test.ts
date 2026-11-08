@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { addIcon } from "obsidian";
 import {
+  APPROVED_ICONS,
   ICON_FAMILY_CANDIDATES,
   candidateIconName,
   registerIconFamilyCandidates,
@@ -63,13 +64,15 @@ describe("FineNotes Concept #2 icon review", () => {
     }
   });
 
-  it("registers only namespaced gallery icons, never overwriting live toolbar names", () => {
+  it("registers every approved icon with its own name and the host viewport scale", () => {
     vi.mocked(addIcon).mockClear();
     registerIconFamilyCandidates();
     expect(addIcon).toHaveBeenCalledTimes(expectedIds.length);
+    expect(vi.mocked(addIcon).mock.calls.map(([name]) => name)).toEqual(Object.values(APPROVED_ICONS));
     for (const [name, markup] of vi.mocked(addIcon).mock.calls) {
       expect(name).toMatch(/^finenotes-concept2-/);
       expect(markup).toContain('stroke-width="1.6"');
+      expect(markup).toContain(`transform="scale(${100 / 24})"`);
       expect(markup.includes('<g transform="rotate(45 12 12)">')).toBe(
         /-(pen|highlighter|eraser)-concept2$/.test(name),
       );

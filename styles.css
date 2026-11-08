@@ -7926,3 +7926,16 @@ img.finenotes-live-embed-image:hover {
 .finenotes-icon-review[data-preview-theme="dark"] .finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-stage {
   background: #34314c;
 }
+
+.goodobsidian-companion-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.goodobsidian-companion-update > span {
+  display: inline-flex;
+}
+.goodobsidian-pen-card > .finenotes-concept2-highlighter-concept2 {
+  width: 32px;
+  height: 32px;
+}

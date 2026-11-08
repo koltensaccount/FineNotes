@@ -1,7 +1,7 @@
 /**
  * FineNotes Icon Studio — Concept #2, refinement pass.
  *
- * Review-only candidates, grouped by the batch in which they were proposed.
+ * Approved designs and their originals for the Icon Studio comparison.
  */
 import { addIcon } from "obsidian";
 import { ICON_NEW_NOTEBOOK } from "../constants";
@@ -167,20 +167,35 @@ export function candidateIconName(id: string): string {
   return `finenotes-concept2-${id}`;
 }
 
+export const APPROVED_ICONS = {
+  pen: candidateIconName("pen-concept2"),
+  highlighter: candidateIconName("highlighter-concept2"),
+  eraser: candidateIconName("eraser-concept2"),
+  newNotebook: candidateIconName("new-notebook-concept2"),
+  pageThumbnails: candidateIconName("page-thumbnails-concept2"),
+  addPage: candidateIconName("add-page-concept2"),
+  importPdf: candidateIconName("import-pdf-concept2"),
+  scanDocument: candidateIconName("scan-document-concept2"),
+  convertNotebook: candidateIconName("convert-notebook-concept2"),
+  handwriteHere: candidateIconName("handwrite-here-concept2"),
+  updateCompanionPdf: candidateIconName("update-companion-pdf-concept2"),
+} as const;
+
 export function registerIconFamilyCandidates(): void {
   for (const candidate of ICON_FAMILY_CANDIDATES) {
     const artwork = candidate.category === "Writing tools"
       ? `<g transform="rotate(45 12 12)">${candidate.svg}</g>`
       : candidate.svg;
+    // Obsidian gives registered custom icons a 100-unit viewport.
     try {
       addIcon(
         candidateIconName(candidate.id),
-        `<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        `<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" transform="scale(${100 / 24})">
           ${artwork}
         </g>`,
       );
     } catch {
-      // The current production icons are untouched if SVG registration fails.
+      // Keep plugin startup available if the icon registry is unavailable.
     }
   }
 }

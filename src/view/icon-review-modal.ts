@@ -106,7 +106,7 @@ export class IconReviewModal extends Modal {
     root.createDiv({
       cls: "finenotes-icon-review-intro",
       text:
-        "Final batch: Handwrite Here and Update companion PDF. Compare Current and New, then approve or reject each icon. " +
+        "Compare the original icons with the approved designs now used by FineNotes. " +
         "Add comments under each icon, then choose Save feedback to keep your comments and decisions.",
     });
 
@@ -198,7 +198,7 @@ export class IconReviewModal extends Modal {
     }
     const footer = root.createDiv({ cls: "finenotes-icon-review-footer" });
     footer.createSpan({
-      text: "Preview only: approvals do not replace live icons. Actual pen and highlighter stroke previews, Lasso modes, Shape outlines, and normal Obsidian UI controls remain unchanged.",
+      text: "Review decisions are saved as feedback. Actual pen and highlighter stroke previews, Lasso modes, Shape outlines, and normal Obsidian UI controls remain unchanged.",
     });
   }
 
@@ -217,18 +217,15 @@ export class IconReviewModal extends Modal {
 
     const comparison = card.createDiv({ cls: "finenotes-icon-review-pair" });
     const original = comparison.createDiv({ cls: "finenotes-icon-review-example" });
-    original.createSpan({ cls: "finenotes-icon-review-stage-label", text: "Current" });
+    original.createSpan({ cls: "finenotes-icon-review-stage-label", text: "Original" });
     const originalStage = original.createDiv({ cls: "finenotes-icon-review-stage" });
     this.renderOriginal(originalStage, candidate);
     const proposed = comparison.createDiv({ cls: "finenotes-icon-review-example" });
-    proposed.createSpan({ cls: "finenotes-icon-review-stage-label", text: "New" });
+    proposed.createSpan({ cls: "finenotes-icon-review-stage-label", text: "Approved" });
     const proposedStage = proposed.createDiv({ cls: "finenotes-icon-review-stage" });
     const nextIcon = proposedStage.createSpan({ cls: "finenotes-icon-review-svg" });
     try {
       setIcon(nextIcon, candidateIconName(candidate.id));
-      // Obsidian's addIcon wrapper may not use Lucide's 24-unit box by default.
-      // Match the existing fork's rectangular-lasso fix for all custom candidates.
-      nextIcon.querySelector("svg")?.setAttribute("viewBox", "0 0 24 24");
     } catch {
       nextIcon.setText("?");
     }

@@ -1,3 +1,4 @@
+import { APPROVED_ICONS } from "./icon-family";
 import { referencedEmbedImages } from "./embed-references";
 import { AddHandwritingRegion, allocateHandwritingRegion, updateHandwritingReferences } from "../model/region-allocation";
 import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
@@ -2612,7 +2613,7 @@ export class InkView extends TextFileView {
     menu.addItem((item) =>
       item
         .setTitle("Import PDF from device…")
-        .setIcon("file-text")
+        .setIcon(APPROVED_ICONS.importPdf)
         .onClick(() => this.importPdf(false)),
     );
     menu.addItem((item) =>
@@ -2874,7 +2875,7 @@ export class InkView extends TextFileView {
     if (this.isProtected() || !this.file) return;
     const entries = pdf
       ? [
-          { id: "files", icon: "file-text", label: "From files", run: () => this.importPdf() },
+          { id: "files", icon: APPROVED_ICONS.importPdf, label: "From files", run: () => this.importPdf() },
           {
             id: "vault",
             icon: "folder-open",

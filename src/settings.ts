@@ -512,7 +512,7 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
       ]),
       drawnRow(
         "FineNotes Icon Studio",
-        "Review each current icon beside the proposed design, and approve or reject it. No icon is changed in your toolbar until you explicitly choose to adopt it.",
+        "Compare the original glyphs with the approved designs now used by FineNotes. Save comments and review decisions as feedback.",
         (setting) => {
           setting.addButton((button) =>
             button.setButtonText("Review icons…").onClick(() => this.plugin.openIconReview()),
