@@ -136,8 +136,12 @@ export class NewNotebookModal extends Modal {
     }
   }
 
+  /** Remove only Obsidian’s native close controls; keep the custom Cancel/Create header. */
   private removeCloseButton(): void {
-    for (const el of Array.from(this.modalEl.querySelectorAll(".modal-close-button"))) el.remove();
+    // Obsidian renamed the control from modal-close-button to modal-header-button.
+    // Limit the selector to direct children so our own modal buttons remain intact.
+    const selector = ":scope > .modal-close-button, :scope > .modal-header-button";
+    for (const el of Array.from(this.modalEl.querySelectorAll(selector))) el.remove();
   }
 
   override onClose(): void {
