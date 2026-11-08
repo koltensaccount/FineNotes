@@ -2,7 +2,7 @@
 
 ## Current design target
 
-The second mockup (“Lecture Notes”) guides the writing tools. The first nine icons were approved in chat. The final batch covers Handwrite Here and Update companion PDF.
+The second mockup (“Lecture Notes”) guides the writing tools. The gallery has 11 review candidates. Nine cover writing tools, notebook and page actions, and import and conversion. Two more cover Handwrite Here and Update companion PDF. Gallery decisions are recorded per candidate.
 
 ### Candidate behavior
 
