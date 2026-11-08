@@ -7691,18 +7691,22 @@ img.finenotes-live-embed-image:hover {
   font-size: var(--font-ui-smaller);
 }
 .finenotes-icon-review-small-label { margin-right: 6px; }
-.finenotes-icon-review-swatch.clickable-icon {
+.finenotes-icon-review .finenotes-icon-review-swatch.clickable-icon {
+  box-sizing: border-box;
   width: 25px;
+  min-width: 25px;
+  max-width: 25px;
   height: 25px;
+  min-height: 25px;
+  max-height: 25px;
   border-radius: 50%;
   border: 1px solid var(--background-modifier-border-hover);
   outline: 2px solid transparent;
   outline-offset: 2px;
   padding: 0;
   flex: 0 0 25px;
-  min-height: 25px;
 }
-.finenotes-icon-review-swatch[aria-pressed="true"] {
+.finenotes-icon-review .finenotes-icon-review-swatch.clickable-icon[aria-pressed="true"] {
   outline-color: var(--interactive-accent);
 }
 .finenotes-icon-review-progress {
@@ -7783,6 +7787,14 @@ img.finenotes-live-embed-image:hover {
   width: 25px;
   height: 25px;
   stroke-width: 1.8px;
+}
+.finenotes-icon-review-example:nth-child(2) .finenotes-icon-review-svg > svg {
+  box-sizing: border-box;
+  min-width: 25px;
+  max-width: 25px;
+  min-height: 25px;
+  max-height: 25px;
+  flex: 0 0 25px;
 }
 .finenotes-icon-review-actions {
   display: flex;
