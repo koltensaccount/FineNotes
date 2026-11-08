@@ -4,7 +4,7 @@
  * Decisions are recorded individually so approved and rejected candidates can
  * be implemented selectively after the design review.
  */
-import { App, Modal, Notice, setIcon } from "obsidian";
+import { Modal, Notice, setIcon, type App } from "obsidian";
 import { createStrokePreview } from "./stroke-preview";
 import {
   ICON_FAMILY_CANDIDATES,
@@ -37,9 +37,7 @@ const INK_CHOICES = [
 
 export class IconReviewModal extends Modal {
   private inkColor: string = INK_CHOICES[0].value;
-  private panel: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
-  private readonly statuses = new Map<string, () => void>();
 
   constructor(app: App, private readonly host: IconReviewHost) {
     super(app);
@@ -52,8 +50,6 @@ export class IconReviewModal extends Modal {
   }
 
   override onClose(): void {
-    this.statuses.clear();
-    this.panel = null;
     this.countEl = null;
     this.contentEl.empty();
   }
@@ -64,7 +60,6 @@ export class IconReviewModal extends Modal {
     root.empty();
     root.addClass("finenotes-icon-review");
     root.setCssProps({ "--fn-review-ink": this.inkColor });
-    this.panel = root;
 
     root.createDiv({
       cls: "finenotes-icon-review-intro",
@@ -93,11 +88,6 @@ export class IconReviewModal extends Modal {
     }
     this.countEl = controls.createDiv({ cls: "finenotes-icon-review-progress" });
     this.syncProgress();
-
-    const legend = root.createDiv({ cls: "finenotes-icon-review-legend" });
-    legend.createSpan({ text: "Original" });
-    legend.createSpan({ text: "Proposed" });
-    legend.createSpan({ text: "Decision" });
 
     for (const groupName of GROUPS) {
       const group = root.createDiv({ cls: "finenotes-icon-review-group" });
@@ -167,7 +157,6 @@ export class IconReviewModal extends Modal {
       reject.setAttribute("aria-pressed", String(choice === "rejected"));
       clear.toggleClass("is-hidden", choice === null);
     };
-    this.statuses.set(candidate.id, sync);
     sync();
 
     const commit = async (choice: IconReviewDecision | null): Promise<void> => {
