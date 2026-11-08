@@ -1,578 +1,262 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { surfaces, modalText } = vi.hoisted(() => ({
+  surfaces: [] as { change: () => void; finish: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }[],
+  modalText: { value: "", select() {} },
+}));
+
 vi.mock("obsidian", async () => ({
   ...(await import("./fake-obsidian")),
-  Notice: vi.fn(),
   setIcon: vi.fn(),
+  Modal: class {
+    contentEl = { createEl: () => modalText };
+    setTitle() {}
+    open() {}
+  },
+}));
+vi.mock("../../src/view/ink-surface", () => ({
+  InkSurface: class {
+    finishPointerInput = vi.fn();
+    destroy = vi.fn();
+    constructor(_host: unknown, _doc: unknown, _tools: unknown, _options: unknown, callbacks: { onChange: () => void }) {
+      surfaces.push({ change: callbacks.onChange, finish: this.finishPointerInput, destroy: this.destroy });
+    }
+    setTool() {}
+    layout() {}
+  },
 }));
 
 import { TFile } from "obsidian";
-import {
-  emptyDocument,
-  blankPage,
-  type InkDocument,
-  type NotebookClip,
-} from "../../src/model/document";
-import { buildInkFile, parseInkFile, decodeDocument } from "../../src/model/serialize";
-import { BLOCK_LABEL, LEGACY_BLOCK_LABEL } from "../../src/constants";
-import {
-  createBlockPage,
-  isBlockPage,
-  resolveBlockBounds,
-  expandBlockPageIfNeeded,
-} from "../../src/model/handwrite-block";
-import {
-  InlineHandwriteSession,
-  getLastFailedSession,
-} from "../../src/view/inline-handwrite";
+import { DEFAULT_SETTINGS } from "../../src/settings-data";
+import { buildInkFile, parseInkFile } from "../../src/model/serialize";
+import { blankPage, emptyDocument, type InkDocument, type Stroke } from "../../src/model/document";
+import { createBlockPage } from "../../src/model/handwrite-block";
+import { getActiveInlineSession, InlineHandwriteSession } from "../../src/view/inline-handwrite";
+import { waitForNotebookTransaction } from "../../src/view/notebook-transaction";
 
-function createMockCanvas(): any {
-  const base: any = {
-    save: () => {},
-    restore: () => {},
-    beginPath: () => {},
-    closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
-    arc: () => {},
-    rect: () => {},
-    clip: () => {},
-    stroke: () => {},
-    fill: () => {},
-    fillRect: () => {},
-    clearRect: () => {},
-    strokeRect: () => {},
-    fillText: () => {},
-    measureText: () => ({ width: 10 }),
-    setTransform: () => {},
-    resetTransform: () => {},
-    scale: () => {},
-    translate: () => {},
-    rotate: () => {},
-    drawImage: () => {},
-    createImageData: () => ({ data: new Uint8ClampedArray(4) }),
-    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-    putImageData: () => {},
-    setLineDash: () => {},
-    getLineDash: () => [],
-  };
-  return new Proxy(base, {
-    get(target, prop) {
-      if (prop in target) return target[prop];
-      return () => {};
-    },
-    set(target, prop, value) {
-      target[prop] = value;
-      return true;
-    },
-  });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
-const mockWin: any = {
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  requestAnimationFrame: (cb: any) => setTimeout(cb, 0),
-  cancelAnimationFrame: (id: any) => clearTimeout(id),
-  setTimeout,
-  clearTimeout,
-  devicePixelRatio: 1,
-  visualViewport: null,
-};
-(globalThis as any).window = mockWin;
+function host(): HTMLElement {
+  const element = {
+    isConnected: true, ownerDocument: {}, empty() {},
+    addClass() {}, removeClass() {}, toggleClass() {},
+    createEl: () => host(), createSpan: () => host(), createDiv: () => host(),
+    select() {},
+  };
+  return element as unknown as HTMLElement;
+}
 
-function createMockEl(tag = "div"): any {
-  const fakeDoc: any = {
-    defaultView: mockWin,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    createElementNS: (_ns: string, t: string) => createMockEl(t),
-    createElement: (t: string) => createMockEl(t),
+function stroke(id: string, y = 20.12345): Stroke {
+  return { id, color: "#000000", size: 2, tool: "pen", pts: [25, y, 0.51] };
+}
+
+function setup() {
+  const doc = emptyDocument();
+  const block = createBlockPage(doc, "block-first");
+  const other = createBlockPage(doc, "block-second");
+  block.page.strokes.push(stroke("original"), stroke("erase"));
+  block.clip.imagePath = "original-preview.png";
+  let text = buildInkFile("# Notebook", doc);
+  const file = { path: "Notes.notebook.md" } as TFile;
+  let currentFile: TFile | null = file;
+  let open = false;
+  const process = vi.fn(async (_file: TFile, update: (value: string) => string) => {
+    return text = update(text);
+  });
+  const create = vi.fn(async (_path: string, _data: string) => file);
+  const read = vi.fn(async () => text);
+  const openLinkText = vi.fn();
+  const app = {
+    vault: { process, create, read, getFileByPath: () => currentFile },
+    workspace: { getLeavesOfType: () => open ? [{ view: { file } }] : [], openLinkText },
   };
-  const classes = new Set<string>();
-  const el: any = {
-    tag,
-    ownerDocument: fakeDoc,
-    children: [],
-    classList: {
-      has: (cls: string) => classes.has(cls),
-      contains: (cls: string) => classes.has(cls),
-      add: (cls: string) => classes.add(cls),
-      delete: (cls: string) => classes.delete(cls),
-      remove: (cls: string) => classes.delete(cls),
-    },
-    dataset: {},
-    style: { setProperty: () => {} },
-    setCssProps: () => {},
-    setCssStyles: () => {},
-    empty: () => {
-      el.children = [];
-    },
-    addClass: (cls: string) => classes.add(cls),
-    removeClass: (cls: string) => classes.delete(cls),
-    toggleClass: (cls: string, force?: boolean) => {
-      const state = force !== undefined ? force : !classes.has(cls);
-      if (state) classes.add(cls);
-      else classes.delete(cls);
-    },
-    hasClass: (cls: string) => classes.has(cls),
-    offsetWidth: 800,
-    offsetHeight: 600,
-    clientWidth: 800,
-    clientHeight: 600,
-    getBoundingClientRect: () => ({
-      top: 0,
-      left: 0,
-      right: 800,
-      bottom: 600,
-      width: 800,
-      height: 600,
-      x: 0,
-      y: 0,
-    }),
-    createDiv: () => {
-      const child = createMockEl("div");
-      el.children.push(child);
-      return child;
-    },
-    createEl: (t: string) => {
-      const child = createMockEl(t);
-      el.children.push(child);
-      return child;
-    },
-    createSvg: (t: string) => {
-      const child = createMockEl(t);
-      el.children.push(child);
-      return child;
-    },
-    createSpan: () => {
-      const child = createMockEl("span");
-      el.children.push(child);
-      return child;
-    },
-    setAttribute: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    append: (...nodes: any[]) => {
-      el.children.push(...nodes);
-    },
-    appendChild: (child: any) => {
-      el.children.push(child);
-      return child;
-    },
-    remove: () => {},
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    setText: (t: string) => {
-      el.textContent = t;
-    },
-    getText: () => el.textContent ?? "",
-  };
-  if (tag === "canvas") {
-    el.getContext = () => createMockCanvas();
-    el.width = 800;
-    el.height = 600;
+  const onClosed = vi.fn();
+  const containerEl = host();
+  function session(blockId = block.page.id, container = containerEl) {
+    return new InlineHandwriteSession({
+      app: app as never, plugin: { settings: DEFAULT_SETTINGS } as never,
+      containerEl: container, notebookFile: file, blockId, sourcePath: "Source.md", onClosed,
+    });
   }
-  return el;
+  return {
+    file, process, create, read, session, containerEl, onClosed, openLinkText,
+    setOpen: (value: boolean) => { open = value; },
+    replaceFile: () => { currentFile = { path: file.path } as TFile; },
+    external: (edit: (doc: InkDocument) => void, body = "# Notebook") => {
+      const latest = parseInkFile(text).doc!;
+      edit(latest);
+      text = buildInkFile(body, latest);
+    },
+    setText: (value: string) => { text = value; },
+    text: () => text,
+    page: (id = block.page.id) => parseInkFile(text).doc!.pages.find((page) => page.id === id)!,
+    otherId: other.page.id,
+  };
 }
 
-class FakePath2D {
-  moveTo() {}
-  lineTo() {}
-  closePath() {}
-  arc() {}
-  bezierCurveTo() {}
-  quadraticCurveTo() {}
-  rect() {}
+function edit(session: InlineHandwriteSession, apply: (strokes: Stroke[]) => void) {
+  apply(session.currentPage!.strokes);
+  surfaces.at(-1)!.change();
 }
-(globalThis as any).Path2D = FakePath2D;
 
-class MockResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as any).ResizeObserver = MockResizeObserver;
-
-(globalThis as any).getComputedStyle = () => ({
-  getPropertyValue: () => "",
+afterEach(async () => {
+  await getActiveInlineSession()?.close(true);
+  surfaces.length = 0;
 });
 
-const mockDoc = {
-  body: createMockEl(),
-  createElementNS: (_ns: string, tag: string) => createMockEl(tag),
-  createElement: (tag: string) => createMockEl(tag),
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  defaultView: mockWin,
-};
-(globalThis as any).activeDocument = mockDoc;
-(globalThis as any).document = mockDoc;
-(globalThis as any).createEl = (tag: string) => createMockEl(tag);
-
-const dataBlockRegex = new RegExp(`%%(?:${BLOCK_LABEL}|${LEGACY_BLOCK_LABEL})`, "g");
-
-describe("Inline Handwrite Here persistence and safety", () => {
-  let doc: InkDocument;
-  let fileContent: string;
-  const initialBody = "---\ntitle: Calculus Notes\n---\n# Chapter 3\n\nSome introductory text.";
-
-  beforeEach(() => {
-    doc = emptyDocument();
-    doc.pages[0].strokes.push({
-      id: "s-init",
-      tool: "pen",
-      color: "#000000",
-      size: 2,
-      pts: [100, 100, 0.5, 120, 120, 0.5],
-    });
-    fileContent = buildInkFile(initialBody, doc);
-  });
-
-  it("produces exactly one %%goodobsidian/finenotes data block across repeated saves", async () => {
-    // Initial file has exactly 1 data block
-    const matches1 = fileContent.match(dataBlockRegex);
-    expect(matches1?.length).toBe(1);
-
-    const notebookFile = {
-      path: "Calculus.notebook.md",
-      basename: "Calculus.notebook",
-      stat: { mtime: 1000, size: fileContent.length },
-    } as unknown as TFile;
-
-    const fakeContainer = createMockEl();
-    let currentVaultContent = fileContent;
-
-    const fakeApp = {
-      workspace: { getLeavesOfType: () => [] },
-      vault: {
-        read: vi.fn(async () => currentVaultContent),
-        modify: vi.fn(async (_file: TFile, newText: string) => {
-          currentVaultContent = newText;
-        }),
-        getAbstractFileByPath: () => null,
-      },
-    };
-
-    const plugin = {
-      settings: { paperWidth: 800, highlighterAlpha: 0.35 },
-      embedManager: {
-        refreshEmbedsForFile: vi.fn(),
-        refreshEmbedImagesInDom: vi.fn(),
-        pdfCache: {},
-      },
-    };
-
-    // First session: add a dedicated block and save
-    const { pageIndex } = createBlockPage(doc, "block-1");
-    currentVaultContent = buildInkFile(initialBody, doc);
-
-    const session1 = new InlineHandwriteSession({
-      plugin: plugin as never,
-      app: fakeApp as never,
-      containerEl: fakeContainer,
-      notebookFile,
-      pageIndex,
-      cropBounds: { minX: 0, minY: 0, maxX: 800, maxY: 360 },
-      sourcePath: "Notes.md",
-    });
-
-    await session1.start();
-    session1.currentPage?.strokes.push({
-      id: "s1",
-      tool: "pen",
-      color: "#000000",
-      size: 2,
-      pts: [50, 50, 0.5, 60, 60, 0.5],
-    });
-    (session1 as any).isDirty = true;
-    await session1.save();
-    await session1.close();
-
-    const matches2 = currentVaultContent.match(dataBlockRegex);
-    expect(matches2?.length).toBe(1);
-    expect(currentVaultContent).toContain(initialBody);
-
-    // Second session on the same notebook: add more strokes and save again
-    const session2 = new InlineHandwriteSession({
-      plugin: plugin as never,
-      app: fakeApp as never,
-      containerEl: fakeContainer,
-      notebookFile,
-      pageIndex,
-      cropBounds: { minX: 0, minY: 0, maxX: 800, maxY: 360 },
-      sourcePath: "Notes.md",
-    });
-
-    await session2.start();
-    session2.currentPage?.strokes.push({
-      id: "s2",
-      tool: "pen",
-      color: "#000000",
-      size: 2,
-      pts: [70, 70, 0.5, 80, 80, 0.5],
-    });
-    (session2 as any).isDirty = true;
-    await session2.save();
-    await session2.close();
-
-    const matches3 = currentVaultContent.match(dataBlockRegex);
-    expect(matches3?.length).toBe(1);
-    expect(currentVaultContent).toContain(initialBody);
-
-    // Parse and verify all strokes survive
-    const parsed = parseInkFile(currentVaultContent);
-    expect(parsed.doc?.pages[pageIndex].strokes.map((s) => s.id)).toEqual(["s1", "s2"]);
-  });
-
-  it("grows dedicated block pages downward without clipping content or affecting other blocks", () => {
-    const multiDoc = emptyDocument();
-    const b1 = createBlockPage(multiDoc, "block-1", 800, 360);
-    const b2 = createBlockPage(multiDoc, "block-2", 800, 360);
-
-    expect(isBlockPage(b1.page)).toBe(true);
-    expect(isBlockPage(b2.page)).toBe(true);
-    expect(b1.page.geometry.height).toBe(360);
-    expect(b2.page.geometry.height).toBe(360);
-
-    // Drawing near bottom of block 1 expands block 1 only
-    const expanded = expandBlockPageIfNeeded(b1.page, 340);
-    expect(expanded).toBe(true);
-    expect(b1.page.geometry.height).toBeGreaterThan(360);
-    // Block 2 geometry is completely unaffected
-    expect(b2.page.geometry.height).toBe(360);
-  });
-
-  it("detects external modifications and merges inline page edits cleanly", async () => {
-    const notebookFile = {
-      path: "Calculus.notebook.md",
-      basename: "Calculus.notebook",
-      stat: { mtime: 1000, size: fileContent.length },
-    } as unknown as TFile;
-
-    const fakeContainer = createMockEl();
-    let currentVaultContent = fileContent;
-
-    const fakeApp = {
-      workspace: { getLeavesOfType: () => [] },
-      vault: {
-        read: vi.fn(async () => currentVaultContent),
-        modify: vi.fn(async (_file: TFile, newText: string) => {
-          currentVaultContent = newText;
-        }),
-        getAbstractFileByPath: () => null,
-      },
-    };
-
-    const plugin = {
-      settings: { paperWidth: 800, highlighterAlpha: 0.35 },
-      embedManager: {
-        refreshEmbedsForFile: vi.fn(),
-        refreshEmbedImagesInDom: vi.fn(),
-        pdfCache: {},
-      },
-    };
-
-    const session = new InlineHandwriteSession({
-      plugin: plugin as never,
-      app: fakeApp as never,
-      containerEl: fakeContainer,
-      notebookFile,
-      pageIndex: 0,
-      cropBounds: { minX: 0, minY: 0, maxX: 800, maxY: 360 },
-      sourcePath: "Notes.md",
-    });
-
+describe("inline handwriting persistence", () => {
+  it("merges local additions and erasures with external edits after a reorder, preserving body and page fields", async () => {
+    const f = setup();
+    const session = f.session();
     await session.start();
-
-    // Inline edit added
-    session.currentPage?.strokes.push({
-      id: "inline-stroke",
-      tool: "pen",
-      color: "#000",
-      size: 2,
-      pts: [10, 10, 0.5],
-    });
-    (session as any).isDirty = true;
-
-    // Simulate concurrent external edit on disk (e.g. user added stroke or text externally)
-    const externalDoc = decodeDocument(parseInkFile(fileContent).payload!);
-    externalDoc.pages[0].title = "Renamed Externally";
-    const externalContent = buildInkFile("# Updated body\n", externalDoc);
-    currentVaultContent = externalContent;
-    (notebookFile.stat as any).mtime = 2000; // Stat changed!
-
-    // Save should detect mtime change and merge inline page into disk content
-    const saved = await session.save();
-    expect(saved).toBe(true);
-
-    const parsedResult = parseInkFile(currentVaultContent);
-    expect(parsedResult.body).toContain("# Updated body");
-    expect(parsedResult.doc?.pages[0].strokes.some((s) => s.id === "inline-stroke")).toBe(true);
-
-    await session.close();
+    edit(session, (strokes) => { strokes.pop(); strokes.push(stroke("local", 345)); });
+    f.external((doc) => {
+      const page = doc.pages[1];
+      page.title = "Renamed externally";
+      page.bookmarked = true;
+      page.clips![0].imagePath = "renamed-preview.png";
+      page.strokes.push(stroke("external"));
+      doc.pages.reverse();
+      doc.pages[0].title = "Other block";
+    }, "---\ntags: [math]\n---\n# Externally edited");
+    const body = parseInkFile(f.text()).body;
+    expect(await session.close()).toBe(true);
+    expect(parseInkFile(f.text()).body).toBe(body);
+    expect(f.page()).toMatchObject({ title: "Renamed externally", bookmarked: true });
+    expect(f.page().clips![0].imagePath).toBe("renamed-preview.png");
+    expect(f.page().geometry.height).toBeGreaterThan(360);
+    expect(f.page().strokes.map((s) => s.id)).toEqual(["original", "external", "local"]);
+    expect(f.page(f.otherId).title).toBe("Other block");
+    expect(f.page(f.otherId).geometry.height).toBe(360);
+    expect(f.text().match(/%%goodobsidian/g)).toHaveLength(1);
   });
 
-  it("retains unsaved ink in memory if save encounters an error", async () => {
-    const notebookFile = {
-      path: "Calculus.notebook.md",
-      basename: "Calculus.notebook",
-      stat: { mtime: 1000, size: fileContent.length },
-    } as unknown as TFile;
-
-    const fakeContainer = createMockEl();
-
-    const fakeApp = {
-      workspace: { getLeavesOfType: () => [] },
-      vault: {
-        read: vi.fn(async () => fileContent),
-        modify: vi.fn(async () => {
-          throw new Error("Disk full / permission denied");
-        }),
-        getAbstractFileByPath: () => null,
-      },
-    };
-
-    const plugin = {
-      settings: { paperWidth: 800, highlighterAlpha: 0.35 },
-      embedManager: {
-        refreshEmbedsForFile: vi.fn(),
-        refreshEmbedImagesInDom: vi.fn(),
-        pdfCache: {},
-      },
-    };
-
-    const session = new InlineHandwriteSession({
-      plugin: plugin as never,
-      app: fakeApp as never,
-      containerEl: fakeContainer,
-      notebookFile,
-      pageIndex: 0,
-      cropBounds: { minX: 0, minY: 0, maxX: 800, maxY: 360 },
-      sourcePath: "Notes.md",
-    });
-
+  it("keeps post-snapshot changes dirty and serializes concurrent saves and closes", async () => {
+    const f = setup();
+    const session = f.session();
     await session.start();
-    session.currentPage?.strokes.push({
-      id: "critical-stroke",
-      tool: "pen",
-      color: "#000",
-      size: 2,
-      pts: [20, 20, 0.5],
+    edit(session, (strokes) => strokes.push(stroke("first")));
+    const gate = deferred<void>();
+    f.process.mockImplementationOnce(async (_file, update) => {
+      await gate.promise;
+      const text = update(f.text());
+      f.setText(text);
+      return text;
     });
-    (session as any).isDirty = true;
-
-    const saveSuccess = await session.save();
-    expect(saveSuccess).toBe(false);
-
-    // Failed session state is preserved
-    const failedSession = getLastFailedSession();
-    expect(failedSession).toBe(session);
-    expect(
-      failedSession?.currentPage?.strokes.some((s) => s.id === "critical-stroke"),
-    ).toBe(true);
+    const save = session.save();
+    expect(session.save()).toBe(save);
+    edit(session, (strokes) => { strokes.pop(); strokes.push(stroke("second")); });
+    const close = session.close();
+    expect(session.close()).toBe(close);
+    gate.resolve();
+    expect(await save).toBe(true);
+    expect(await close).toBe(false);
+    expect(session.dirty).toBe(true);
+    expect(f.page().strokes.map((s) => s.id)).toContain("first");
+    expect(await session.close()).toBe(true);
+    expect(f.page().strokes.map((s) => s.id)).toEqual(["original", "erase", "second"]);
+    expect(f.onClosed).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves exact legacy multi-clip notebook bounds and behavior", () => {
-    const legacyPage = blankPage("legacy-p1", { width: 800, height: 1200 });
-    const clip1: NotebookClip = {
-      id: "clip-1",
-      pageId: legacyPage.id,
-      bounds: { minX: 40, minY: 60, maxX: 760, maxY: 300 },
-      isExpandable: true,
-      originY: 60,
-      createdAt: 100,
-      updatedAt: 100,
-    };
-    const clip2: NotebookClip = {
-      id: "clip-2",
-      pageId: legacyPage.id,
-      bounds: { minX: 40, minY: 320, maxX: 760, maxY: 600 },
-      isExpandable: true,
-      originY: 320,
-      createdAt: 200,
-      updatedAt: 200,
-    };
-    legacyPage.clips = [clip1, clip2];
-
-    expect(isBlockPage(legacyPage)).toBe(false);
-
-    // resolveBlockBounds falls back to legacy clipCurrentBounds
-    const b1 = resolveBlockBounds(legacyPage, clip1);
-    expect(b1).toEqual(clip1.bounds);
-
-    const b2 = resolveBlockBounds(legacyPage, clip2);
-    expect(b2).toEqual(clip2.bounds);
-  });
-
-  it("synchronizes seamlessly when backing notebook is open in an InkView leaf", async () => {
-    const notebookFile = {
-      path: "Calculus.notebook.md",
-      basename: "Calculus.notebook",
-      stat: { mtime: 1000, size: fileContent.length },
-    } as unknown as TFile;
-
-    const fakeContainer = createMockEl();
-
-    const liveDoc = emptyDocument();
-    const livePage = liveDoc.pages[0];
-    const mockRequestSave = vi.fn();
-    const mockRelayout = vi.fn();
-
-    const mockInkView = {
-      file: notebookFile,
-      document: liveDoc,
-      bodyText: "# Live Notebook Body",
-      requestSave: mockRequestSave,
-      relayoutSurface: mockRelayout,
-    };
-
-    const fakeApp = {
-      workspace: {
-        getLeavesOfType: () => [{ view: mockInkView }],
-      },
-      vault: {
-        read: vi.fn(),
-        modify: vi.fn(),
-      },
-    };
-
-    const plugin = {
-      settings: { paperWidth: 800, highlighterAlpha: 0.35 },
-      embedManager: {
-        refreshEmbedsForFile: vi.fn(),
-        refreshEmbedImagesInDom: vi.fn(),
-        pdfCache: {},
-      },
-    };
-
-    const session = new InlineHandwriteSession({
-      plugin: plugin as never,
-      app: fakeApp as never,
-      containerEl: fakeContainer,
-      notebookFile,
-      pageIndex: 0,
-      cropBounds: { minX: 0, minY: 0, maxX: 800, maxY: 360 },
-      sourcePath: "Notes.md",
-    });
-
+  it("leaves a conflicting stroke untouched, keeps the editor mounted and writes a recoverable copy", async () => {
+    const f = setup();
+    const session = f.session();
     await session.start();
-    expect(session.document).toBe(liveDoc);
+    edit(session, (strokes) => { strokes[0].size = 7; });
+    f.external((doc) => { doc.pages[1].strokes[0].size = 9; });
+    const latest = f.text();
+    expect(await session.close()).toBe(false);
+    expect(f.text()).toBe(latest);
+    expect(getActiveInlineSession()).toBe(session);
+    expect(surfaces[0].destroy).not.toHaveBeenCalled();
+    expect(f.onClosed).not.toHaveBeenCalled();
+    const recovered = parseInkFile(f.create.mock.calls[0][1]).doc!.pages[0];
+    expect(recovered.strokes[0].size).toBe(7);
+    expect(recovered.clips![0].imagePath).toBeUndefined();
+    await f.session(f.otherId, host()).start();
+    expect(getActiveInlineSession()).toBe(session);
+    expect(f.create).toHaveBeenCalledTimes(1);
+    expect(await session.close(true)).toBe(true);
+    expect(surfaces[0].destroy).toHaveBeenCalledTimes(1);
+  });
 
-    // Add stroke in inline session
-    session.currentPage?.strokes.push({
-      id: "shared-stroke",
-      tool: "pen",
-      color: "#000",
-      size: 2,
-      pts: [15, 15, 0.5],
+  it("fails safely if the full notebook is open initially or opens during a save", async () => {
+    const f = setup();
+    f.setOpen(true);
+    await f.session().start();
+    expect(f.read).not.toHaveBeenCalled();
+    expect(getActiveInlineSession()).toBeNull();
+    f.setOpen(false);
+    const session = f.session();
+    await session.start();
+    edit(session, (strokes) => strokes.push(stroke("local")));
+    const text = f.text();
+    const gate = deferred<void>();
+    f.process.mockImplementationOnce(async (_file, update) => {
+      await gate.promise;
+      return update(text);
     });
-    (session as any).isDirty = true;
+    const save = session.close();
+    const ready = vi.fn();
+    const loading = waitForNotebookTransaction(f.file).then(ready);
+    expect(ready).not.toHaveBeenCalled();
+    f.setOpen(true);
+    gate.resolve();
+    expect(await save).toBe(false);
+    await loading;
+    expect(ready).toHaveBeenCalled();
+    expect(f.text()).toBe(text);
+    f.setOpen(false);
+    expect(await session.close()).toBe(true);
+    expect(f.page().strokes.map((s) => s.id)).toContain("local");
+  });
 
-    // Save delegates to mockInkView.requestSave()
-    await session.save();
-    expect(mockRequestSave).toHaveBeenCalled();
-    expect(livePage.strokes.some((s) => s.id === "shared-stroke")).toBe(true);
+  it.each(["deleted block", "duplicated block", "replaced file", "unreadable payload", "future payload"])(
+    "keeps local ink recoverable if the target becomes unsafe (%s)", async (condition) => {
+      const f = setup();
+      const session = f.session();
+      await session.start();
+      edit(session, (strokes) => strokes.push(stroke("local")));
+      if (condition === "deleted block") f.external((doc) => { doc.pages.splice(1, 1, blankPage("replacement")); });
+      if (condition === "duplicated block") f.external((doc) => { doc.pages.push(structuredClone(doc.pages[1])); });
+      if (condition === "replaced file") f.replaceFile();
+      if (condition === "unreadable payload") f.setText("# Sync in progress");
+      if (condition === "future payload") f.setText(f.text().replace(/\nv\d+:/, "\nv999:"));
+      const latest = f.text();
+      expect(await session.close(true)).toBe(true);
+      expect(f.text()).toBe(latest);
+      expect(parseInkFile(f.create.mock.calls[0][1]).doc?.pages[0].strokes.at(-1)?.id).toBe("local");
+    },
+  );
 
-    await session.close();
+  it("finishes wet ink before saving and offers copyable recovery if both writes fail on detach", async () => {
+    const f = setup();
+    const session = f.session();
+    await session.start();
+    surfaces[0].finish.mockImplementationOnce(() => edit(session, (strokes) => strokes.push(stroke("wet"))));
+    f.process.mockRejectedValueOnce(new Error("Vault read-only"));
+    f.create.mockRejectedValue(new Error("Vault read-only"));
+    expect(await session.close(true)).toBe(false);
+    expect(surfaces[0].destroy).not.toHaveBeenCalled();
+    expect(parseInkFile(modalText.value).doc?.pages[0].strokes.at(-1)?.id).toBe("wet");
+    expect(await session.close()).toBe(true);
+    expect(f.page().strokes.at(-1)?.id).toBe("wet");
+  });
+
+  it("does not mount an editor if the embed disappears during loading", async () => {
+    const f = setup();
+    const gate = deferred<string>();
+    f.read.mockReturnValueOnce(gate.promise);
+    const session = f.session();
+    const starting = session.start();
+    expect(await session.close(true)).toBe(true);
+    gate.resolve(f.text());
+    await starting;
+    expect(surfaces).toHaveLength(0);
+    expect(getActiveInlineSession()).toBeNull();
   });
 });
-

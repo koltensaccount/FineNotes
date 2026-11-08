@@ -123,9 +123,9 @@ export function resolveBlockBounds(page: Page, clip: NotebookClip): Bounds {
     return clipCurrentBounds(page, clip);
   }
   const content = contentBoundsOnPage(page);
-  const minX = clip.bounds.minX;
-  const maxX = clip.bounds.maxX;
-  const minY = clip.bounds.minY;
+  const minX = content ? Math.max(0, Math.min(clip.bounds.minX, content.minX - 8)) : clip.bounds.minX;
+  const maxX = content ? Math.min(page.geometry.width, Math.max(clip.bounds.maxX, content.maxX + 8)) : clip.bounds.maxX;
+  const minY = content ? Math.max(0, Math.min(clip.bounds.minY, content.minY - 8)) : clip.bounds.minY;
   const baseHeight = Math.max(
     INITIAL_BLOCK_HEIGHT - BLOCK_PADDING * 2,
     clip.bounds.maxY - clip.bounds.minY,

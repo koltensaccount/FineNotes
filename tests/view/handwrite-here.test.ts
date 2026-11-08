@@ -193,6 +193,9 @@ describe("safe Markdown insertion and command", () => {
       offsetToPos: (n: number) => n,
     };
     const queuedActivation = vi.fn();
+    const existing = emptyDocument();
+    existing.pages[0].title = "Existing page";
+    let notebookText = buildInkFile("# Existing Markdown", existing);
     const plugin = {
       settings: {},
       saveSettings: vi.fn(async () => {}),
@@ -202,7 +205,10 @@ describe("safe Markdown insertion and command", () => {
       app: {
         vault: {
           read: vi.fn(async () => ""),
-          modify: vi.fn(async () => {}),
+          process: vi.fn(async (_file: TFile, update: (text: string) => string) => {
+            notebookText = update(notebookText);
+            return notebookText;
+          }),
           createBinary: vi.fn(async () => {}),
           getFiles: () => [book],
           getFileByPath: (p: string) => (p === book.path ? book : null),
@@ -223,6 +229,11 @@ describe("safe Markdown insertion and command", () => {
     await handwriteHere(plugin as never, source as never, editor as never, note, "Proof", 5);
     expect(plugin.settings).toEqual({ notebookAssociations: { [note.path]: book.path } });
     expect(queuedActivation).toHaveBeenCalledWith(book.path, expect.stringMatching(/^block-/));
+    const saved = parseInkFile(notebookText);
+    expect(saved.body).toContain("# Existing Markdown");
+    expect(saved.doc?.pages.map(({ id, title }) => ({ id, title }))).toEqual([
+      { id: "p1", title: "Existing page" }, { id: expect.stringMatching(/^block-/), title: undefined },
+    ]);
     expect(editor.replaceRange).toHaveBeenCalledWith(
       expect.stringMatching(/^\n!\[\[class\/a\.notebook\.md#\^block-[a-f0-9-]+\]\]\n$/),
       5,

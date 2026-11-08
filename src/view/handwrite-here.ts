@@ -9,7 +9,7 @@ import {
   normalizePath,
 } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import { VIEW_TYPE_INK } from "../constants";
+import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
 import {
   resolveNotebookAssociation,
   renameNotebookAssociations,
@@ -32,10 +32,9 @@ import {
   resolveManagedFilePath,
   ensureManagedDirectory,
 } from "../model/storage-resolver";
-import { type InkDocument, emptyDocument } from "../model/document";
+import { emptyDocument } from "../model/document";
 import { createBlockPage, resolveBlockBounds } from "../model/handwrite-block";
 import { renderClipPng } from "./clip-png";
-import { InkView } from "./ink-view";
 
 export type NotebookChoiceItem =
   | {
@@ -326,38 +325,9 @@ export async function handwriteHere(
   (plugin.settings.notebookAssociations ??= {})[source.path] = notebook.path;
   await plugin.saveSettings();
 
-  // Check if notebook is currently open in an InkView leaf
-  const openLeaf = app.workspace
-    .getLeavesOfType(VIEW_TYPE_INK)
-    .find((leaf) => (leaf.view as InkView).file?.path === notebook.path);
-  const openInkView = openLeaf?.view as InkView | undefined;
-
-  let doc: InkDocument;
-  let noteBody: string;
-
-  if (openInkView?.document) {
-    doc = openInkView.document;
-    noteBody = openInkView.bodyText;
-  } else {
-    const vault = app.vault as any;
-    const rawContent =
-      typeof vault.read === "function"
-        ? await vault.read(notebook)
-        : typeof vault.cachedRead === "function"
-          ? await vault.cachedRead(notebook)
-          : "";
-    const parsed = parseInkFile(rawContent, plugin.settings?.paperWidth);
-    doc = parsed.doc ?? emptyDocument();
-    noteBody = parsed.body;
-  }
-
-  // Create dedicated block page with stable identity
+  if (notebookIsOpen(app, notebook)) throw new Error("Close the full notebook editor before writing inline.");
   const blockId = `block-${crypto.randomUUID()}`;
-  const { page, clip } = createBlockPage(
-    doc,
-    blockId,
-    plugin.settings.paperWidth ?? 800,
-  );
+  const { page, clip } = createBlockPage(emptyDocument(), blockId, plugin.settings.paperWidth);
 
   // Allocate preview PNG in managed storage or attachment folder
   let imagePath: string;
@@ -387,12 +357,15 @@ export async function handwriteHere(
     console.warn("[FineNotes] Failed to generate initial clip PNG:", err);
   }
 
-  // Save notebook: canonical buildInkFile ensuring exactly one data block
-  if (openInkView) {
-    openInkView.requestSave();
-  } else if (typeof (app.vault as any).modify === "function") {
-    const canonical = buildInkFile(noteBody, doc);
-    await (app.vault as any).modify(notebook, canonical);
+  await editClosedNotebook(app, notebook, plugin.settings.paperWidth, (doc) => {
+    if (sourceView.file !== source || sourceView.leaf.view !== sourceView ||
+        embedInsertionOffset(before, editor.getValue(), offset) === null) {
+      throw new Error("The source note changed. Run Handwrite Here again.");
+    }
+    doc.pages.push(page);
+  });
+  if (sourceView.file !== source || sourceView.leaf.view !== sourceView) {
+    throw new Error("The source note changed. The new block is in the backing notebook.");
   }
 
   // Queue inline activation for when the embed mounts in the DOM

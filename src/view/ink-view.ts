@@ -1,3 +1,4 @@
+import { claimNotebook, releaseNotebook, waitForNotebookTransaction } from "./notebook-transaction";
 import { referencedEmbedImages } from "./embed-references";
 import {
   isManagedStorageEnabled,
@@ -220,7 +221,7 @@ const HELD_LOAD_NOTICE =
 const ignore = (): void => undefined;
 
 /** The tools as the settings left them, for a view that has just opened. */
-function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
+export function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
   const penType = s.penType ?? (s.pressureWidth ? "fountain" : "ball");
   const spec = PEN_TYPES.find((p) => p.id === penType) ?? PEN_TYPES[0];
   const isHighlighter = s.defaultTool === "highlighter";
@@ -365,6 +366,17 @@ export class InkView extends TextFileView {
 
   // --- Reading and writing the file ------------------------------------------
 
+  override async onLoadFile(file: TFile): Promise<void> {
+    claimNotebook(file, this);
+    try {
+      await waitForNotebookTransaction(file);
+      await super.onLoadFile(file);
+    } catch (error) {
+      releaseNotebook(file, this);
+      throw error;
+    }
+  }
+
   /** What Obsidian writes to the file: the note rebuilt, unless its load was held. */
   getViewData(): string {
     return this.guard.contents(() => buildInkFile(this.noteBody, this.doc, this.encoder));
@@ -478,17 +490,21 @@ export class InkView extends TextFileView {
    * running recording so it joins *this* note, and save that.
    */
   override async onUnloadFile(file: TFile): Promise<void> {
-    this.dismissMenus();
-    if (await this.audio?.finishForUnload()) await this.saveNow();
-    if (this.companionUnloadedFile !== file) {
-      this.companionUnloadedFile = file;
-      await this.updateCompanionPdf(false);
-      this.companionUnloadedFile = file;
+    try {
+      this.dismissMenus();
+      if (await this.audio?.finishForUnload()) await this.saveNow();
+      if (this.companionUnloadedFile !== file) {
+        this.companionUnloadedFile = file;
+        await this.updateCompanionPdf(false);
+        this.companionUnloadedFile = file;
+      }
+      if (this.clipsDirty) {
+        await this.updateClipsPng();
+      }
+      await super.onUnloadFile(file);
+    } finally {
+      releaseNotebook(file, this);
     }
-    if (this.clipsDirty) {
-      await this.updateClipsPng();
-    }
-    await super.onUnloadFile(file);
   }
 
   /**

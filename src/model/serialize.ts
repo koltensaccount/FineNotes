@@ -185,6 +185,11 @@ function isEpoch(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+/** Compare strokes at notebook storage precision, including across a save/retry. */
+export function storedStrokeKey(stroke: Stroke): string {
+  return JSON.stringify(storeStroke(stroke));
+}
+
 function storeStroke(stroke: Stroke): StoredStroke {
   return {
     id: stroke.id,
@@ -885,4 +890,19 @@ export function buildInkFile(body: string, doc: InkDocument, encoder?: DocumentE
   const payload = encoder ? encoder.encode(doc) : encodeDocument(doc);
   const block = `%%${BLOCK_LABEL}\n${payload}\n%%\n`;
   return text.length > 0 ? `${text}\n\n${block}` : block;
+}
+
+/** Apply a transactional edit to one recognized payload, preserving the surrounding Markdown. */
+export function editInkFile(markdown: string, paperWidth: number, edit: (doc: InkDocument) => void): string {
+  const block = BLOCK_RE.exec(markdown);
+  if (!block || BLOCK_RE.test(markdown.slice(block.index + block[0].length))) {
+    throw new Error("Expected one FineNotes data block.");
+  }
+  const payload = block[1];
+  const version = /^v(\d+):/.exec(payload.trim());
+  if (!version || Number(version[1]) > SCHEMA_VERSION) throw new Error("Unsupported FineNotes data version.");
+  const doc = decodeDocument(payload, paperWidth);
+  edit(doc);
+  const start = block.index + block[0].indexOf(payload);
+  return markdown.slice(0, start) + encodeDocument(doc) + markdown.slice(start + payload.length);
 }

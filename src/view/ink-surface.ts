@@ -1535,6 +1535,11 @@ export class InkSurface {
    * pointer controller, listeners and observers. Its DOM stays; that is the
    * host's to remove.
    */
+  /** Finish an in-progress stroke before the inline host takes its save snapshot. */
+  finishPointerInput(): void {
+    this.pointerInput?.cancelDrawing();
+  }
+
   destroy(): void {
     this.clipHighlightEl?.remove();
     if (this.handwritingGuideFrame) window.cancelAnimationFrame(this.handwritingGuideFrame);

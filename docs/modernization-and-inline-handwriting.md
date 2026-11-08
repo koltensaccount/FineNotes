@@ -125,7 +125,7 @@ Stop and report blockers instead of taking shortcuts that could damage user note
 - [ ] Resolve licensing and attribution for code copied from the GPL-3.0-or-later upstream tag. The fork currently declares MIT.
 - [x] Implement managed storage resolver (`src/model/storage-resolver.ts`) and user settings (`useManagedStorage`, `managedStorageRoot`).
 - [x] Implement dedicated block page model with `expandBlockPageIfNeeded` (`src/model/handwrite-block.ts`).
-- [ ] Wire the Handwrite Here command to a dedicated inline block with safe save and teardown. The review patch keeps the existing notebook-opening flow.
+- [x] Wire dedicated Handwrite Here blocks to inline editing and atomic, conflict-aware saves. Real Obsidian desktop and iPad validation remains open.
 - [x] Port and integrate typed LaTeX formula engine (`src/model/calc-display.ts`, `src/model/latex.ts`, `src/canvas/math-layout.ts`, `src/canvas/equation-paint.ts`, `src/model/equation.ts`).
 - [ ] Port and integrate Goodnotes-style text box drag handles and width pills (`src/canvas/text-box-handles.ts`).
 - [ ] Port and integrate PDF text selection, layout, hit-testing, and notebook search (`src/canvas/pdf-text.ts`, `src/canvas/text-pick.ts`, `src/search/notebook-search.ts`, `src/search/pdf-hits.ts`).
@@ -133,3 +133,22 @@ Stop and report blockers instead of taking shortcuts that could damage user note
 - [x] Implement `EquationEditor` floating modal, selection bar Edit Equation action, and Text tool Σ option (`src/view/equation-editor.ts`, `src/view/floating-window.ts`, `src/view/toolbar.ts`, `src/view/ink-view.ts`).
 - [x] Full production build (`npm run build`) passing cleanly.
 - [ ] Physical iPad manual testing checklist (native modal X button, Apple Pencil latency, palm rejection during inline session).
+
+
+## Inline save behavior
+
+Dedicated blocks use the same stable ID for their page and clip. Existing page and legacy clip embeds open the notebook at their destination. Close the full notebook editor before creating or saving an inline block. If the full editor opens during inline editing, the inline save stops and can be retried with Done after closing the notebook.
+
+Inline Done applies only the local stroke changes and vertical growth to the latest notebook inside Obsidian's atomic file operation. The surrounding Markdown, other pages, and unrelated fields on the target page are preserved. Conflicting edits to the same stroke, a changed block identity, or unreadable notebook data stop the write. A failed save leaves the inline editor open and attempts to create a separate recovery notebook beside the original. If the embed is removed and the recovery file cannot be written, a dialog offers the serialized recovery notebook for copying. Recovery copies are standalone snapshots for manual review. Ink that has not reached a save or recovery operation is still in memory.
+
+## Upstream provenance and distribution gate
+
+The fork's existing MIT notice applies to the code received under MIT. Upstream [2.8.3 at `18daa971432785a6952e4a871cb2ebd2cd00b064`](https://github.com/Joost-8/FineNotes/tree/18daa971432785a6952e4a871cb2ebd2cd00b064) declares [GPL-3.0-or-later](https://github.com/Joost-8/FineNotes/blob/2.8.3/package.json#L32). This branch contains post-change ports, including `398f9e8` and `11fbbd8`. In particular, `src/canvas/pdf-text.ts` and `src/canvas/text-box-handles.ts` are byte-for-byte copies of that tag. Unwired files also count when distributing the source tree.
+
+The MIT-only root license and package metadata do not describe the combined branch. **Distribution remains blocked.** Before distributing the combined work, audit the copied and adapted files and their notices, retain the original MIT and third-party notices, include the GPL license and applicable notices for the combined work, and provide the corresponding source and build material for any binaries under the GPL. An MIT-only route requires removing or independently replacing the GPL material, or obtaining compatible permission from the relevant rights holders. Review the already-published draft source as part of that audit. [Upstream GPL text, sections 4–6](https://github.com/Joost-8/FineNotes/blob/2.8.3/LICENSE)
+
+## Upstream wiring checked in PR #1
+
+- Equation insertion, editing, and rendering have production call sites. Notebook search still uses the existing page/typed-text/transcript index.
+- PDF text layout, picking, and PDF hit rectangles exist as utilities with tests. The production view does not call them for PDF text selection, text highlights, or PDF text search. Scanned-page OCR was not verified as a port.
+- Text-box drag and rotation helpers exist with tests. The production text-box interactions do not call those helpers.

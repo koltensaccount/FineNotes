@@ -62,6 +62,7 @@ interface CachedDoc {
 export class FineNotesEmbedManager {
   private pngRefreshPending = false;
   private pngRefreshRunning: Promise<void> | null = null;
+  private readonly pendingPngFiles = new Set<TFile>();
   private disposed = false;
   private sourceIndex: Promise<Map<string, string>> | null = null;
   private readonly docCache = new Map<string, CachedDoc>();
@@ -71,18 +72,23 @@ export class FineNotesEmbedManager {
   private readonly activeEmbedViews = new Set<FineNotesEmbedView>();
 
   /** Refresh theme-dependent PNGs, including notebooks that are not open. */
-  refreshPngEmbeds(): Promise<void> {
-    this.pngRefreshPending = true;
+  refreshPngEmbeds(file?: TFile): Promise<void> {
+    if (file) this.pendingPngFiles.add(file);
+    else this.pngRefreshPending = true;
     if (this.pngRefreshRunning) return this.pngRefreshRunning;
     this.pngRefreshRunning = (async () => {
-      while (this.pngRefreshPending && !this.disposed) {
+      while ((this.pngRefreshPending || this.pendingPngFiles.size > 0) && !this.disposed) {
+        const refreshAll = this.pngRefreshPending;
+        const files = refreshAll ? this.app.vault.getFiles() : [...this.pendingPngFiles];
         this.pngRefreshPending = false;
+        this.pendingPngFiles.clear();
         const themeMode = typeof document !== "undefined" && document.body?.classList.contains("theme-dark") ? "dark" : "light";
         const includeBackground = this.plugin.settings.embedBackground === true;
         const openViews = this.app.workspace.getLeavesOfType(VIEW_TYPE_INK).map(leaf => leaf.view as InkView);
         const openPaths = new Set(openViews.map(view => view.file?.path));
-        await Promise.all(openViews.map(view => view.updateClipsPng(true)));
-        for (const file of this.app.vault.getFiles()) {
+        const viewsToRefresh = refreshAll ? openViews : openViews.filter((view) => view.file && files.includes(view.file));
+        await Promise.all(viewsToRefresh.map((view) => view.updateClipsPng(true)));
+        for (const file of files) {
           if (this.disposed || this.pngRefreshPending) break;
           if (!this.plugin.isInkFile(file) || openPaths.has(file.path)) continue;
           try {
@@ -92,7 +98,7 @@ export class FineNotesEmbedManager {
             for (const page of doc.pages) {
               const geom = page.geometry ?? { width: 1024, height: 1366 };
               const assets = (page.clips ?? []).filter(clip => clip.imagePath).map(clip => ({
-                path: clip.imagePath!, bounds: clipCurrentBounds(page, clip), padding: 8,
+                path: clip.imagePath!, bounds: resolveBlockBounds(page, clip), padding: 8,
               }));
               if (page.pageEmbedPath) assets.push({path: page.pageEmbedPath, bounds: {minX: 0, minY: 0, maxX: geom.width, maxY: geom.height}, padding: 0});
               for (const asset of assets) {
@@ -844,9 +850,7 @@ export class FineNotesEmbedView {
   private canvas: HTMLCanvasElement | null = null;
   private containerEl: HTMLElement | null = null;
   private isDestroyed = false;
-  private resolvedPageIndex = 0;
-  private resolvedCropBounds: Bounds | null = null;
-  private resolvedClip: NotebookClip | null = null;
+  private inlineBlockId: string | null = null;
 
   constructor(
     private readonly manager: FineNotesEmbedManager,
@@ -882,6 +886,7 @@ export class FineNotesEmbedView {
     this.containerEl.addEventListener("click", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
+      if (this.containerEl?.hasClass("finenotes-inline-active")) return;
       if (evt.altKey || evt.metaKey || evt.ctrlKey) {
         const linkText = `${this.file.path}${this.subpath}`;
         void this.app.workspace.openLinkText(linkText, this.sourcePath, false);
@@ -906,16 +911,19 @@ export class FineNotesEmbedView {
 
   private activateInlineEditing(): void {
     if (this.isDestroyed || !this.containerEl) return;
+    if (!this.inlineBlockId) {
+      void this.app.workspace.openLinkText(`${this.file.path}${this.subpath}`, this.sourcePath, false);
+      return;
+    }
     startInlineHandwriteSession({
       plugin: this.manager.plugin,
       app: this.app,
       containerEl: this.containerEl,
       notebookFile: this.file,
-      pageIndex: this.resolvedPageIndex,
-      clip: this.resolvedClip,
-      cropBounds: this.resolvedCropBounds ?? { minX: 0, minY: 0, maxX: 800, maxY: 360 },
+      blockId: this.inlineBlockId,
       sourcePath: this.sourcePath,
       onClosed: () => {
+        if (!this.canvas?.isConnected) this.canvas = null;
         void this.paintContent();
       },
     });
@@ -930,7 +938,7 @@ export class FineNotesEmbedView {
     this.isDestroyed = true;
     const session = getActiveInlineSession();
     if (session && session.hostContainer === this.containerEl) {
-      void session.close();
+      void session.close(true);
     }
     this.manager.unregisterActiveView(this);
     if(this.canvas) {this.canvas.width=0;this.canvas.height=0;}
@@ -939,9 +947,10 @@ export class FineNotesEmbedView {
   }
 
   private async paintContent(): Promise<void> {
-    if (!this.containerEl) return;
+    if (this.isDestroyed || !this.containerEl || this.containerEl.hasClass("finenotes-inline-active")) return;
     const doc = await this.manager.loadDocument(this.file);
-    if(this.isDestroyed || !this.containerEl?.isConnected) return;
+    if (this.isDestroyed || !this.containerEl?.isConnected || this.containerEl.hasClass("finenotes-inline-active")) return;
+    this.inlineBlockId = null;
     if (!doc || doc.pages.length === 0) {
       this.containerEl.empty();
       this.containerEl.createDiv({
@@ -1002,9 +1011,10 @@ export class FineNotesEmbedView {
       page = doc.pages[0];
     }
 
-    this.resolvedPageIndex = pageIndex;
-    this.resolvedCropBounds = cropBounds;
-    this.resolvedClip = clip;
+    if (clip && page.id.startsWith("block-") && page.id === clip.id &&
+        page.clips?.length === 1 && page.clips[0].id === clip.id) {
+      this.inlineBlockId = clip.id;
+    }
 
     // Default to whole page if no clip bounds
     const pW = page.geometry.width;
