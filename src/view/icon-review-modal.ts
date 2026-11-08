@@ -38,6 +38,7 @@ const INK_CHOICES = [
 
 export class IconReviewModal extends Modal {
   private inkColor: string = INK_CHOICES[0].value;
+  private previewTheme: "auto" | "light" | "dark" = "auto";
   private countEl: HTMLElement | null = null;
 
   constructor(app: App, private readonly host: IconReviewHost) {
@@ -61,6 +62,7 @@ export class IconReviewModal extends Modal {
     root.empty();
     root.addClass("finenotes-icon-review");
     root.setCssProps({ "--fn-review-ink": this.inkColor });
+    root.setAttribute("data-preview-theme", this.previewTheme);
 
     root.createDiv({
       cls: "finenotes-icon-review-intro",
@@ -87,8 +89,40 @@ export class IconReviewModal extends Modal {
         }
       });
     }
+    const theme = controls.createDiv({ cls: "finenotes-icon-review-themes" });
+    theme.createSpan({ cls: "finenotes-icon-review-small-label", text: "Preview" });
+    for (const mode of ["auto", "light", "dark"] as const) {
+      const button = theme.createEl("button", {
+        cls: "finenotes-icon-review-theme",
+        text: mode === "auto" ? "Obsidian" : mode === "light" ? "Light" : "Dark",
+        attr: { type: "button", "aria-pressed": String(mode === this.previewTheme) },
+      });
+      button.addEventListener("click", () => {
+        this.previewTheme = mode;
+        root.setAttribute("data-preview-theme", mode);
+        for (const node of Array.from(theme.querySelectorAll<HTMLButtonElement>("button"))) {
+          node.setAttribute("aria-pressed", String(node === button));
+        }
+      });
+    }
+
     this.countEl = controls.createDiv({ cls: "finenotes-icon-review-progress" });
     this.syncProgress();
+
+    const copy = controls.createEl("button", {
+      cls: "finenotes-icon-review-copy",
+      text: "Copy decisions",
+      attr: { type: "button" },
+    });
+    copy.addEventListener("click", () => {
+      const saved = this.host.decisions();
+      const summary = ICON_FAMILY_CANDIDATES.map(({ id, title }) => ({
+        id, title, decision: saved[id] ?? "undecided",
+      }));
+      void navigator.clipboard.writeText(JSON.stringify(summary, null, 2))
+        .then(() => new Notice("FineNotes icon decisions copied."))
+        .catch(() => new Notice("FineNotes: clipboard unavailable on this device."));
+    });
 
     for (const groupName of GROUPS) {
       const group = root.createDiv({ cls: "finenotes-icon-review-group" });
