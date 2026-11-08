@@ -13,7 +13,8 @@ Original, Swiss-technical icon candidates based on the **second approved visual 
 - In Obsidian, **Settings → FineNotes → Support and diagnostics → FineNotes Icon Studio → Review icons…**
 - Or command palette: **FineNotes: Review proposed icons side by side…**.
 - Each row renders the old icon **next to** the new original SVG at native toolbar size, its proposed usage, and **Approve**, **Reject**, or **Clear decision**.
-- Test blue, red, green, black and white ink before deciding. The app's own theme supplies the surface and neutral outline colours.
+- Test blue, red, green, black and white ink before deciding. Switch the comparison between Obsidian's current theme, a light sample surface, and a dark sample surface without changing the real app theme.
+- Use **Copy decisions** to export every candidate's id/title/approved/rejected/undecided status as JSON for a follow-up agent or chat. This does not export notes or any private vault content.
 - Decisions persist in the vault's plugin settings; review choices do **not** affect live notebook rendering.
 
 ## Candidate inventory (28)
