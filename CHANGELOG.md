@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 91 — Slider thumbs, ink swatches, and Highlighter preview
+
+- Center adjustment slider thumbs on their tracks in Obsidian.
+- Keep toolbar ink swatches circular in the Mac theme.
+- Show a broad stroke preview for Highlighter in the Pen type menu.
+
 ### Beta 90 — Toolbar, settings, and handwriting
 
 - Align floating toolbar corners and use compact slider tracks with full-size touch targets.
