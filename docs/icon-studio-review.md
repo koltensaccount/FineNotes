@@ -2,7 +2,7 @@
 
 ## Current design target
 
-The second mockup (“Lecture Notes”) guides the writing tools. Pen, Highlighter, and Eraser were approved in chat. The next review group covers notebook creation and page navigation.
+The second mockup (“Lecture Notes”) guides the writing tools. The writing tools and notebook/page batches were approved in chat. The next review group covers PDF import, scanning, and single-page conversion.
 
 ### Candidate behavior
 
@@ -14,8 +14,11 @@ The second mockup (“Lecture Notes”) guides the writing tools. Pen, Highlight
 | New notebook | Obsidian `notebook-pen` | Bound notebook with a creation mark |
 | Page thumbnails | Obsidian `panel-left` | Page strip beside an open page |
 | Add page | Obsidian `plus` | Loose sheet with a folded corner and creation mark |
+| Import PDF | Obsidian `file-text` | Folded sheet with an inward arrow |
+| Scan document | Obsidian `scan-line` | Sheet framed by camera guides |
+| Convert to notebook | Obsidian `book-open` | Open notebook with a turning page |
 
-Both batches use one 24×24 grid, a 1.6-unit neutral outline, rounded joins and caps, and minimal detail. Test at displayed tool size, not just enlarged.
+All batches use one 24×24 grid, a 1.6-unit neutral outline, rounded joins and caps, and minimal detail. Test at displayed tool size, not just enlarged.
 
 **Existing behavior stays untouched.** Pen presets, highlighter opacity, pressure rules, lasso modes, shape-specific previews, color swatches, record, text, notebook layout, circuit tools and Obsidian utility icons are unchanged. SVG registrations are review-only and use `finenotes-concept2-*` ids. Approval stores a decision and does not apply icons to the toolbar.
 

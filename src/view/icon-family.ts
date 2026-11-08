@@ -7,7 +7,7 @@ import { addIcon } from "obsidian";
 import { ICON_NEW_NOTEBOOK } from "../constants";
 
 export type IconReviewDecision = "approved" | "rejected";
-export type IconFamilyGroup = "Writing tools" | "Notebook and pages";
+export type IconFamilyGroup = "Writing tools" | "Notebook and pages" | "Import and convert";
 
 export interface IconFamilyCandidate {
   readonly id: string;
@@ -100,6 +100,42 @@ export const ICON_FAMILY_CANDIDATES: readonly IconFamilyCandidate[] = [
       <path d="M7 3.5H14L19 8.5V18.5A2 2 0 0 1 17 20.5H7A2 2 0 0 1 5 18.5V5.5A2 2 0 0 1 7 3.5Z"/>
       ${seam("M14 3.5V8.5H19")}
       <path d="M9.5 14H14.5M12 11.5V16.5"/>
+    `,
+  },
+  {
+    id: "import-pdf-concept2",
+    title: "Import PDF",
+    category: "Import and convert",
+    original: "file-text",
+    usage: "PDF file actions and notebook menu — a folded sheet with an inward arrow.",
+    svg: `
+      <path d="M9 8V5.5A2 2 0 0 1 11 3.5H16L20 7.5V18.5A2 2 0 0 1 18 20.5H11A2 2 0 0 1 9 18.5V16"/>
+      ${seam("M16 3.5V7.5H20")}
+      <path d="M3.5 12H14M11 9L14 12L11 15"/>
+    `,
+  },
+  {
+    id: "scan-document-concept2",
+    title: "Scan document",
+    category: "Import and convert",
+    original: "scan-line",
+    usage: "Scan document action — a sheet framed by camera guides.",
+    svg: `
+      <path d="M3.5 8V5.5A2 2 0 0 1 5.5 3.5H8M16 3.5H18.5A2 2 0 0 1 20.5 5.5V8M20.5 16V18.5A2 2 0 0 1 18.5 20.5H16M8 20.5H5.5A2 2 0 0 1 3.5 18.5V16"/>
+      <path d="M8 7.5H14L16 9.5V16.5H8Z"/>
+      <path d="M10.5 13H13.5"/>
+    `,
+  },
+  {
+    id: "convert-notebook-concept2",
+    title: "Convert to notebook",
+    category: "Import and convert",
+    original: "book-open",
+    usage: "Single-page menu — an open notebook with a page turning into place.",
+    svg: `
+      <path d="M12 7.5C9.5 5.5 6.5 5.5 3.5 6.5V18.5C6.5 17.5 9.5 17.5 12 19.5C14.5 17.5 17.5 17.5 20.5 18.5V6.5"/>
+      ${seam("M12 7.5V19.5")}
+      <path d="M12 7.5C14 5.5 16 4.5 18 4.5V13.5C16 13.5 14 14.5 12 16.5"/>
     `,
   },
 ];
