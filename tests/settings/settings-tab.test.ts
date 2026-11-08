@@ -241,6 +241,7 @@ describe("the rows", () => {
       [AI, "Image model", "text:imageModel"],
       [AI, `${label} API key for images`, "render"],
       [SUPPORT, "Input debug overlay", "toggle:debugHud"],
+      [SUPPORT, "FineNotes Icon Studio", "render"],
       [SUPPORT, "(block)", "render"],
     ]);
   });
@@ -301,6 +302,7 @@ describe("the rows", () => {
       "Image model": [],
       [`${label} API key for images`]: ["image key"],
       "Input debug overlay": ["diagnostics", "HUD", "troubleshooting"],
+      "FineNotes Icon Studio": ["icons", "design", "rebrand", "approve", "reject"],
     });
   });
 
@@ -390,7 +392,8 @@ describe("which rows show", () => {
       "Image generation",
       "(block 30)",
       "Input debug overlay",
-      "(block 34)",
+      "FineNotes Icon Studio",
+      "(block 35)",
     ]);
   });
 

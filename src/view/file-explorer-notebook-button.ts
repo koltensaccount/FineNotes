@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { ICON_NEW_NOTEBOOK } from "../constants";
+import { APPROVED_ICONS } from "./icon-family";
 
 /** Obsidian exposes explorer leaves, but no API for adding a button to their bar. */
 export class FileExplorerNotebookButton {
@@ -30,7 +30,7 @@ export class FileExplorerNotebookButton {
         cls: "clickable-icon nav-action-button goodobsidian-new-notebook",
         attr: { type: "button", "aria-label": "New notebook", title: "New notebook" },
       });
-      setIcon(button, ICON_NEW_NOTEBOOK);
+      setIcon(button, APPROVED_ICONS.newNotebook);
       button.addEventListener("click", this.createNotebook);
       // Beside the built-in New note and New folder buttons.
       bar.insertBefore(button, bar.children.item(2));

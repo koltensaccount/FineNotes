@@ -1,3 +1,4 @@
+import { APPROVED_ICONS } from "./icon-family";
 import { AnchoredNativeMenus } from "./transient-popover";
 /**
  * The page sidebar: GoodNotes' thumbnail panel, opened from the leftmost
@@ -824,7 +825,7 @@ export class PageSidebar {
       menu.addItem((item) =>
         item
           .setTitle("Convert to notebook")
-          .setIcon("book-open")
+          .setIcon(APPROVED_ICONS.convertNotebook)
           .onClick(act("convert-to-notebook")),
       );
       menu.addSeparator();

@@ -1,3 +1,4 @@
+import { APPROVED_ICONS } from "./icon-family";
 import { fitPopover } from "./writing-popover-fit";
 import { penDynamicsProfile, type PenDynamics } from "../model/pen-dynamics";
 import { claimTransient, presetActivation } from "./transient-popover";
@@ -166,7 +167,7 @@ export interface ConfigurableToolMeta {
 export const CONFIGURABLE_TOOLS: Record<ConfigurableToolId, ConfigurableToolMeta> = {
   select: { id: "select", icon: "lasso", label: "Lasso select (V)", name: "Lasso select" },
   pen: { id: "pen", icon: "pen-tool", label: "Pen (P)", name: "Pen" },
-  eraser: { id: "eraser", icon: "eraser", label: "Eraser (E)", name: "Eraser" },
+  eraser: { id: "eraser", icon: APPROVED_ICONS.eraser, label: "Eraser (E)", name: "Eraser" },
   text: { id: "text", icon: "type", label: "Text box (T)", name: "Text box" },
   shape: { id: "shape", icon: "shapes", label: "Shapes (S)", name: "Shapes" },
   image: { id: "image", icon: "image", label: "Insert image", name: "Insert image" },
@@ -697,7 +698,7 @@ export class Toolbar {
     const left = this.barEl.createDiv({ cls: "goodobsidian-bar-group" });
     this.thumbnailsButton = this.barButton(
       left,
-      "panel-left",
+      APPROVED_ICONS.pageThumbnails,
       "Page thumbnails",
       cb.onToggleThumbnails,
     );
@@ -722,7 +723,7 @@ export class Toolbar {
     // (bookmark, duplicate, go to page, clear, delete), then, rightmost,
     // the note's own settings.
     const doc = this.barEl.createDiv({ cls: "goodobsidian-bar-group goodobsidian-bar-doc" });
-    this.addPageButton = this.barButton(doc, "plus", "Add page", cb.onAddPage);
+    this.addPageButton = this.barButton(doc, APPROVED_ICONS.addPage, "Add page", cb.onAddPage);
     this.barButton(doc, "share", "Export as PDF", cb.onShare);
     this.barButton(doc, "more-horizontal", "More", cb.onMore);
     this.barButton(doc, "settings", "Notebook settings", cb.onSettings);
@@ -2620,7 +2621,9 @@ export class Toolbar {
         cls: "goodobsidian-tool-choice goodobsidian-pen-card clickable-icon",
         attr: { "aria-label": spec.label, title: `${spec.label} — ${TOOL_HINTS[spec.id]}` },
       });
-      button.append(this.penTypeGraphic(spec));
+      if (spec.id !== "highlighter" || !this.setWritingIcon(button, "highlighter")) {
+        button.append(this.penTypeGraphic(spec));
+      }
       const caption = button.createSpan({ cls: "goodobsidian-pen-caption" });
       caption.createSpan({ text: spec.label });
 
@@ -3443,6 +3446,19 @@ export class Toolbar {
     return penTypeFor(this.state);
   }
 
+  private setWritingIcon(button: HTMLElement, tool: WritingTool): boolean {
+    setIcon(button, APPROVED_ICONS[tool]);
+    const svg = button.querySelector("svg");
+    if (!svg?.childElementCount) {
+      button.empty();
+      return false;
+    }
+    const presets = this.options.writingPresets;
+    const ink = presets ? selectedColor(presets, tool) : this.state.color;
+    svg.style.setProperty("--fn-review-ink", ink);
+    return true;
+  }
+
   /** Mark every choice button that matches the state, and unmark the rest. */
   syncActive(): void {
     this.syncSelectButtonIcon();
@@ -3453,12 +3469,15 @@ export class Toolbar {
     const penControl = this.toolButtons.get("pen");
     if (penControl) {
       penControl.empty();
-      penControl.append(
-        createStrokePreview(
+      const tool = state.tool === "highlighter" || this.activePenType().id === "highlighter"
+        ? "highlighter"
+        : "pen";
+      if (!this.setWritingIcon(penControl, tool)) {
+        penControl.append(createStrokePreview(
           { ...this.previewOptions(), color: "currentColor", compact: true },
           this.host.ownerDocument,
-        ),
-      );
+        ));
+      }
       penControl.setAttribute("aria-label", `${this.activePenType().label} (P)`);
       penControl.setAttribute("title", `${this.activePenType().label} (P)`);
     }
