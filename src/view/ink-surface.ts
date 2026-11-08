@@ -1386,7 +1386,15 @@ export class InkSurface {
       this.selectionFrameEl.createEl("button", { cls: `goodobsidian-shape-handle is-${handle}`, attr: { "data-shape-handle": handle, "aria-label": `Shape ${handle} handle` } });
       
     }
-    this.selectionFrameEl.addEventListener("lostpointercapture", event => { if (event.pointerId === this.groupDrag?.pointerId && !this.selectionFrameEl.hasPointerCapture(event.pointerId) && (this.groupDrag.shape || this.groupDrag.ink)) this.endGroupDrag(false); });
+    this.selectionFrameEl.addEventListener("lostpointercapture", (event) => {
+      const drag = this.groupDrag;
+      // A handle's implicit capture can transfer to the frame at pen-down.
+      // Only loss of the frame's own capture ends a resize.
+      if (event.target === this.selectionFrameEl && drag?.pointerId === event.pointerId &&
+          !this.selectionFrameEl.hasPointerCapture(event.pointerId) && (drag.shape || drag.ink)) {
+        this.endGroupDrag(true);
+      }
+    });
     this.selectionFrameEl.addEventListener("pointerdown", this.onSelectionPointerDown);
     this.actionBar = new SelectionActionBar(this.selectionUiEl, "Selection");
     const cancelShapeEdit = (): void => {
@@ -7406,7 +7414,9 @@ export class InkSurface {
     const drag = this.groupDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     event.stopPropagation();
-    this.endGroupDrag(!(drag.shape || drag.ink || drag.circuit) || event.type !== "pointercancel");
+    // WebKit can report a Pencil lift as pointercancel. Keep the last
+    // visible shape or ink preview just as we do for a selection move.
+    this.endGroupDrag(!drag.circuit || event.type !== "pointercancel");
   };
 
   /**

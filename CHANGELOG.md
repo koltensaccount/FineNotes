@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 98 — Shape resize snap-back
+
+- Keep the last visible shape or ink resize when pointer cancellation or capture loss ends the drag.
+
 ### Beta 97 — Shape resizing
 
 - Redraw a resized shape even when the resize leaves its first and last points in place.
