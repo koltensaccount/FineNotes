@@ -119,6 +119,10 @@ export class IconReviewModal extends Modal {
       const summary = ICON_FAMILY_CANDIDATES.map(({ id, title }) => ({
         id, title, decision: saved[id] ?? "undecided",
       }));
+      if (!navigator.clipboard?.writeText) {
+        new Notice("FineNotes: clipboard unavailable on this device.");
+        return;
+      }
       void navigator.clipboard.writeText(JSON.stringify(summary, null, 2))
         .then(() => new Notice("FineNotes icon decisions copied."))
         .catch(() => new Notice("FineNotes: clipboard unavailable on this device."));
