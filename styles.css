@@ -521,7 +521,14 @@ body,
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: var(--gob-pill-pad);
+  --gob-options-pad-top: var(--gob-pill-pad);
+  --gob-options-pad-bottom: var(--gob-pill-pad);
+  --gob-options-border-width: 1px;
+  /* Keep each well concentric with the pill, including where padding differs. */
+  --gob-options-inset-x: max(0px, calc(var(--gob-options-radius) - var(--gob-pill-pad) - var(--gob-options-border-width)));
+  --gob-options-inset-top: max(0px, calc(var(--gob-options-radius) - var(--gob-options-pad-top) - var(--gob-options-border-width)));
+  --gob-options-inset-bottom: max(0px, calc(var(--gob-options-radius) - var(--gob-options-pad-bottom) - var(--gob-options-border-width)));
+  padding: var(--gob-options-pad-top) var(--gob-pill-pad) var(--gob-options-pad-bottom);
   /* Border-box, so the width it glides between tools (toolbar.ts,
      morphPill) is the box it measured. */
   box-sizing: border-box;
@@ -529,7 +536,7 @@ body,
   max-width: calc(100% - 16px);
   overflow-x: auto;
   scrollbar-width: none;
-  border: 1px solid var(--gob-line);
+  border: var(--gob-options-border-width) solid var(--gob-line);
   border-radius: var(--gob-options-radius);
   background: var(--gob-pill-bg);
   box-shadow: var(--gob-shadow-float);
@@ -597,7 +604,8 @@ body,
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
-  padding: 6px 4px;
+  --gob-options-pad-top: 6px;
+  --gob-options-pad-bottom: 6px;
   gap: 4px;
   touch-action: pan-y !important;
 }
@@ -665,7 +673,7 @@ body,
   height: var(--gob-touch-compact);
   padding: 0 4px;
   border: none;
-  border-radius: var(--gob-radius-m);
+  border-radius: var(--gob-options-inset-x) / var(--gob-options-inset-top) var(--gob-options-inset-top) var(--gob-options-inset-bottom) var(--gob-options-inset-bottom);
   background: transparent;
   box-shadow: none;
   color: var(--text-normal);
@@ -757,7 +765,6 @@ body,
 
 .goodobsidian-options button.goodobsidian-erasermode,
 .goodobsidian-options .goodobsidian-shape-color.clickable-icon {
-  border-radius: var(--gob-well-radius);
   background: var(--gob-well);
 }
 
@@ -2752,7 +2759,6 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
   min-width: var(--gob-touch-compact);
   height: var(--gob-touch-compact);
   padding: 0 6px;
-  border-radius: var(--gob-radius-m);
   color: var(--text-normal);
   opacity: 1;
   white-space: nowrap;
@@ -2786,7 +2792,6 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
   background: var(--gob-well-strong);
   font-size: var(--font-ui-small);
   padding: 0 8px 0 10px;
-  border-radius: var(--gob-well-radius);
 }
 
 .goodobsidian-options .goodobsidian-text-control.is-size {
@@ -2834,7 +2839,6 @@ body:not(.is-phone) .modal.goodobsidian-dialog {
 .goodobsidian-options .goodobsidian-text-control.is-pin,
 .goodobsidian-options .goodobsidian-text-control.is-drag-size {
   background: var(--gob-well);
-  border-radius: var(--gob-well-radius);
 }
 
 .goodobsidian-options .goodobsidian-text-control.is-pin.is-active,
@@ -6520,7 +6524,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   touch-action: pan-x;
   scrollbar-width: thin;
   scrollbar-color: var(--text-muted) var(--gob-pill-bg);
-  padding-bottom: 6px;
+  --gob-options-pad-bottom: 6px;
 }
 .goodobsidian-options.is-eraser::-webkit-scrollbar { display: block; height: 4px; }
 .goodobsidian-options.is-eraser::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
@@ -7404,7 +7408,7 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 @media (max-height: 500px) { .goodobsidian-slide-import-preview { --slide-preview-height: min(24vh, 120px); } }
 
 /* Fit the pen-type well around its preview, without lifting it outside the pill. */
-.goodobsidian-options button.goodobsidian-pentype { box-sizing: border-box; width: 66px; min-width: 66px; height: 44px; min-height: 44px; padding: 6px; align-items: center; justify-content: center; border-radius: 12px; }
+.goodobsidian-options button.goodobsidian-pentype { box-sizing: border-box; width: 66px; min-width: 66px; height: 44px; min-height: 44px; padding: 6px; align-items: center; justify-content: center; }
 .goodobsidian-options .goodobsidian-pentype.is-active { transform: none; }
 
 .goodobsidian-pen-dynamics-control { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; width: 100%; }
