@@ -60,7 +60,14 @@ interface CachedDoc {
   doc: InkDocument;
 }
 
+const notebookPngName = /-(?:clip|page|block)-/i;
+
+function isPrintRender(element: Element): boolean {
+  return Boolean(element.closest?.(".print"));
+}
+
 export class FineNotesEmbedManager {
+  private printImages = new Map<string, { src: string; width?: number }>();
   private pngRefreshPending = false;
   private pngRefreshRunning: Promise<void> | null = null;
   private readonly pendingPngFiles = new Set<TFile>();
@@ -231,7 +238,7 @@ export class FineNotesEmbedManager {
 
     // Register markdown post processor for ![[Notebook#...]] embeds
     this.plugin.registerMarkdownPostProcessor?.((el, ctx) => {
-      this.processMarkdownEmbeds(el, ctx);
+      return this.processMarkdownEmbeds(el, ctx);
     });
 
     // Register code block processor for ```finenotes and ```finenotes-embed
@@ -240,21 +247,17 @@ export class FineNotesEmbedManager {
       el: HTMLElement,
       ctx: MarkdownPostProcessorContext,
     ) => {
-      this.processCodeBlock(source, el, ctx);
+      return this.processCodeBlock(source, el, ctx);
     };
 
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes", codeBlockHandler);
     this.plugin.registerMarkdownCodeBlockProcessor?.("finenotes-embed", codeBlockHandler);
 
-    const markImages = (root: Element): void => {
-      const isPrint = Boolean(
-        root.closest?.(".print") ||
-        (typeof document !== "undefined" && root.ownerDocument && root.ownerDocument !== document)
-      );
-      const isMainDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+    const markImages = (root: Element, sourcePath?: string): Promise<unknown> | void => {
+      if (!isPrintRender(root)) return;
 
       // In print window, ensure MathJax CHTML stylesheet is synced immediately so glyph widths never collapse
-      if (isPrint && typeof document !== "undefined" && root.ownerDocument && root.ownerDocument !== document) {
+      if (typeof document !== "undefined" && root.ownerDocument && root.ownerDocument !== document) {
         const printDoc = root.ownerDocument;
         if ((window as any).MathJax && typeof (window as any).MathJax.chtmlStylesheet === "function") {
           const mjxStyle = (window as any).MathJax.chtmlStylesheet();
@@ -266,36 +269,43 @@ export class FineNotesEmbedManager {
         }
       }
 
-      const images = root instanceof HTMLImageElement ? [root] : [...root.querySelectorAll<HTMLImageElement>("img")];
+      const images = root.tagName === "IMG"
+        ? [root as HTMLImageElement]
+        : [...root.querySelectorAll<HTMLImageElement>("img")];
+      const pending: Promise<void>[] = [];
       for (const image of images) {
-        const src = image.getAttribute("src") || "";
-        const alt = image.getAttribute("alt") || "";
-        const isFineNotes =
-          /-clip-|-page-/i.test(src) ||
-          /-clip-|-page-/i.test(alt) ||
-          image.classList.contains("finenotes-live-embed-image");
-
-        if (isFineNotes) {
-          image.classList.add("finenotes-live-embed-image");
-          if (isMainDark) {
-            image.dataset.finenotesTheme = "dark";
-            image.classList.add("finenotes-dark-clip");
-            if (isPrint) {
-              image.style.filter = "invert(1) hue-rotate(180deg)";
-              (image.style as any).webkitFilter = "invert(1) hue-rotate(180deg)";
-            }
-          } else {
-            image.dataset.finenotesTheme = "light";
-            image.classList.remove("finenotes-dark-clip");
+        if (image.dataset.finenotesPrintReady) continue;
+        const src = (image.getAttribute("src") || "").split("?")[0];
+        const apply = async () => {
+          let printSrc = this.printImages.get(src);
+          if (!printSrc && sourcePath && notebookPngName.test(src)) {
+            const link = image.closest(".internal-embed")?.getAttribute("src") || image.alt;
+            const candidate = this.app.metadataCache.getFirstLinkpathDest(link, sourcePath);
+            const matches = (file: TFile) => file.extension === "png" &&
+              this.app.vault.getResourcePath(file).split("?")[0] === src;
+            const file = candidate && matches(candidate) ? candidate : this.app.vault.getFiles().find(matches);
+            if (file) printSrc = await this.preparePrintImage(file);
           }
-          if (isPrint && image.dataset.finenotesHq !== "true") {
-            void this.upgradeImageForPrint(image);
-          }
-        }
+          if (!printSrc) return;
+          image.dataset.finenotesPrintReady = "true";
+          // Older themes may still invert the whole PNG via a print stylesheet.
+          image.style.setProperty("filter", "none", "important");
+          if (printSrc.width && !image.hasAttribute("width")) image.width = printSrc.width;
+          image.removeAttribute("srcset");
+          image.src = printSrc.src;
+          await image.decode();
+        };
+        pending.push(apply());
       }
+      if (pending.length) return Promise.allSettled(pending);
     };
 
-    this.plugin.registerMarkdownPostProcessor((el) => markImages(el));
+    this.plugin.registerMarkdownPostProcessor((el, ctx) => {
+      if (!isPrintRender(el)) return;
+      // Obsidian inserts native wiki-image elements after invoking post-processors.
+      // Return the work to Obsidian so PDF capture waits for the replacement to decode.
+      return Promise.resolve().then(() => markImages(el, ctx.sourcePath));
+    });
     if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
       const observer = new MutationObserver((records) => {
         this.pruneLiveNotebookEmbeds();
@@ -365,7 +375,7 @@ export class FineNotesEmbedManager {
       const commands = (this.app as any).commands?.commands;
       if (!commands) return;
       for (const cmdId of Object.keys(commands)) {
-        if (/export.*pdf|pdf.*export/i.test(cmdId)) {
+        if (cmdId === "workspace:export-pdf") {
           const exportCmd = commands[cmdId];
           if (exportCmd && !exportCmd._finenotesHooked) {
             exportCmd._finenotesHooked = true;
@@ -382,7 +392,7 @@ export class FineNotesEmbedManager {
                       notice = new Notice("Preparing high-quality handwriting for PDF export…", 3000);
                     }, 300);
                     try {
-                      await this.prepareHighQualityClipsForFile(active);
+                      await this.prepareHighQualityClipsForFile(active, true);
                     } catch (e) {
                       console.warn("[FineNotes] Failed to prepare high-quality clips:", e);
                     } finally {
@@ -405,7 +415,7 @@ export class FineNotesEmbedManager {
                       notice = new Notice("Preparing high-quality handwriting for PDF export…", 3000);
                     }, 300);
                     try {
-                      await this.prepareHighQualityClipsForFile(active);
+                      await this.prepareHighQualityClipsForFile(active, true);
                     } catch (e) {
                       console.warn("[FineNotes] Failed to prepare high-quality clips:", e);
                     } finally {
@@ -433,50 +443,6 @@ export class FineNotesEmbedManager {
     setTimeout(installHook, 1000);
     setTimeout(installHook, 3000);
 
-    if (typeof document !== "undefined") {
-      this.plugin.registerDomEvent(document, "click", (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
-        const btn = target?.closest?.("button.mod-cta, button");
-        if (btn && btn.textContent?.trim() === "Export") {
-          const modal = btn.closest(".modal");
-          if (modal && modal.querySelector(".modal-title")?.textContent?.includes("Export to PDF")) {
-            const active = this.getActiveMarkdownFile();
-            if (active) void this.prepareHighQualityClipsForFile(active);
-          }
-        }
-      });
-    }
-  }
-
-  private async upgradeImageForPrint(image: HTMLImageElement): Promise<void> {
-    if (image.dataset.finenotesHq === "true") return;
-    const src = (image.getAttribute("src") || "").split("?")[0];
-    const alt = image.getAttribute("alt") || "";
-    const cleanSrc = decodeURIComponent(src);
-    void this.logHq(`upgradeImageForPrint: src=${src}, alt=${alt}`);
-
-    const asset = this.app.vault.getFiles().find(file => {
-      if (file.extension !== "png") return false;
-      if (file.name === alt || file.path === alt) return true;
-      if (cleanSrc.includes(file.path) || cleanSrc.endsWith("/" + file.name)) return true;
-      try {
-        const resPath = this.app.vault.getResourcePath(file).split("?")[0];
-        if (decodeURIComponent(resPath) === cleanSrc) return true;
-      } catch {}
-      return false;
-    });
-    if (!asset) {
-      void this.logHq(`upgradeImageForPrint: no asset found for ${src}`);
-      return;
-    }
-    image.dataset.finenotesHq = "true";
-    void this.logHq(`upgradeImageForPrint: calling prepareHighQualityClip for ${asset.path}`);
-    const ok = await this.prepareHighQualityClip(asset);
-    void this.logHq(`upgradeImageForPrint: prepareHighQualityClip result=${ok}`);
-    if (ok && image.isConnected) {
-      const resPath = this.app.vault.getResourcePath(asset).split("?")[0];
-      image.src = `${resPath}?t=${Date.now()}`;
-    }
   }
 
   /**
@@ -484,8 +450,16 @@ export class FineNotesEmbedManager {
    * strictly on export/publish, keeping live editing lightweight and fast.
    */
   async prepareHighQualityClip(imageFile: TFile): Promise<boolean> {
+    const buffer = await this.renderHighQualityClip(imageFile);
+    if (!buffer) return false;
+    await this.app.vault.modifyBinary(imageFile, buffer);
+    this.refreshEmbedImagesInDom(imageFile);
+    return true;
+  }
+
+  private async renderHighQualityClip(imageFile: TFile, forPrint = false): Promise<ArrayBuffer | null> {
     void this.logHq(`prepareHighQualityClip started for ${imageFile.path}`);
-    if (imageFile.extension !== "png") return false;
+    if (imageFile.extension !== "png") return null;
     let page: Page | null = null;
     let bounds: Bounds | null = null;
     let isClip = false;
@@ -560,10 +534,10 @@ export class FineNotesEmbedManager {
     }
 
     void this.logHq(`Found page=${Boolean(page)}, bounds=${JSON.stringify(bounds)}`);
-    if (!page || !bounds) return false;
+    if (!page || !bounds) return null;
 
     try {
-      const isDark = typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
+      const isDark = !forPrint && typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
       const incBg = this.plugin.settings.embedBackground === true;
       const buffer = await renderClipPng(page, bounds, {
         images: this.imageCache,
@@ -580,26 +554,22 @@ export class FineNotesEmbedManager {
       });
 
       void this.logHq(`Rendered buffer size: ${buffer?.byteLength}`);
-      if (buffer && buffer.byteLength > 8) {
-        await this.app.vault.modifyBinary(imageFile, buffer);
-        this.refreshEmbedImagesInDom(imageFile);
-        void this.logHq(`Successfully modified binary for ${imageFile.path}!`);
-        return true;
-      }
+      return buffer && buffer.byteLength > 8 ? buffer : null;
     } catch (err) {
       void this.logHq(`Error in renderClipPng: ${err}`);
       console.warn("[FineNotes] Failed to generate high-quality clip:", imageFile.path, err);
     }
-    return false;
+    return null;
   }
 
   /**
    * Scan a Markdown note for all embedded FineNotes clip/page references and render them
    * at high quality for PDF export or digital garden publishing.
    */
-  async prepareHighQualityClipsForFile(markdownFile: TFile): Promise<number> {
+  async prepareHighQualityClipsForFile(markdownFile: TFile, forPrint = false): Promise<number> {
     void this.logHq(`prepareHighQualityClipsForFile: note=${markdownFile.path}`);
     if (markdownFile.extension !== "md") return 0;
+    const printImages = new Map<string, { src: string; width?: number }>();
     try {
       const content = await this.app.vault.read(markdownFile);
       const regex = /!\[\[([^\]]+)\]\]|!\[[^\]]*\]\(([^)]+)\)/g;
@@ -608,9 +578,12 @@ export class FineNotesEmbedManager {
       while ((match = regex.exec(content)) !== null) {
         const raw = match[1] || match[2] || "";
         const pathOrName = raw.split("|")[0].split("#")[0].trim();
-        if (/-clip-|-page-/i.test(pathOrName)) {
-          targets.add(pathOrName);
+        if (notebookPngName.test(pathOrName)) {
+          targets.add(pathOrName.replace(/^<|>$/g, ""));
         }
+      }
+      for (const embed of this.app.metadataCache.getFileCache(markdownFile)?.embeds ?? []) {
+        if (notebookPngName.test(embed.link)) targets.add(embed.link);
       }
       void this.logHq(`Targets found in note: ${[...targets].join(", ")}`);
       let count = 0;
@@ -619,8 +592,17 @@ export class FineNotesEmbedManager {
                      this.app.vault.getFiles().find(f => f.name === name || f.path === name || f.path.endsWith("/" + name));
         if (file instanceof TFile && file.extension === "png") {
           void this.logHq(`Found file for target ${name}: ${file.path}`);
-          const ok = await this.prepareHighQualityClip(file);
-          if (ok) count++;
+          if (forPrint) {
+            const resource = this.app.vault.getResourcePath(file).split("?")[0];
+            if (printImages.has(resource)) continue;
+            const rendered = await this.preparePrintImage(file);
+            if (rendered) {
+              printImages.set(resource, rendered);
+              count++;
+            }
+          } else if (await this.prepareHighQualityClip(file)) {
+            count++;
+          }
         } else {
           void this.logHq(`Target ${name} did not resolve to a PNG TFile`);
         }
@@ -631,6 +613,67 @@ export class FineNotesEmbedManager {
       void this.logHq(`Error in prepareHighQualityClipsForFile: ${err}`);
       console.warn("[FineNotes] Failed to prepare high-quality clips for note:", markdownFile.path, err);
       return 0;
+    } finally {
+      if (forPrint) this.printImages = printImages;
+    }
+  }
+
+  private async preparePrintImage(file: TFile): Promise<{ src: string; width?: number } | undefined> {
+    try {
+      const original = await this.app.vault.readBinary(file);
+      const buffer = await this.renderHighQualityClip(file, true);
+      const src = buffer ? await this.printDataUrl(buffer) : await this.prepareLegacyPrintImage(original);
+      const header = new DataView(original);
+      const width = original.byteLength >= 24 && header.getUint32(0) === 0x89504e47 ? header.getUint32(16) : undefined;
+      return { src, width };
+    } catch (err) {
+      console.warn("[FineNotes] Could not prepare print image:", file.path, err);
+      return undefined;
+    }
+  }
+
+  printDataUrl(buffer: ArrayBuffer): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(new Blob([buffer], { type: "image/png" }));
+    });
+  }
+
+  private async prepareLegacyPrintImage(buffer: ArrayBuffer): Promise<string> {
+    const original = await this.printDataUrl(buffer);
+    const image = new Image();
+    image.src = original;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    try {
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return original;
+      ctx.drawImage(image, 0, 0);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const { data } = pixels;
+      let transparent = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
+      if (transparent < data.length / 400) return original;
+
+      let changed = false;
+      for (let i = 0; i < data.length; i += 4) {
+        if (!data[i + 3]) continue;
+        const min = Math.min(data[i], data[i + 1], data[i + 2]);
+        const max = Math.max(data[i], data[i + 1], data[i + 2]);
+        if (min >= 180 && max - min <= 35) {
+          data[i] = data[i + 1] = data[i + 2] = 26;
+          changed = true;
+        }
+      }
+      if (!changed) return original;
+      ctx.putImageData(pixels, 0, 0);
+      return canvas.toDataURL("image/png");
+    } finally {
+      canvas.width = canvas.height = 0;
     }
   }
 
@@ -834,9 +877,10 @@ export class FineNotesEmbedManager {
     }
   }
 
-  private processMarkdownEmbeds(el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
+  private processMarkdownEmbeds(el: HTMLElement, ctx: MarkdownPostProcessorContext): Promise<unknown> | void {
     const embeds = el.matches(".internal-embed") ? [el] : [];
     embeds.push(...el.querySelectorAll<HTMLElement>(".internal-embed"));
+    const pending: Promise<void>[] = [];
     for (const embedEl of embeds) {
       if (embedEl.hasClass("finenotes-embed-wrapper") || this.liveNotebookEmbeds.has(embedEl)) continue;
       const src = embedEl.getAttribute("src") || embedEl.getAttribute("data-src");
@@ -845,23 +889,27 @@ export class FineNotesEmbedManager {
       const file = this.app.metadataCache.getFirstLinkpathDest(linkpath, ctx.sourcePath);
       if (!file || !this.plugin.isInkFile(file)) continue;
       embedEl.addClass("finenotes-embed-wrapper");
-      this.renderMarkdownEmbed(embedEl, file, subpath ? `#${subpath}` : "", ctx);
+      const render = this.renderMarkdownEmbed(embedEl, file, subpath ? `#${subpath}` : "", ctx);
+      if (render) pending.push(render);
     }
+    if (pending.length) return Promise.allSettled(pending);
   }
 
-  private renderMarkdownEmbed(el: HTMLElement, file: TFile, subpath: string, ctx: MarkdownPostProcessorContext): void {
+  private renderMarkdownEmbed(el: HTMLElement, file: TFile, subpath: string, ctx: MarkdownPostProcessorContext): Promise<void> | void {
     const view = this.createNotebookEmbed(el, file, subpath, ctx.sourcePath);
     const child = new MarkdownRenderChild(el);
-    child.onload = () => { void view.render(); };
+    const forPrint = isPrintRender(el);
+    if (!forPrint) child.onload = () => { void view.render(); };
     child.onunload = () => view.destroy();
     ctx.addChild(child);
+    if (forPrint) return view.render();
   }
 
   private processCodeBlock(
     source: string,
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
-  ): void {
+  ): Promise<void> | void {
     el.empty();
     const trimmed = source.trim();
 
@@ -920,7 +968,7 @@ export class FineNotesEmbedManager {
       return;
     }
 
-    this.renderMarkdownEmbed(el, targetFile, subpath && !subpath.startsWith("#") ? `#${subpath}` : subpath, ctx);
+    return this.renderMarkdownEmbed(el, targetFile, subpath && !subpath.startsWith("#") ? `#${subpath}` : subpath, ctx);
   }
 }
 
@@ -983,6 +1031,7 @@ export class FineNotesEmbedView {
     });
 
     await this.paintContent();
+    if (isPrintRender(this.parentEl)) return;
 
     const activateIfPending = () => {
       if (this.inlineBlockId && this.containerEl?.isConnected &&
@@ -1121,6 +1170,33 @@ export class FineNotesEmbedView {
 
     const cssWidth = Math.min(MAX_EMBED_WIDTH_PX, Math.max(160, cropW));
     const cssHeight = Math.round((cssWidth * cropH) / cropW);
+    if (isPrintRender(this.containerEl)) {
+      const png = await renderClipPng(page, cropBounds, {
+        images: this.imageCache,
+        backdropPainter: this.backdropPainter,
+        pdf: this.manager.pdfCache,
+        includeBackground: !this.inlineBlockId || this.manager.plugin.settings.embedBackground === true,
+        usePressure: this.usePressure,
+        highlighterAlpha: this.highlighterAlpha,
+        writingGuides: clip?.writingGuides,
+        themeMode: "light",
+        padding: 0,
+        highQuality: true,
+        scale: 3,
+      });
+      if (!png || this.isDestroyed || !this.containerEl) return;
+      const src = await this.manager.printDataUrl(png);
+      if (this.isDestroyed || !this.containerEl) return;
+      this.containerEl.empty();
+      const image = this.containerEl.createEl("img", {
+        attr: { src, alt: "Handwritten ink", "data-finenotes-print-ready": "true" },
+      });
+      image.width = cssWidth;
+      image.style.maxWidth = "100%";
+      await image.decode();
+      return;
+    }
+
     const dpr = window.devicePixelRatio || 1;
 
     if (!this.canvas?.isConnected) {

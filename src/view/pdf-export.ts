@@ -153,6 +153,7 @@ export async function renderPageJpeg(page: Page, sources: PdfExportSources, qual
       usePressure: sources.usePressure,
       highlighterAlpha: sources.highlighterAlpha,
       paper: sources.paper,
+      adaptContrast: page.backdrop.kind !== "pdf",
       ...(sources.images ? { images: sources.images } : {}),
     });
     const jpeg = await canvasToJpeg(canvas);
@@ -187,6 +188,7 @@ export async function renderPagePng(
       usePressure: sources.usePressure,
       highlighterAlpha: sources.highlighterAlpha,
       paper: sources.paper,
+      adaptContrast: page.backdrop.kind !== "pdf",
       ...(sources.images ? { images: sources.images } : {}),
     });
     return await new Promise<Uint8Array>((resolve, reject) => {
@@ -221,6 +223,7 @@ export async function paintPagePreview(
     usePressure: sources.usePressure,
     highlighterAlpha: sources.highlighterAlpha,
     paper: sources.paper,
+    adaptContrast: page.backdrop.kind !== "pdf",
     ...(sources.images ? { images: sources.images } : {}),
   });
 }

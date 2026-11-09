@@ -8,6 +8,11 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 104 — Handwriting contrast in exports
+
+- Render Handwrite Here blocks and FineNotes PNG embeds for white PDF paper without rewriting their attachments.
+- Preserve colored ink while making light neutral strokes legible on white paper.
+
 ### Beta 103 — Floating inline toolbar
 
 - Keep both Handwrite Here toolbar rows visible while scrolling within the active handwriting block.
