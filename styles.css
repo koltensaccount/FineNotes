@@ -7948,6 +7948,13 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
   width: 100%;
   box-sizing: border-box;
 }
+.finenotes-inline-toolbar-host {
+  position: relative;
+  z-index: 24;
+  flex: 0 0 auto;
+  min-width: 0;
+  background: var(--background-primary);
+}
 .finenotes-inline-active .goodobsidian-toolbar {
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;

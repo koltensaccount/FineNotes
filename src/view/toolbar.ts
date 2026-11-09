@@ -3244,6 +3244,9 @@ export class Toolbar {
     const popover = this.popover;
     if (!popover) return;
     const hostBox = this.host.getBoundingClientRect();
+    const blockBox = this.options.inline
+      ? this.host.closest(".finenotes-inline-active")?.getBoundingClientRect() ?? hostBox
+      : hostBox;
     const anchorBox = anchor.getBoundingClientRect();
     const win = this.host.ownerDocument.defaultView ?? window;
     const viewport = win.visualViewport;
@@ -3257,11 +3260,11 @@ export class Toolbar {
         (viewport?.offsetLeft ?? 0) + (viewport?.width ?? win.innerWidth),
       ) - EDGE_INSET,
     );
-    const topEdge = Math.max(this.options.inline ? hostBox.top : 0, viewport?.offsetTop ?? 0) + EDGE_INSET;
+    const topEdge = Math.max(this.options.inline ? blockBox.top : 0, viewport?.offsetTop ?? 0) + EDGE_INSET;
     const bottomEdge = Math.max(
       topEdge,
       Math.min(
-        hostBox.bottom,
+        blockBox.bottom,
         (viewport?.offsetTop ?? 0) + (viewport?.height ?? win.innerHeight),
         win.innerHeight - keyboardHeight(this.host.ownerDocument),
       ) - EDGE_INSET,

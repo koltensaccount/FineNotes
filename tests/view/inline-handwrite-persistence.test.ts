@@ -44,7 +44,7 @@ import { DEFAULT_SETTINGS } from "../../src/settings-data";
 import { buildInkFile, parseInkFile } from "../../src/model/serialize";
 import { blankPage, emptyDocument, type InkDocument, type Stroke } from "../../src/model/document";
 import { createBlockPage } from "../../src/model/handwrite-block";
-import { getActiveInlineSession, InlineHandwriteSession } from "../../src/view/inline-handwrite";
+import { getActiveInlineSession, inlineToolbarOffset, InlineHandwriteSession } from "../../src/view/inline-handwrite";
 import { waitForNotebookTransaction } from "../../src/view/notebook-transaction";
 
 function deferred<T>() {
@@ -136,6 +136,13 @@ afterEach(async () => {
 });
 
 describe("inline handwriting persistence", () => {
+  it("pins both toolbar rows to the viewport only within the handwriting block", () => {
+    expect(inlineToolbarOffset(80, 160, 900, 76)).toBe(0);
+    expect(inlineToolbarOffset(80, -400, 900, 76)).toBe(480);
+    expect(inlineToolbarOffset(80, -820, 900, 76)).toBe(824);
+    expect(inlineToolbarOffset(80, -820, 60, 76)).toBe(0);
+  });
+
   it("keeps writing open on a tap outside the editor", async () => {
     const f = setup();
     const owner = Object.assign(new EventTarget(), { body: { classList: { contains: () => false } } });

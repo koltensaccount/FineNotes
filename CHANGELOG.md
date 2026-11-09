@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 103 — Floating inline toolbar
+
+- Keep both Handwrite Here toolbar rows visible while scrolling within the active handwriting block.
+
 ### Beta 102 — Inline lasso and shapes
 
 - Add the Lasso and Shapes tools to Handwrite Here, including selection edits and ink-only clipboard operations.

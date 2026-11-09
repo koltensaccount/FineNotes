@@ -453,6 +453,7 @@ export interface InkSurfaceCallbacks {
    * page cleared, an undo or redo — and is due to be saved.
    */
   onChange: () => void;
+  onInlineViewportTop?: (top: number | null) => void;
   /** Open an internal vault note or external link tapped in a text box. */
   onOpenLink?: (target: string) => void;
   onEquation?: (pageId: string, at: Pt, equation: EquationElement | null) => void;
@@ -2639,8 +2640,10 @@ export class InkSurface {
     const note = this.isInlineLocked ? this.inlineNoteScroller() : null;
     // Keep the bounded backing canvases over the part of the block on screen.
     // The full-height host remains in the Markdown flow and owns the space.
-    const noteOffset = host && note
-      ? clamp(note.getBoundingClientRect().top - host.getBoundingClientRect().top, 0,
+    const noteTop = note?.getBoundingClientRect().top ?? null;
+    this.callbacks.onInlineViewportTop?.(noteTop);
+    const noteOffset = host && noteTop !== null
+      ? clamp(noteTop - host.getBoundingClientRect().top, 0,
         Math.max(0, host.clientHeight - this.cssH))
       : 0;
     if (this.isInline) this.surfaceEl.style.top = this.isInlineLocked ? `${noteOffset}px` : "";

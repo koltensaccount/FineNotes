@@ -32,6 +32,11 @@ export function getActiveInlineSession(): InlineHandwriteSession | null {
   return activeInlineSession;
 }
 
+/** Keep the toolbar within its own block, including when the block ends. */
+export function inlineToolbarOffset(viewportTop: number, blockTop: number, blockHeight: number, toolbarHeight: number): number {
+  return Math.min(Math.max(0, viewportTop - blockTop), Math.max(0, blockHeight - toolbarHeight));
+}
+
 export class InlineHandwriteSession {
   private surface: InkSurface | null = null;
   private toolbar: Toolbar | null = null;
@@ -125,9 +130,11 @@ export class InlineHandwriteSession {
       containerEl.removeClass("has-png-preview");
       containerEl.addClass("finenotes-inline-active", "is-inline-locked");
 
+      const toolbarHost = containerEl.createDiv({ cls: "finenotes-inline-toolbar-host" });
+      let toolbarOffset = 0;
       const palette = [...PALETTE, ...plugin.settings.customColors];
       this.toolbar = new Toolbar(
-        containerEl,
+        toolbarHost,
         palette,
         SIZES,
         this.toolState,
@@ -243,6 +250,16 @@ export class InlineHandwriteSession {
             this.handleStrokeCommitted();
           },
           onHistoryChange: (canUndo, canRedo) => this.toolbar?.setHistoryState?.(canUndo, canRedo),
+          onInlineViewportTop: (top) => {
+            const offset = top === null ? 0 : inlineToolbarOffset(
+              top, containerEl.getBoundingClientRect().top,
+              containerEl.clientHeight, toolbarHost.offsetHeight,
+            );
+            if (offset === toolbarOffset) return;
+            toolbarOffset = offset;
+            toolbarHost.style.translate = offset ? `0 ${offset}px` : "";
+            if (this.toolbar?.hasOpenPopover()) this.toolbar.applyPosition();
+          },
         },
       );
       this.surface.setTool(this.toolState.tool);
