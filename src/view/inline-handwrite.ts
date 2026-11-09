@@ -48,7 +48,6 @@ export class InlineHandwriteSession {
   private paperIsDark = false;
   private themeCleanup: (() => void) | null = null;
   private keydownCleanup: (() => void) | null = null;
-  private clickOutsideCleanup: (() => void) | null = null;
   private guidePopover: WritingGuidePopover | null = null;
   private get guidesEnabled(): boolean {
     return this.currentPage?.clips?.[0]?.writingGuides?.enabled === true;
@@ -313,23 +312,6 @@ export class InlineHandwriteSession {
       containerEl.addEventListener("keydown", onKeyDown);
       this.keydownCleanup = () => containerEl.removeEventListener("keydown", onKeyDown);
 
-      // Commit and close on genuine click outside (toolbar clicks and popovers count as inside)
-      const onDocPointerDown = (evt: PointerEvent) => {
-        if (this.closed || this.closing || evt.defaultPrevented || evt.button !== 0 || !evt.isPrimary) return;
-        const target = evt.target as Node | null;
-        if (!target) return;
-        if (containerEl.contains(target)) return;
-        // Pop-outs have their own DOM constructors. Check the event path
-        // instead of comparing against the main window's Element class.
-        if (evt.composedPath().some((node) => (node as Element).matches?.(
-          ".goodobsidian-popover, .goodobsidian-tool-popover, .goodobsidian-guide-popover, .modal, .menu",
-        ))) return;
-        if (this.toolbar?.hasOpenPopover?.() || this.guidePopover?.isOpen) return;
-        void this.close();
-      };
-      containerEl.ownerDocument?.addEventListener?.("pointerdown", onDocPointerDown);
-      this.clickOutsideCleanup = () =>
-        containerEl.ownerDocument?.removeEventListener?.("pointerdown", onDocPointerDown);
     } catch (err) {
       new Notice(
         `FineNotes: ${err instanceof Error ? err.message : "Could not open handwriting."}`,
@@ -458,8 +440,6 @@ Block: ${page.id}`,
         }
       }
       this.closed = true;
-      this.clickOutsideCleanup?.();
-      this.clickOutsideCleanup = null;
       this.guidePopover?.close();
       this.guidePopover = null;
       this.guideSubscribers.clear();

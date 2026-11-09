@@ -56,6 +56,8 @@ function deferred<T>() {
 function host(): HTMLElement {
   const element = {
     isConnected: true,
+    contains() { return false; },
+
     ownerDocument: { body: { classList: { contains: () => false } } },
     empty() {},
     addClass() {},
@@ -134,6 +136,19 @@ afterEach(async () => {
 });
 
 describe("inline handwriting persistence", () => {
+  it("keeps writing open on a tap outside the editor", async () => {
+    const f = setup();
+    const owner = Object.assign(new EventTarget(), { body: { classList: { contains: () => false } } });
+    Object.defineProperty(f.containerEl, "ownerDocument", { value: owner });
+    const session = f.session();
+    await session.start();
+    const tap = Object.assign(new Event("pointerdown"), { button: 0, isPrimary: true });
+    owner.dispatchEvent(tap);
+    expect(getActiveInlineSession()).toBe(session);
+    expect(f.onClosed).not.toHaveBeenCalled();
+    expect(await session.close()).toBe(true);
+  });
+
   it("saves guide-only edits per block and restores them on reopen", async () => {
     const f = setup();
     const session = f.session();

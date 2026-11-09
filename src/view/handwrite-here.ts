@@ -222,6 +222,22 @@ export function insertHandwritingEmbed(
   const current = editor.getValue();
   const at = embedInsertionOffset(before, current, offset);
   if (at === null) throw new Error("The insertion location changed. Run Handwrite Here again.");
+  const lineStart = at === 0 ? 0 : current.lastIndexOf("\n", at - 1) + 1;
+  const nextBreak = current.indexOf("\n", at);
+  const lineEnd = nextBreak < 0 ? current.length : nextBreak;
+  const line = current.slice(lineStart, lineEnd);
+  const quote = /^[ \t]*(?:>[ \t]*)+/.exec(line)?.[0].trimEnd();
+  if (quote) {
+    const newline = current.includes("\r\n") ? "\r\n" : "\n";
+    const quotedEmbed = embed.split(/\r?\n/).map(part => `${quote} ${part}`).join(newline);
+    const quotedAnchor = /^\s*\^[-a-zA-Z0-9]+\s*$/.test(line.slice(quote.length));
+    const position = quotedAnchor ? lineStart : lineEnd - Number(line.endsWith("\r"));
+    const separator = quotedAnchor ? "" : newline;
+    const inserted = `${separator}${quote}${newline}${quotedEmbed}${newline}${quote}${quotedAnchor ? newline : ""}`;
+    editor.replaceRange(inserted, editor.offsetToPos(position));
+    editor.setCursor?.(editor.offsetToPos(position + inserted.length - (quotedAnchor ? newline.length : 0)));
+    return;
+  }
   const prefix = at > 0 && current[at - 1] !== "\n" ? "\n" : "";
   const inserted = `${prefix}${embed}\n`;
   editor.replaceRange(inserted, editor.offsetToPos(at));

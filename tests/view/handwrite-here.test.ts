@@ -179,6 +179,21 @@ describe("safe Markdown insertion and command", () => {
       insertHandwritingEmbed({ ...editor, getValue: () => "changed" } as never, before, 7, "x"),
     ).toThrow();
   });
+  it.each([
+    ["> [!note] Topic\n> A complete sentence.\nOutside", "> A complete sentence.", ">"],
+    ["> [!note] Outer\n> > [!tip] Inner\n> > Content.\n> Tail", "> > Content.", "> >"],
+    ["> [!note] Topic\r\n> Content.", "> Content.", ">"],
+  ])("keeps every line of the handwriting block in the current quote", (before, body, quote) => {
+    const replaceRange = vi.fn();
+    const setCursor = vi.fn();
+    const editor = { getValue: () => before, offsetToPos: (n: number) => n, replaceRange, setCursor };
+    const at = before.indexOf(body);
+    const newline = before.includes("\r\n") ? "\r\n" : "\n";
+    insertHandwritingEmbed(editor as never, before, at + 3, "```finenotes\n{}\n```");
+    const inserted = ["", quote, quote + " ```finenotes", `${quote} {}`, quote + " ```", quote].join(newline);
+    expect(replaceRange).toHaveBeenCalledWith(inserted, at + body.length);
+    expect(setCursor).toHaveBeenCalledWith(at + body.length + inserted.length);
+  });
   it("persists an association, creates dedicated block page, and inserts a FineNotes render block", async () => {
     const note = Object.assign(Object.create(TFile.prototype), { path: "class/note.md" });
     const book = Object.assign(Object.create(TFile.prototype), {

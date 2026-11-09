@@ -8,6 +8,11 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 101 — Handwrite Here in callouts
+
+- Keep inline handwriting open when tapping outside it.
+- Insert Handwrite Here blocks inside the current callout or blockquote, retaining the surrounding text.
+
 ### Beta 100 — Replayed Pencil input
 
 - Drop replayed Pencil samples before they can make a freehand stroke double back over itself.
