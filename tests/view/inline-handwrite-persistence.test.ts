@@ -149,6 +149,20 @@ describe("inline handwriting persistence", () => {
     expect(await session.close()).toBe(true);
   });
 
+  it("persists moved and duplicated selected ink in the inline block", async () => {
+    const f = setup();
+    const session = f.session();
+    await session.start();
+    edit(session, strokes => {
+      strokes[0].pts[0] += 40;
+      strokes.push({ ...structuredClone(strokes[0]), id: "duplicate" });
+    });
+    expect(await session.close()).toBe(true);
+    expect(f.page().strokes.map(({ id, pts }) => [id, pts[0]])).toEqual([
+      ["original", 65], ["erase", 25], ["duplicate", 65],
+    ]);
+  });
+
   it("saves guide-only edits per block and restores them on reopen", async () => {
     const f = setup();
     const session = f.session();

@@ -883,7 +883,7 @@ export class Toolbar {
     this.recordButton = null;
 
     const toolList = this.options.inline
-      ? (["pen", "highlighter", "eraser"] as ConfigurableToolId[])
+      ? (["select", "pen", "highlighter", "eraser", "shape"] as ConfigurableToolId[])
       : this.toolOrder;
 
     for (const toolId of toolList) {
@@ -1960,6 +1960,7 @@ export class Toolbar {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Include in selection" });
     const filter = lassoFilterFor(this.state);
     for (const key of LASSO_FILTER_KEYS) {
+      if (this.options.inline && (key === "images" || key === "textBoxes")) continue;
       this.switchRow(body, LASSO_FILTER_LABELS[key], filter[key], (on) => {
         this.state.lassoFilter = { ...lassoFilterFor(this.state), [key]: on };
         this.saveLasso();

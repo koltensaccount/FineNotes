@@ -412,6 +412,16 @@ describe("Modular toolbar: reordering, hiding, and three-dots integration", () =
     expect(toolbar.getHiddenTools()).toEqual([]);
   });
 
+  it("offers selection and drawn shapes in Handwrite Here", () => {
+    const { state, toolChangeSpy } = createTestToolbar({ inline: true });
+    const tools = host.querySelector(".goodobsidian-bar-group.is-tools")!;
+    expect(tools.querySelectorAll("button").map(button => button.dataset.toolId))
+      .toEqual(["select", "pen", "highlighter", "eraser", "shape"]);
+    tools.querySelector('[data-tool-id="select"]')!.dispatchEvent("click");
+    expect(state.tool).toBe("select");
+    expect(toolChangeSpy).toHaveBeenCalledWith("select");
+  });
+
   it("keeps the eraser filter caption and check slot in every row when selection changes", () => {
     const onEraserFilterChange = vi.fn();
     const { state } = createTestToolbar({}, { onEraserFilterChange });

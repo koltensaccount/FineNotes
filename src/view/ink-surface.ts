@@ -5911,9 +5911,11 @@ export class InkSurface {
   private select(pageId: string, elements: ElementLists): void {
     this.clearSelection();
     this.deselectImage();
-    const { strokes, textBoxes, equations = [] } = elements;
-    const images = elements.images.filter((image) => image.locked !== true);
-    const circuits = (elements.circuits ?? []).filter((circuit) => circuit.locked !== true);
+    const { strokes } = elements;
+    const textBoxes = this.isInline ? [] : elements.textBoxes;
+    const equations = this.isInline ? [] : elements.equations ?? [];
+    const images = this.isInline ? [] : elements.images.filter((image) => image.locked !== true);
+    const circuits = this.isInline ? [] : (elements.circuits ?? []).filter((circuit) => circuit.locked !== true);
     if (isEmptySelection({ strokes, images, textBoxes, circuits, equations })) return;
     if (this.toolState.tool === "select") this.selectionToolUsed = true;
     if (strokes.length === 0 && textBoxes.length === 0 && circuits.length === 0 && equations.length === 0 && images.length === 1) {
@@ -6325,15 +6327,15 @@ export class InkSurface {
         run: () => this.cutSelection(),
       },
       { id: "copy", icon: "copy", label: "Copy", group: "edit", run: () => this.copySelection() },
-      {
+      ...(!this.isInline ? [{
         id: "copy-embed",
         icon: "file-code-2",
         label: "Copy Embed",
-        group: "edit",
+        group: "edit" as const,
         bar: true,
         showLabel: true,
         run: () => this.copyEmbedSelection(sel),
-      },
+      }] : []),
       {
         id: "duplicate",
         icon: "copy-plus",
@@ -6456,6 +6458,12 @@ export class InkSurface {
     return actions;
   }
 
+  private canPasteSelection(): boolean {
+    return this.isInline
+      ? Boolean(clipboard.content?.elements.strokes.length)
+      : clipboard.canPaste(this.imagesShown);
+  }
+
   /** Paste, greyed while the clipboard holds nothing this surface can show. */
   private pasteAction(pageId: string, at?: Pt): SelectionAction {
     return {
@@ -6464,7 +6472,7 @@ export class InkSurface {
       label: "Paste",
       group: "edit",
       enabled:
-        clipboard.canPaste(this.imagesShown) || (this.imagesShown && !!this.callbacks.onPasteImage),
+        this.canPasteSelection() || (this.imagesShown && !!this.callbacks.onPasteImage),
       run: () => {
         this.requestPaste(
           {
@@ -6861,8 +6869,14 @@ export class InkSurface {
       void png.then(file=>{ if(this.doc===doc && !this.callbacks.isLocked?.() && doc.pages.some(p=>p.id===pageId)) host(file,{...target,pageId}); }).catch(()=>undefined);
       return true;
     }
-    const entry = clipboard.content;
-    if (!entry || !clipboard.canPaste(this.imagesShown)) return false;
+    let entry = clipboard.content;
+    if (!entry || !this.canPasteSelection()) return false;
+    if (this.isInline) {
+      const { strokes } = entry.elements;
+      const bounds = selectionBounds(strokes, [], []);
+      if (!bounds) return false;
+      entry = { bounds, elements: { strokes, images: [], textBoxes: [] } };
+    }
     if (this.callbacks.isLocked?.()) return false;
     const pageId =
       target.pageId ?? this.liveSelection()?.pageId ?? this.liveImageSelection()?.pageId;
@@ -6960,7 +6974,7 @@ export class InkSurface {
         this.consumePaste(request, data);
       } else if (
         (!data || !data.text) &&
-        clipboard.canPaste(this.imagesShown) &&
+        this.canPasteSelection() &&
         !clipboard.leftSinceCopy
       ) {
         this.consumePaste(request, { file: null, text: clipboardMarker(clipboard.version) });
@@ -7013,7 +7027,7 @@ export class InkSurface {
     const file = this.imagesShown ? imageFileOf(event.clipboardData) : null;
     let text = event.clipboardData?.getData("text/plain") ?? "";
     // Engines without system writes still retain the established local-clipboard fallback.
-    if (!file && !text && clipboard.canPaste(this.imagesShown))
+    if (!file && !text && this.canPasteSelection())
       text = clipboardMarker(clipboard.version);
     if (!file && text !== clipboardMarker(clipboard.version) && !this.callbacks.isLocked?.())
       return false;

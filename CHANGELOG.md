@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 102 — Inline lasso and shapes
+
+- Add the Lasso and Shapes tools to Handwrite Here, including selection edits and ink-only clipboard operations.
+
 ### Beta 101 — Handwrite Here in callouts
 
 - Keep inline handwriting open when tapping outside it.

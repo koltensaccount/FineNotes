@@ -5,9 +5,8 @@ import type { InkDocument, Page } from "../model/document";
 import { dedicatedInkPage, mergeInlineInk } from "../model/inline-ink-merge";
 import { InkSurface } from "./ink-surface";
 import { toolStateFrom } from "./ink-view";
-import { Toolbar, type ToolbarState } from "./toolbar";
+import { lassoFilterFor, Toolbar, type ToolbarState } from "./toolbar";
 import { migrateWritingPresets } from "../model/writing-presets";
-import { penGesturesOf } from "../ink/pen-gestures";
 import { expandBlockPageIfNeeded } from "../model/handwrite-block";
 import { buildInkFile, parseInkFile } from "../model/serialize";
 import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
@@ -66,10 +65,11 @@ export class InlineHandwriteSession {
     this.toolState = toolStateFrom(options.plugin.settings);
     this.paperIsDark =
       options.containerEl.ownerDocument?.body?.classList.contains("theme-dark") ?? false;
-    // Inline editing is scoped to ink. The notebook retains its selection gestures.
-    this.toolState.penGestures = {
-      ...penGesturesOf(this.toolState.penGestures),
-      circleLasso: false,
+    // The inline save transaction supports handwriting and drawn shapes.
+    this.toolState.lassoFilter = {
+      ...lassoFilterFor(this.toolState),
+      images: false,
+      textBoxes: false,
     };
   }
 
