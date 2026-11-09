@@ -355,6 +355,24 @@ describe("a drawing pointer", () => {
     ]);
   });
 
+  it("drops replayed Pencil samples without dropping new points or retraces", () => {
+    const rig = new Rig();
+    rig.pen("pointerdown", 1, { x: 0, y: 0, t: 10 });
+    const a = { x: 1, y: 1, t: 12 };
+    const b = { x: 2, y: 2, t: 14 };
+    rig.pen("pointermove", 1, { ...b, coalesced: [a, b, a, b] });
+    rig.pen("pointermove", 1, { ...b, coalesced: [a, b] });
+    const c = { x: 3, y: 3, t: 16 };
+    rig.pen("pointermove", 1, { ...c, coalesced: [b, c] });
+    rig.pen("pointermove", 1, { ...a, t: 18 });
+    rig.pen("pointerup", 1, { ...a, t: 20 });
+    expect(rig.take().filter(entry => entry.startsWith("move "))).toEqual([
+      "move [1001,2001 p=0.5 tilt=0,0 | 1002,2002 p=0.5 tilt=0,0]",
+      "move [1003,2003 p=0.5 tilt=0,0]",
+      "move [1001,2001 p=0.5 tilt=0,0]",
+    ]);
+  });
+
   it("does not add the event's own position to coalesced samples that exist", () => {
     const rig = new Rig();
     rig.pen("pointerdown", 1, { x: 0, y: 0 });

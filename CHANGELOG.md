@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 100 — Replayed Pencil input
+
+- Drop replayed Pencil samples before they can make a freehand stroke double back over itself.
+
 ### Beta 99 — Pencil stroke timing
 
 - Use Pencil event timestamps to keep separate strokes from joining when input delivery is delayed.

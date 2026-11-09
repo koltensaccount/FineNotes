@@ -108,10 +108,12 @@ export class PointerController {
   /** The pointer drawing the open stroke; null between strokes. */
   private stroke: number | null = null;
   private penStroke = false;
+  private lastTimedPenSample: PointerEvent | null = null;
   get isPenDrawing(): boolean { return this.stroke !== null && this.penStroke; }
   cancelDrawing(): void {
     if (this.stroke === null) return;
     const id = this.stroke; this.stroke = null; this.penStroke = false;
+    this.lastTimedPenSample = null;
     this.releaseCapture(id); this.listener.onCancel();
   }
 
@@ -193,6 +195,7 @@ export class PointerController {
     event.preventDefault();
     const pen = event.pointerType === "pen";
     this.penStroke = pen;
+    this.lastTimedPenSample = pen && event.timeStamp > 0 ? event : null;
     if (pen) this.notePen(event);
     this.rounded = pen && !this.penIsPrecise;
     this.debug("down", event, 0);
@@ -207,11 +210,25 @@ export class PointerController {
     event.preventDefault();
     const taken = event.getCoalescedEvents?.() ?? [];
     // Where the browser has no coalesced list, the event is the one sample.
-    const samples = taken.length > 0 ? taken.map((e) => this.sample(e)) : [this.sample(event)];
-    if (event.pointerType === "pen")
-      for (const e of taken.length > 0 ? taken : [event]) this.notePen(e);
+    const samples: PointerSample[] = [];
+    for (const sample of taken.length > 0 ? taken : [event]) {
+      if (this.penStroke) {
+        const last = this.lastTimedPenSample;
+        if (sample.timeStamp > 0) {
+          // Replayed coalesced events otherwise pull the pen back along ink
+          // it already drew. Keep distinct samples when timestamps tie.
+          if (last && (sample.timeStamp < last.timeStamp ||
+              (sample.timeStamp === last.timeStamp && sample.clientX === last.clientX &&
+               sample.clientY === last.clientY && sample.pressure === last.pressure &&
+               sample.tiltX === last.tiltX && sample.tiltY === last.tiltY))) continue;
+          this.lastTimedPenSample = sample;
+        }
+        this.notePen(sample);
+      }
+      samples.push(this.sample(sample));
+    }
     this.debug("move", event, samples.length);
-    this.listener.onMove(samples);
+    if (samples.length > 0) this.listener.onMove(samples);
   }
 
   private released(event: PointerEvent, cancelled: boolean): void {
@@ -222,6 +239,7 @@ export class PointerController {
     }
     this.stroke = null;
     this.penStroke = false;
+    this.lastTimedPenSample = null;
     this.releaseCapture(id);
     if (cancelled) {
       this.debug("cancel", event, 0);
