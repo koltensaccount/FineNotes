@@ -1095,7 +1095,7 @@ describe("smoothing a pen whose positions arrive rounded (FineNotes#1)", () => {
 
 describe("resumeLifted", () => {
   /** A page with one stroke just committed, lifted at (40, 10) a moment ago. */
-  function lifted(liftedMsAgo = 10, style: Partial<Stroke> = {}) {
+  function lifted(liftedMsAgo = 10, style: Partial<Stroke> = {}, eventTime?: number) {
     const w = ink(documentOf(page("p1", [line("s1", 10, 110, 100)])));
     const builder = new StrokeBuilder({ minDistance: 1, pressureEnabled: false });
     builder.add({ x: 10, y: 10, pressure: 0 });
@@ -1105,6 +1105,7 @@ describe("resumeLifted", () => {
     Object.assign(w.surface, {
       lastLift: {
         t: performance.now() - liftedMsAgo,
+        eventTime,
         boxIndex: 0,
         pageId: "p1",
         x: 40,
@@ -1123,8 +1124,8 @@ describe("resumeLifted", () => {
       atFitZoom: (v: number) => v,
       currentStyle: () => ({ color: "#000000", size: 2, tool: "pen" }),
     });
-    const resume = (x: number, y: number): StrokeBuilder | null =>
-      run(w.surface, "resumeLifted", boxOf(w.doc, 0), { x, y });
+    const resume = (x: number, y: number, timeStamp?: number): StrokeBuilder | null =>
+      run(w.surface, "resumeLifted", boxOf(w.doc, 0), { x, y }, timeStamp);
     return { w, builder, resume };
   }
 
@@ -1145,6 +1146,17 @@ describe("resumeLifted", () => {
     const { w, resume } = lifted(200);
     expect(resume(40, 10)).toBeNull();
     expect(ids(w.doc.pages[0])).toEqual(["s1", "s2"]);
+  });
+
+  it("keeps separate Pencil strokes when queued events are handled together", () => {
+    const { w, resume } = lifted(10, {}, 1000);
+    expect(resume(40, 14, 1120)).toBeNull();
+    expect(ids(w.doc.pages[0])).toEqual(["s1", "s2"]);
+  });
+
+  it("rejoins a real contact flicker even if event handling is delayed", () => {
+    const { builder, resume } = lifted(200, {}, 1000);
+    expect(resume(41, 11, 1010)).toBe(builder);
   });
 
   it("leaves a stroke alone when the pen lands away from where it lifted", () => {

@@ -8,6 +8,10 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 99 — Pencil stroke timing
+
+- Use Pencil event timestamps to keep separate strokes from joining when input delivery is delayed.
+
 ### Beta 98 — Shape resize snap-back
 
 - Keep the last visible shape or ink resize when pointer cancellation or capture loss ends the drag.

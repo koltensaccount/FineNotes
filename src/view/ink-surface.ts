@@ -1072,6 +1072,7 @@ export class InkSurface {
    */
   private lastLift: {
     t: number;
+    eventTime?: number;
     boxIndex: number;
     pageId: string;
     x: number;
@@ -4308,7 +4309,7 @@ export class InkSurface {
       this.showShapeDraft(box);
       return;
     }
-    const resumed = this.resumeLifted(box, at);
+    const resumed = this.resumeLifted(box, at, sample.timeStamp);
     const builder = resumed ?? new StrokeBuilder(this.builderOpts());
     builder.add({ ...sample, ...at });
     this.builder = builder;
@@ -4328,7 +4329,7 @@ export class InkSurface {
    * lifted from back off the page and return its builder, to go on with.
    * Null for a new stroke.
    */
-  private resumeLifted(box: PageBox, at: Pt): StrokeBuilder | null {
+  private resumeLifted(box: PageBox, at: Pt, timeStamp?: number): StrokeBuilder | null {
     const lift = this.lastLift;
     this.lastLift = null;
     if (!lift || lift.boxIndex !== box.index) return null;
@@ -4345,7 +4346,11 @@ export class InkSurface {
       return null;
     }
     const distance = Math.hypot(at.x - lift.x, at.y - lift.y);
-    if (!rejoinsStroke(now() - lift.t, distance, this.atFitZoom(REJOIN_PX))) return null;
+    // A busy frame can deliver separate gestures together. Compare hardware
+    // event times when available, using handler time only for untimed cancels.
+    const eventGap = (timeStamp ?? NaN) - (lift.eventTime ?? NaN);
+    const gap = Number.isFinite(eventGap) ? eventGap : now() - lift.t;
+    if (!rejoinsStroke(gap, distance, this.atFitZoom(REJOIN_PX))) return null;
     if (!this.history.withdraw(this.doc, lift.command)) return null;
     this.strokeIndex.remove(stroke.id, page.id);
     const drawn = selectionBounds([stroke], [], []);
@@ -4994,6 +4999,7 @@ export class InkSurface {
       const raw = builder.view;
       this.lastLift = {
         t: now(),
+        eventTime: final?.timeStamp,
         boxIndex: box.index,
         pageId: page.id,
         x: raw[end * 3],
