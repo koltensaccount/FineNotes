@@ -385,6 +385,7 @@ describe("registration", () => {
         "handwrite-here",
         "import-pdf",
         "import-vault-pdf",
+        "publish-garden-high-quality",
         "recognize-handwriting",
         "review-finenotes-icon-candidates",
         "scan-document",

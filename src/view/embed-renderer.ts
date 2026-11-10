@@ -1,3 +1,5 @@
+import { getGardenPublisher, publishStagedNote } from "./garden-publish";
+import { ReadingPngQueue } from "./reading-png";
 import { paintWritingGuides } from "../canvas/writing-guides";
 import { equationBounds } from "../model/equation";
 import { paintEquation } from "../canvas/equation-paint";
@@ -67,11 +69,17 @@ function isPrintRender(element: Element): boolean {
 }
 
 export class FineNotesEmbedManager {
+  readonly readingPngQueue = new ReadingPngQueue(element => this.canSharpenReading(element));
+  private readonly readingPngs = new Map<string, { page: Page; src: string }>();
+  private readingPngBytes = 0;
+  private readonly finalPngs = new Map<string, { page: Page; png: ArrayBuffer }>();
+  private finalPngBytes = 0;
   private printImages = new Map<string, { src: string; width?: number }>();
   private pngRefreshPending = false;
   private pngRefreshRunning: Promise<void> | null = null;
   private readonly pendingPngFiles = new Set<TFile>();
   private disposed = false;
+  private gardenPublishRunning = false;
   private sourceIndex: Promise<Map<string, string>> | null = null;
   private readonly docCache = new Map<string, CachedDoc>();
   private readonly imageCache: VaultImageCache;
@@ -79,6 +87,35 @@ export class FineNotesEmbedManager {
   readonly pdfCache: PdfBackdropCache;
   private readonly activeEmbedViews = new Set<FineNotesEmbedView>();
   private readonly liveNotebookEmbeds = new Map<HTMLElement, { mount: HTMLElement; view: FineNotesEmbedView; src: string }>();
+
+  canSharpenReading(element: Element): boolean {
+    return !this.disposed && !getActiveInlineSession() && element.isConnected &&
+      Boolean(element.closest(".workspace-leaf.mod-active .markdown-reading-view")) &&
+      !element.closest(".popover, .print, .finenotes-inline-active");
+  }
+
+  async readingPng(page: Page, key: string, render: () => Promise<ArrayBuffer>): Promise<string> {
+    const cached = this.readingPngs.get(key);
+    if (cached?.page === page) {
+      this.readingPngs.delete(key);
+      this.readingPngs.set(key, cached);
+      return cached.src;
+    }
+    const src = await this.printDataUrl(await render());
+    if (this.disposed || src.length > 8_000_000) return src;
+    if (cached) {
+      this.readingPngBytes -= cached.src.length;
+      this.readingPngs.delete(key);
+    }
+    for (const [oldKey, old] of this.readingPngs) {
+      if (this.readingPngBytes + src.length <= 8_000_000 && this.readingPngs.size < 32) break;
+      this.readingPngBytes -= old.src.length;
+      this.readingPngs.delete(oldKey);
+    }
+    this.readingPngs.set(key, { page, src });
+    this.readingPngBytes += src.length;
+    return src;
+  }
 
   /** Returns the active inline handwriting session, if one is currently active. */
   getActiveInlineSession(): InlineHandwriteSession | null {
@@ -171,6 +208,9 @@ export class FineNotesEmbedManager {
     this.imageCache = new VaultImageCache(app);
     this.plugin.register(() => {
       this.disposed = true;
+      this.readingPngQueue.destroy();
+      this.readingPngs.clear();
+      this.finalPngs.clear();
       for (const [element, embed] of this.liveNotebookEmbeds) {
         embed.mount.remove();
         element.removeClass("finenotes-live-notebook-embed");
@@ -305,6 +345,53 @@ export class FineNotesEmbedManager {
       // Obsidian inserts native wiki-image elements after invoking post-processors.
       // Return the work to Obsidian so PDF capture waits for the replacement to decode.
       return Promise.resolve().then(() => markImages(el, ctx.sourcePath));
+    });
+    this.plugin.registerMarkdownPostProcessor((el, ctx) => {
+      if (isPrintRender(el)) return;
+      const owner = el.ownerDocument?.defaultView;
+      if (!owner?.IntersectionObserver) return;
+      const child = new MarkdownRenderChild(el);
+      const observer = new owner.IntersectionObserver(entries => {
+        for (const entry of entries) {
+          const image = entry.target as HTMLImageElement;
+          this.readingPngQueue.cancel(image);
+          if (!entry.isIntersecting) continue;
+          this.readingPngQueue.add(image, async () => {
+            const original = image.src;
+            const valid = () => live && this.canSharpenReading(image) && image.src === original;
+            const src = original.split("?")[0];
+            const file = this.app.vault.getFiles().find(file => file.extension === "png" &&
+              notebookPngName.test(file.name) && this.app.vault.getResourcePath(file).split("?")[0] === src);
+            if (!file) return;
+            const png = await this.renderHighQualityClip(file, false, valid);
+            if (!png || !valid()) return;
+            const ready = new owner.Image();
+            ready.src = await this.printDataUrl(png);
+            await ready.decode();
+            if (!valid()) return;
+            if (!image.hasAttribute("width") && image.naturalWidth) image.width = image.naturalWidth;
+            image.style.content = `url("${ready.src}")`;
+            image.dataset.finenotesReadingPng = "true";
+            observer.unobserve(image);
+          });
+        }
+      });
+      let live = true;
+      const images = new Set<HTMLImageElement>();
+      child.onunload = () => {
+        live = false;
+        observer.disconnect();
+        for (const image of images) this.readingPngQueue.cancel(image);
+      };
+      ctx.addChild(child);
+      owner.requestAnimationFrame(() => {
+        if (!live || !el.closest(".markdown-reading-view")) return;
+        for (const image of el.querySelectorAll<HTMLImageElement>("img")) {
+          if (!notebookPngName.test(image.src)) continue;
+          images.add(image);
+          observer.observe(image);
+        }
+      });
     });
     if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
       const observer = new MutationObserver((records) => {
@@ -457,7 +544,11 @@ export class FineNotesEmbedManager {
     return true;
   }
 
-  private async renderHighQualityClip(imageFile: TFile, forPrint = false): Promise<ArrayBuffer | null> {
+  private async renderHighQualityClip(
+    imageFile: TFile,
+    forPrint = false,
+    shouldContinue?: () => boolean,
+  ): Promise<ArrayBuffer | null> {
     void this.logHq(`prepareHighQualityClip started for ${imageFile.path}`);
     if (imageFile.extension !== "png") return null;
     let page: Page | null = null;
@@ -465,16 +556,16 @@ export class FineNotesEmbedManager {
     let isClip = false;
     let writingGuides: NotebookClip["writingGuides"];
 
-    const clipMatch = /^(.*?)-(?:clip)-([a-zA-Z0-9_-]+)\.png$/i.exec(imageFile.name);
+    const clipMatch = /^(.*?)-(?:clip|block)-([a-zA-Z0-9_-]+)\.png$/i.exec(imageFile.name);
     const pageMatch = /^(.*?)-(?:page)-(\d+)\.png$/i.exec(imageFile.name);
-    const prefix = clipMatch ? clipMatch[1] : pageMatch ? pageMatch[1] : null;
+    const prefix = clipMatch?.[1] ?? pageMatch?.[1];
 
     let notebookFile: TFile | null = null;
     if (prefix) {
-      notebookFile = this.app.vault.getFiles().find(f =>
-        this.plugin.isInkFile(f) &&
-        (f.name.startsWith(prefix) || f.basename === prefix || stripInkSuffix(f.basename) === prefix || f.path.includes(prefix))
-      ) ?? null;
+      const candidates = this.app.vault.getFiles().filter(file =>
+        this.plugin.isInkFile(file) && (file.basename === prefix || stripInkSuffix(file.basename) === prefix)
+      );
+      if (candidates.length === 1) notebookFile = candidates[0];
     }
     void this.logHq(`prefix=${prefix}, notebookFile=${notebookFile?.path}`);
 
@@ -514,7 +605,7 @@ export class FineNotesEmbedManager {
             c.imagePath === imageFile.path ||
             c.imagePath?.endsWith("/" + imageFile.name) ||
             c.imagePath === imageFile.name ||
-            (clipMatch && (c.id === clipMatch[2] || c.id === `clip-${clipMatch[2]}`))
+            (clipMatch && (c.id === clipMatch[2] || c.id === `clip-${clipMatch[2]}` || c.id === `block-${clipMatch[2]}`))
           );
           if (clip) {
             isClip = true;
@@ -539,6 +630,10 @@ export class FineNotesEmbedManager {
     try {
       const isDark = !forPrint && typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
       const incBg = this.plugin.settings.embedBackground === true;
+      const key = JSON.stringify([imageFile.path, page.id, bounds, forPrint, isDark, incBg,
+        this.plugin.settings.pressureWidth, this.plugin.settings.highlighterAlpha, writingGuides]);
+      const cached = this.finalPngs.get(key);
+      if (cached?.page === page) return cached.png;
       const buffer = await renderClipPng(page, bounds, {
         images: this.imageCache,
         backdropPainter: this.backdropPainter,
@@ -550,12 +645,27 @@ export class FineNotesEmbedManager {
         padding: isClip ? 8 : 0,
         writingGuides,
         highQuality: true,
-        scale: 3.0,
+        scale: forPrint ? 4 : 3,
+        shouldContinue,
       });
+      if (shouldContinue?.() === false) return null;
+      if (buffer.byteLength <= 16_000_000 && !this.disposed) {
+        const previous = this.finalPngs.get(key);
+        if (previous) this.finalPngBytes -= previous.png.byteLength;
+        this.finalPngs.delete(key);
+        for (const [oldKey, old] of this.finalPngs) {
+          if (this.finalPngBytes + buffer.byteLength <= 16_000_000 && this.finalPngs.size < 24) break;
+          this.finalPngBytes -= old.png.byteLength;
+          this.finalPngs.delete(oldKey);
+        }
+        this.finalPngs.set(key, { page, png: buffer });
+        this.finalPngBytes += buffer.byteLength;
+      }
 
       void this.logHq(`Rendered buffer size: ${buffer?.byteLength}`);
       return buffer && buffer.byteLength > 8 ? buffer : null;
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return null;
       void this.logHq(`Error in renderClipPng: ${err}`);
       console.warn("[FineNotes] Failed to generate high-quality clip:", imageFile.path, err);
     }
@@ -615,6 +725,74 @@ export class FineNotesEmbedManager {
       return 0;
     } finally {
       if (forPrint) this.printImages = printImages;
+    }
+  }
+
+  async publishToGarden(file: TFile): Promise<void> {
+    const garden = getGardenPublisher(this.app);
+    if (!garden || this.gardenPublishRunning) return;
+    if (this.app.metadataCache.getFileCache(file)?.frontmatter?.["dg-publish"] !== true) {
+      new Notice("Enable dg-publish on this note before publishing to Digital Garden.");
+      return;
+    }
+    this.gardenPublishRunning = true;
+    let notice: Notice | undefined;
+    try {
+      const content = await this.app.vault.cachedRead(file);
+      const targets = new Map<string, TFile>();
+      const stage = (path: string) => {
+        const asset = this.app.metadataCache.getFirstLinkpathDest(path, file.path)
+          ?? this.app.vault.getFileByPath(path);
+        if (!(asset instanceof TFile) || asset.extension !== "png") {
+          throw new Error(`Missing handwriting attachment: ${path}`);
+        }
+        targets.set(asset.path, asset);
+        return asset.path;
+      };
+      for (const ref of this.app.metadataCache.getFileCache(file)?.embeds ?? []) {
+        if (notebookPngName.test(ref.link) && /\.png$/i.test(ref.link)) stage(ref.link);
+      }
+
+      const fences = /^(?<prefix>(?:[ \t]*>[ \t]?)*[ \t]*)```finenotes(?:-embed)?[ \t]*\r?\n(?<body>[^\r\n]+)\r?\n\k<prefix>```[ \t]*$/gm;
+      const replacements = [];
+      for (const match of content.matchAll(fences)) {
+        const { prefix, body } = match.groups!;
+        const json = body.replace(/^(?:[ \t]*>[ \t]?)*/, "").trim();
+        if (!json.startsWith("{")) continue;
+        const ref: { notebook?: unknown; block?: unknown } = JSON.parse(json);
+        if (typeof ref.notebook !== "string" || typeof ref.block !== "string") continue;
+        const path = this.plugin.fileMoves?.relink(ref.notebook) ?? ref.notebook;
+        const notebook = this.app.vault.getFileByPath(path);
+        const doc = notebook && this.plugin.isInkFile(notebook) ? await this.loadDocument(notebook) : null;
+        const block = doc && findBlockInDocument(doc, ref.block);
+        if (!block?.clip.imagePath) throw new Error(`Missing handwriting source: ${ref.block}`);
+        const asset = stage(block.clip.imagePath);
+        replacements.push({ from: match.index!, to: match.index! + match[0].length, text: `${prefix}![[${asset}]]` });
+      }
+
+      if (targets.size) notice = new Notice(`Preparing ${targets.size} handwriting image(s) for Digital Garden…`, 0);
+      const images = new Map<string, ArrayBuffer>();
+      let bytes = 0;
+      for (const asset of targets.values()) {
+        // Let the progress notice paint and keep only one full-sized canvas alive.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const png = await this.renderHighQualityClip(asset, true);
+        if (!png) throw new Error(`Original ink is unavailable for ${asset.name}`);
+        bytes += png.byteLength;
+        if (bytes > 32_000_000) throw new Error("This note exceeds the 32 MB handwriting upload budget.");
+        images.set(asset.path, png);
+      }
+      let markdown = content;
+      for (const { from, to, text } of replacements.reverse()) {
+        markdown = markdown.slice(0, from) + text + markdown.slice(to);
+      }
+      notice?.hide();
+      await publishStagedNote(garden, file, markdown, images);
+    } catch (error) {
+      new Notice(`FineNotes could not prepare this note for Digital Garden. ${error instanceof Error ? error.message : String(error)}`, 9000);
+    } finally {
+      notice?.hide();
+      this.gardenPublishRunning = false;
     }
   }
 
@@ -788,6 +966,10 @@ export class FineNotesEmbedManager {
         srcAttr.includes(filename);
 
       if (matches) {
+        if (img.dataset?.finenotesReadingPng) {
+          img.style.removeProperty("content");
+          delete img.dataset.finenotesReadingPng;
+        }
         const cleanBase = (img.src || srcAttr).split("?")[0];
         img.src = `${cleanBase}?t=${img.classList?.contains("finenotes-block-preview") ? file.stat.mtime : now}`;
       }
@@ -978,6 +1160,8 @@ export class FineNotesEmbedView {
   private containerEl: HTMLElement | null = null;
   private isDestroyed = false;
   private inlineBlockId: string | null = null;
+  private readingObserver: IntersectionObserver | null = null;
+  private readingRevision = 0;
 
   constructor(
     private readonly manager: FineNotesEmbedManager,
@@ -1049,6 +1233,7 @@ export class FineNotesEmbedView {
       void this.app.workspace.openLinkText(`${this.file.path}${this.subpath}`, this.sourcePath, false);
       return;
     }
+    this.cancelReadingPng();
     startInlineHandwriteSession({
       plugin: this.manager.plugin,
       app: this.app,
@@ -1070,6 +1255,7 @@ export class FineNotesEmbedView {
 
   destroy(): void {
     this.isDestroyed = true;
+    this.cancelReadingPng();
     const session = getActiveInlineSession();
     if (session && session.hostContainer === this.containerEl) {
       void session.close(true);
@@ -1082,8 +1268,10 @@ export class FineNotesEmbedView {
 
   private async paintContent(): Promise<void> {
     if (this.isDestroyed || !this.containerEl || this.containerEl.hasClass("finenotes-inline-active")) return;
+    this.cancelReadingPng();
+    const revision = this.readingRevision;
     const doc = await this.manager.loadDocument(this.file);
-    if (this.isDestroyed || !this.containerEl || this.containerEl.hasClass("finenotes-inline-active")) return;
+    if (revision !== this.readingRevision || this.isDestroyed || !this.containerEl || this.containerEl.hasClass("finenotes-inline-active")) return;
     this.inlineBlockId = null;
     if (!doc || doc.pages.length === 0) {
       this.containerEl.empty();
@@ -1182,7 +1370,7 @@ export class FineNotesEmbedView {
         themeMode: "light",
         padding: 0,
         highQuality: true,
-        scale: 3,
+        scale: 4,
       });
       if (!png || this.isDestroyed || !this.containerEl) return;
       const src = await this.manager.printDataUrl(png);
@@ -1354,6 +1542,60 @@ export class FineNotesEmbedView {
     }
 
     ctx.restore();
+
+    const container = this.containerEl;
+    if (revision !== this.readingRevision || !container?.closest(".markdown-reading-view")) return;
+    const owner = container.ownerDocument.defaultView;
+    if (!owner?.IntersectionObserver) return;
+    const sourcePage = page;
+    const bounds = cropBounds;
+    const themeMode = this.inlineBlockId && isDark ? "dark" : "light";
+    const key = JSON.stringify([this.file.path, sourcePage.id, this.subpath, bounds, themeMode,
+      includeBackground, this.usePressure, this.highlighterAlpha]);
+    let visible = false;
+    const valid = () => visible && revision === this.readingRevision && this.manager.canSharpenReading(container);
+    const observer = new owner.IntersectionObserver(([entry]) => {
+      this.manager.readingPngQueue.cancel(container);
+      visible = entry?.isIntersecting === true;
+      if (!visible) return;
+      this.manager.readingPngQueue.add(container, async () => {
+        const src = await this.manager.readingPng(sourcePage, key, () => renderClipPng(sourcePage, bounds, {
+          images: this.imageCache,
+          backdropPainter: this.backdropPainter,
+          pdf: this.manager.pdfCache,
+          includeBackground,
+          usePressure: this.usePressure,
+          highlighterAlpha: this.highlighterAlpha,
+          writingGuides: clip?.writingGuides,
+          themeMode,
+          padding: 0,
+          highQuality: true,
+          scale: 3,
+          shouldContinue: valid,
+        }));
+        if (!valid()) return;
+        const image = container.ownerDocument.createElement("img");
+        image.className = "finenotes-block-preview";
+        image.alt = "Handwritten ink";
+        image.style.width = `${cssWidth}px`;
+        image.src = src;
+        await image.decode();
+        if (!valid()) return;
+        container.querySelector("img.finenotes-block-preview")?.remove();
+        container.appendChild(image);
+        container.addClass("has-png-preview");
+        observer.disconnect();
+      });
+    });
+    this.readingObserver = observer;
+    observer.observe(container);
+  }
+
+  private cancelReadingPng(): void {
+    this.readingRevision++;
+    this.readingObserver?.disconnect();
+    this.readingObserver = null;
+    if (this.containerEl) this.manager.readingPngQueue.cancel(this.containerEl);
   }
 }
 

@@ -1,3 +1,4 @@
+import { getGardenPublisher } from "./view/garden-publish";
 import { registerHandwriteHere } from "./view/handwrite-here";
 import { APPROVED_ICONS, registerIconFamilyCandidates } from "./view/icon-family";
 import { IconReviewModal } from "./view/icon-review-modal";
@@ -301,6 +302,17 @@ export default class GoodObsidianPlugin extends Plugin {
       id: "review-finenotes-icon-candidates",
       name: "Review proposed icons side by side…",
       callback: () => this.openIconReview(),
+    });
+
+    this.addCommand({
+      id: "publish-garden-high-quality",
+      name: "Publish current note to Digital Garden with high-quality ink",
+      checkCallback: checking => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== "md" || this.isInkFile(file) || !getGardenPublisher(this.app)) return false;
+        if (!checking) void this.embedManager?.publishToGarden(file);
+        return true;
+      },
     });
 
     // The id predates the dialog; kept so existing hotkeys still work.

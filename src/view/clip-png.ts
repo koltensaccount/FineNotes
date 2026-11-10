@@ -31,6 +31,7 @@ export interface RenderClipPngOptions {
   scale?: number;
   images?: ImagePainter | null;
   includeBackground?: boolean;
+  shouldContinue?: () => boolean;
   writingGuides?: EmbedWritingGuides;
   usePressure?: boolean;
   highlighterAlpha?: number;
@@ -80,7 +81,7 @@ export async function renderClipPng(
   let scale: number;
   if (options.highQuality) {
     const exportScale = options.scale ?? 3.0;
-    scale = Math.min(exportScale, 6000 / Math.max(w, h));
+    scale = Math.min(exportScale, 6000 / Math.max(w, h), Math.sqrt(12_000_000 / (w * h)));
   } else {
     const maxPixels = 2_000_000;
     scale = Math.min(
@@ -88,6 +89,11 @@ export async function renderClipPng(
       2048 / Math.max(w, h),
     );
   }
+
+  const checkActive = () => {
+    if (options.shouldContinue?.() === false) throw new DOMException("Render cancelled", "AbortError");
+  };
+  checkActive();
 
   const canvas =
     typeof createEl === "function"
@@ -157,6 +163,7 @@ export async function renderClipPng(
         options.images as { prepare: (imgs: typeof pictures, sc: number) => Promise<void> }
       ).prepare(pictures, scale);
     }
+    checkActive();
     for (const img of pictures) {
       if (boundsMeet({ minX: img.x, minY: img.y, maxX: img.x + img.w, maxY: img.y + img.h }, cropBox)) {
         drawPlacedImage(ctx, img, options.images, scale);
@@ -164,6 +171,7 @@ export async function renderClipPng(
     }
   }
 
+  checkActive();
   // 3. Draw circuits (inverted in dark mode if background is transparent for high contrast)
   for (const circuit of page.circuits ?? []) {
     if (
