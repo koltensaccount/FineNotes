@@ -7,13 +7,14 @@ export function bindMultiTouchInput(
     undo: () => void;
     redo: () => void;
     blocked: () => boolean;
+    singleTap?: boolean;
   },
 ): { dispose: () => void; reset: () => void } {
   const doc = element.ownerDocument;
   const win = doc.defaultView;
   const gesture = new MultiTouchDoubleTap((action) => {
     if (!callbacks.blocked()) callbacks[action]();
-  });
+  }, callbacks.singleTap);
   let disposed = false;
   const down = (event: PointerEvent): void => {
     const target = event.target;

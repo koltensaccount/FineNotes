@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 106 — Inline clipboard and sharper previews
+
+- Keep cached sharp handwriting previews when switching to Editing View.
+- Increase final PNG sampling and improve embedded PDF backdrop resolution.
+- Add inline picture paste, expose Copy on inline selections, and support single two- and three-finger history taps on iPad.
+
 ### Beta 105 — Sharper finished handwriting
 
 - Sharpen visible handwriting in Reading View after showing the lightweight preview.

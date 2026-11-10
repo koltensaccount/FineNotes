@@ -22,6 +22,7 @@ vi.mock("../../src/view/ink-surface", () => ({
       surfaces.push({ change: callbacks.onChange, finish: this.finishPointerInput, destroy: this.destroy });
     }
     setTool() {}
+    setImagePainter() {}
     setWritingGuides() {}
     writingGuideContext() { return { eligible: true, paper: "#ffffff", scale: 1 }; }
     layout() {}
@@ -141,6 +142,21 @@ describe("inline handwriting persistence", () => {
     expect(inlineToolbarOffset(80, -400, 900, 76)).toBe(480);
     expect(inlineToolbarOffset(80, -820, 900, 76)).toBe(824);
     expect(inlineToolbarOffset(80, -820, 60, 76)).toBe(0);
+  });
+
+  it("persists a pasted picture while preserving external stroke changes", async () => {
+    const f = setup();
+    const session = f.session();
+    await session.start();
+    session.currentPage!.images.push({
+      id: "i1", path: "Pasted.png", x: 12, y: 18, w: 60, h: 40,
+    });
+    surfaces.at(-1)!.change();
+    const blockId = session.currentPage!.id;
+    f.external(doc => doc.pages.find(page => page.id === blockId)!.strokes.push(stroke("external", 84)));
+    expect(await session.close()).toBe(true);
+    expect(f.page().images.map(image => image.path)).toEqual(["Pasted.png"]);
+    expect(f.page().strokes.some(ink => ink.pts[1] === 84)).toBe(true);
   });
 
   it("keeps writing open on a tap outside the editor", async () => {

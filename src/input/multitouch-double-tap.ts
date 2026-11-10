@@ -29,7 +29,10 @@ export class MultiTouchDoubleTap {
   private peak = 0;
   private seen = 0;
   private anchor = { x: 0, y: 0 };
-  constructor(private readonly invoke: (action: Action) => void) {}
+  constructor(
+    private readonly invoke: (action: Action) => void,
+    private readonly singleTap = false,
+  ) {}
   down(pointer: GesturePointer, allowed = true): void {
     if (pointer.pointerType === "pen") {
       this.pens.clear(); // The page controller owns only one active Pencil stroke.
@@ -112,9 +115,9 @@ export class MultiTouchDoubleTap {
     }
     const first = this.first;
     if (
-      first &&
+      this.singleTap || (first &&
       first.count === this.peak &&
-      Math.hypot(first.x - this.anchor.x, first.y - this.anchor.y) <= 32
+      Math.hypot(first.x - this.anchor.x, first.y - this.anchor.y) <= 32)
     ) {
       const action = this.peak === 2 ? "undo" : "redo";
       this.reset();

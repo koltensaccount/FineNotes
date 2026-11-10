@@ -1448,6 +1448,7 @@ export class InkSurface {
     this.pointerInput = input;
     this.disposers.push(() => input.detach());
     const multitouch = bindMultiTouchInput(this.scrollEl, {
+      singleTap: this.isInline && Platform.isIosApp && Platform.isTablet,
       undo: () => this.undo(),
       redo: () => this.redo(),
       blocked: () =>
@@ -1491,6 +1492,12 @@ export class InkSurface {
           if (event.type === "touchstart" || event.type === "touchmove") event.preventDefault();
           return;
         }
+      }
+      if (this.isInlineLocked && Platform.isIosApp && Platform.isTablet &&
+          event.touches.length >= 2 && !onTextBox(event.target) && !onSelectionMenu(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
       }
       if (this.isInlineLocked || onTextBox(event.target)) return;
       // The lasso's menu scrolls by itself when it is taller than the view
@@ -6267,7 +6274,7 @@ export class InkSurface {
         enabled: can("back"),
         run: () => this.reorderSelectedImage("back"),
       },
-      { id: "copy", icon: "copy", label: "Copy", group: "edit", run: () => this.copySelection() },
+      { id: "copy", icon: "copy", label: "Copy", group: "edit", bar: this.isInline, run: () => this.copySelection() },
       {
         id: "copy-embed",
         icon: "file-code-2",
@@ -6329,7 +6336,7 @@ export class InkSurface {
         menu: "tile",
         run: () => this.cutSelection(),
       },
-      { id: "copy", icon: "copy", label: "Copy", group: "edit", run: () => this.copySelection() },
+      { id: "copy", icon: "copy", label: "Copy", group: "edit", bar: this.isInline, run: () => this.copySelection() },
       ...(!this.isInline ? [{
         id: "copy-embed",
         icon: "file-code-2",
@@ -6462,9 +6469,13 @@ export class InkSurface {
   }
 
   private canPasteSelection(): boolean {
-    return this.isInline
-      ? Boolean(clipboard.content?.elements.strokes.length)
-      : clipboard.canPaste(this.imagesShown);
+    if (!this.isInline) return clipboard.canPaste(this.imagesShown);
+    const elements = clipboard.content?.elements;
+    return Boolean(elements && (elements.strokes.length || (this.imagesShown && elements.images.length)));
+  }
+
+  pasteFromClipboard(): void {
+    this.requestPaste(this.clipboardTarget(), true);
   }
 
   /** Paste, greyed while the clipboard holds nothing this surface can show. */
@@ -6876,9 +6887,10 @@ export class InkSurface {
     if (!entry || !this.canPasteSelection()) return false;
     if (this.isInline) {
       const { strokes } = entry.elements;
-      const bounds = selectionBounds(strokes, [], []);
+      const images = this.imagesShown ? entry.elements.images : [];
+      const bounds = selectionBounds(strokes, images, []);
       if (!bounds) return false;
-      entry = { bounds, elements: { strokes, images: [], textBoxes: [] } };
+      entry = { bounds, elements: { strokes, images, textBoxes: [] } };
     }
     if (this.callbacks.isLocked?.()) return false;
     const pageId =

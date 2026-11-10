@@ -72,6 +72,7 @@ export class FineNotesEmbedManager {
   readonly readingPngQueue = new ReadingPngQueue(element => this.canSharpenReading(element));
   private readonly readingPngs = new Map<string, { page: Page; src: string }>();
   private readingPngBytes = 0;
+  private readonly rawReadingPngs = new Map<string, { src: string; notebook: TFile; mtime: number }>();
   private readonly finalPngs = new Map<string, { page: Page; png: ArrayBuffer }>();
   private finalPngBytes = 0;
   private printImages = new Map<string, { src: string; width?: number }>();
@@ -94,15 +95,20 @@ export class FineNotesEmbedManager {
       !element.closest(".popover, .print, .finenotes-inline-active");
   }
 
-  async readingPng(page: Page, key: string, render: () => Promise<ArrayBuffer>): Promise<string> {
+  cachedReadingPng(page: Page, key: string): string | undefined {
     const cached = this.readingPngs.get(key);
-    if (cached?.page === page) {
-      this.readingPngs.delete(key);
-      this.readingPngs.set(key, cached);
-      return cached.src;
-    }
+    if (cached?.page !== page) return undefined;
+    this.readingPngs.delete(key);
+    this.readingPngs.set(key, cached);
+    return cached.src;
+  }
+
+  async readingPng(page: Page, key: string, render: () => Promise<ArrayBuffer>): Promise<string> {
+    const hit = this.cachedReadingPng(page, key);
+    if (hit) return hit;
     const src = await this.printDataUrl(await render());
     if (this.disposed || src.length > 8_000_000) return src;
+    const cached = this.readingPngs.get(key);
     if (cached) {
       this.readingPngBytes -= cached.src.length;
       this.readingPngs.delete(key);
@@ -210,6 +216,7 @@ export class FineNotesEmbedManager {
       this.disposed = true;
       this.readingPngQueue.destroy();
       this.readingPngs.clear();
+      this.rawReadingPngs.clear();
       this.finalPngs.clear();
       for (const [element, embed] of this.liveNotebookEmbeds) {
         embed.mount.remove();
@@ -350,6 +357,14 @@ export class FineNotesEmbedManager {
       if (isPrintRender(el)) return;
       const owner = el.ownerDocument?.defaultView;
       if (!owner?.IntersectionObserver) return;
+      const key = (image: HTMLImageElement) =>
+        `${owner.document.body.classList.contains("theme-dark")}:${image.src}`;
+      const show = (image: HTMLImageElement, src: string, source: string) => {
+        if (!image.hasAttribute("width") && image.naturalWidth) image.width = image.naturalWidth;
+        image.style.content = `url("${src}")`;
+        image.dataset.finenotesReadingPng = "true";
+        image.dataset.finenotesReadingSource = source;
+      };
       const child = new MarkdownRenderChild(el);
       const observer = new owner.IntersectionObserver(entries => {
         for (const entry of entries) {
@@ -363,15 +378,20 @@ export class FineNotesEmbedManager {
             const file = this.app.vault.getFiles().find(file => file.extension === "png" &&
               notebookPngName.test(file.name) && this.app.vault.getResourcePath(file).split("?")[0] === src);
             if (!file) return;
-            const png = await this.renderHighQualityClip(file, false, valid);
+            let source: { notebook: TFile; mtime: number } | undefined;
+            const png = await this.renderHighQualityClip(file, false, valid, notebook => {
+              source = { notebook, mtime: notebook.stat.mtime };
+            });
             if (!png || !valid()) return;
             const ready = new owner.Image();
             ready.src = await this.printDataUrl(png);
             await ready.decode();
-            if (!valid()) return;
-            if (!image.hasAttribute("width") && image.naturalWidth) image.width = image.naturalWidth;
-            image.style.content = `url("${ready.src}")`;
-            image.dataset.finenotesReadingPng = "true";
+            if (!valid() || !source || source.notebook.stat.mtime !== source.mtime) return;
+            if (ready.src.length <= 1_000_000) {
+              if (this.rawReadingPngs.size >= 8) this.rawReadingPngs.delete(this.rawReadingPngs.keys().next().value!);
+              this.rawReadingPngs.set(key(image), { ...source, src: ready.src });
+            }
+            show(image, ready.src, source.notebook.path);
             observer.unobserve(image);
           });
         }
@@ -385,11 +405,17 @@ export class FineNotesEmbedManager {
       };
       ctx.addChild(child);
       owner.requestAnimationFrame(() => {
-        if (!live || !el.closest(".markdown-reading-view")) return;
+        if (!live || !el.closest(".markdown-reading-view, .markdown-source-view")) return;
+        const reading = Boolean(el.closest(".markdown-reading-view"));
         for (const image of el.querySelectorAll<HTMLImageElement>("img")) {
           if (!notebookPngName.test(image.src)) continue;
-          images.add(image);
-          observer.observe(image);
+          const cached = this.rawReadingPngs.get(key(image));
+          if (cached && cached.notebook.stat.mtime === cached.mtime) {
+            show(image, cached.src, cached.notebook.path);
+          } else if (reading) {
+            images.add(image);
+            observer.observe(image);
+          }
         }
       });
     });
@@ -548,6 +574,7 @@ export class FineNotesEmbedManager {
     imageFile: TFile,
     forPrint = false,
     shouldContinue?: () => boolean,
+    onSource?: (notebook: TFile) => void,
   ): Promise<ArrayBuffer | null> {
     void this.logHq(`prepareHighQualityClip started for ${imageFile.path}`);
     if (imageFile.extension !== "png") return null;
@@ -625,7 +652,8 @@ export class FineNotesEmbedManager {
     }
 
     void this.logHq(`Found page=${Boolean(page)}, bounds=${JSON.stringify(bounds)}`);
-    if (!page || !bounds) return null;
+    if (!page || !bounds || !notebookFile) return null;
+    onSource?.(notebookFile);
 
     try {
       const isDark = !forPrint && typeof document !== "undefined" && document.body?.classList.contains("theme-dark");
@@ -645,7 +673,7 @@ export class FineNotesEmbedManager {
         padding: isClip ? 8 : 0,
         writingGuides,
         highQuality: true,
-        scale: forPrint ? 4 : 3,
+        scale: forPrint ? 6 : 4,
         shouldContinue,
       });
       if (shouldContinue?.() === false) return null;
@@ -978,9 +1006,28 @@ export class FineNotesEmbedManager {
 
   /** Notify all active embed views for `filePath` to re-render. */
   refreshEmbedsForFile(filePath: string): void {
+    for (const [key, cached] of this.rawReadingPngs) {
+      if (cached.notebook.path === filePath) this.rawReadingPngs.delete(key);
+    }
+    if (typeof document !== "undefined") {
+      for (const image of document.querySelectorAll<HTMLImageElement>("img[data-finenotes-reading-source]")) {
+        if (image.dataset.finenotesReadingSource !== filePath) continue;
+        image.style.removeProperty("content");
+        delete image.dataset.finenotesReadingSource;
+        delete image.dataset.finenotesReadingPng;
+      }
+    }
     for (const view of this.activeEmbedViews) {
       if (view.filePath === filePath) {
         view.refresh();
+      }
+    }
+  }
+
+  refreshMatchingEditingPreview(source: FineNotesEmbedView): void {
+    for (const view of this.activeEmbedViews) {
+      if (view !== source && view.filePath === source.filePath && view.subpath === source.subpath) {
+        view.showCachedEditingPreview();
       }
     }
   }
@@ -1162,6 +1209,7 @@ export class FineNotesEmbedView {
   private inlineBlockId: string | null = null;
   private readingObserver: IntersectionObserver | null = null;
   private readingRevision = 0;
+  private showCachedPreview: (() => void) | undefined;
 
   constructor(
     private readonly manager: FineNotesEmbedManager,
@@ -1370,7 +1418,7 @@ export class FineNotesEmbedView {
         themeMode: "light",
         padding: 0,
         highQuality: true,
-        scale: 4,
+        scale: 6,
       });
       if (!png || this.isDestroyed || !this.containerEl) return;
       const src = await this.manager.printDataUrl(png);
@@ -1447,8 +1495,13 @@ export class FineNotesEmbedView {
           cls: "finenotes-block-preview",
           attr: { alt: "Handwritten ink" },
         });
-        preview.addEventListener("load", () => container.toggleClass("has-png-preview", true));
-        preview.addEventListener("error", () => container.toggleClass("has-png-preview", false));
+        const image = preview;
+        image.addEventListener("load", () => {
+          if (image.parentElement === container) container.addClass("has-png-preview");
+        });
+        image.addEventListener("error", () => {
+          if (image.parentElement === container) container.removeClass("has-png-preview");
+        });
       }
       const url = this.app.vault.getResourcePath(imageFile).split("?")[0];
       preview.style.width = `${cssWidth}px`;
@@ -1544,14 +1597,37 @@ export class FineNotesEmbedView {
     ctx.restore();
 
     const container = this.containerEl;
-    if (revision !== this.readingRevision || !container?.closest(".markdown-reading-view")) return;
-    const owner = container.ownerDocument.defaultView;
-    if (!owner?.IntersectionObserver) return;
+    if (revision !== this.readingRevision || !container) return;
     const sourcePage = page;
     const bounds = cropBounds;
     const themeMode = this.inlineBlockId && isDark ? "dark" : "light";
     const key = JSON.stringify([this.file.path, sourcePage.id, this.subpath, bounds, themeMode,
       includeBackground, this.usePressure, this.highlighterAlpha]);
+    const current = () => revision === this.readingRevision && !container.hasClass("finenotes-inline-active");
+    const show = async (src: string, valid: () => boolean) => {
+      if (!valid()) return;
+      const image = container.ownerDocument.createElement("img");
+      image.className = "finenotes-block-preview";
+      image.alt = "Handwritten ink";
+      image.style.width = `${cssWidth}px`;
+      image.src = src;
+      try { await image.decode(); } catch { return; }
+      if (!valid()) return;
+      container.querySelector("img.finenotes-block-preview")?.remove();
+      container.appendChild(image);
+      container.addClass("has-png-preview");
+    };
+    this.showCachedPreview = () => {
+      const cached = this.manager.cachedReadingPng(sourcePage, key);
+      if (cached) void show(cached, current);
+    };
+    if (this.manager.cachedReadingPng(sourcePage, key)) {
+      this.showCachedPreview();
+      return;
+    }
+    if (!container.closest(".markdown-reading-view")) return;
+    const owner = container.ownerDocument.defaultView;
+    if (!owner?.IntersectionObserver) return;
     let visible = false;
     const valid = () => visible && revision === this.readingRevision && this.manager.canSharpenReading(container);
     const observer = new owner.IntersectionObserver(([entry]) => {
@@ -1570,20 +1646,11 @@ export class FineNotesEmbedView {
           themeMode,
           padding: 0,
           highQuality: true,
-          scale: 3,
+          scale: 4,
           shouldContinue: valid,
         }));
-        if (!valid()) return;
-        const image = container.ownerDocument.createElement("img");
-        image.className = "finenotes-block-preview";
-        image.alt = "Handwritten ink";
-        image.style.width = `${cssWidth}px`;
-        image.src = src;
-        await image.decode();
-        if (!valid()) return;
-        container.querySelector("img.finenotes-block-preview")?.remove();
-        container.appendChild(image);
-        container.addClass("has-png-preview");
+        await show(src, valid);
+        if (valid()) this.manager.refreshMatchingEditingPreview(this);
         observer.disconnect();
       });
     });
@@ -1591,8 +1658,13 @@ export class FineNotesEmbedView {
     observer.observe(container);
   }
 
+  showCachedEditingPreview(): void {
+    if (this.containerEl?.closest(".markdown-source-view")) this.showCachedPreview?.();
+  }
+
   private cancelReadingPng(): void {
     this.readingRevision++;
+    this.showCachedPreview = undefined;
     this.readingObserver?.disconnect();
     this.readingObserver = null;
     if (this.containerEl) this.manager.readingPngQueue.cancel(this.containerEl);

@@ -23,7 +23,7 @@ function sameStroke(a?: Stroke, b?: Stroke): boolean {
   return a === b || (a !== undefined && b !== undefined && storedStrokeKey(a) === storedStrokeKey(b));
 }
 
-function otherPageData({ strokes, epoch, geometry, clips, ...page }: Page): string {
+function otherPageData({ strokes, images, epoch, geometry, clips, ...page }: Page): string {
   const { height, ...dimensions } = geometry;
   return JSON.stringify({
     page, dimensions,
@@ -34,7 +34,7 @@ function otherPageData({ strokes, epoch, geometry, clips, ...page }: Page): stri
   });
 }
 
-/** Apply only local stroke changes and vertical growth to the latest version of the block. */
+/** Merge local handwriting and pictures with the latest version of the block. */
 export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
   if (otherPageData(local) !== otherPageData(base)) {
     throw new Error("The inline editor changed unsupported page content.");
@@ -47,6 +47,13 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
   const guideChanged = guideKey(base) !== guideKey(local);
   if (guideChanged && guideKey(base) !== guideKey(latest) && guideKey(local) !== guideKey(latest)) {
     throw new Error("The writing guides were changed elsewhere.");
+  }
+
+  const imageKey = (images: Page["images"]) => JSON.stringify(images);
+  const imagesChanged = imageKey(local.images) !== imageKey(base.images);
+  if (imagesChanged && imageKey(latest.images) !== imageKey(base.images) &&
+      imageKey(latest.images) !== imageKey(local.images)) {
+    throw new Error("The handwriting block's pictures changed elsewhere.");
   }
 
   const before = strokesById(base.strokes);
@@ -73,6 +80,7 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
   const sameOrder = latest.strokes.length === base.strokes.length &&
     latest.strokes.every((stroke, index) => sameStroke(stroke, base.strokes[index]));
   latest.strokes = sameOrder ? local.strokes : [...disk.values()];
+  if (imagesChanged) latest.images = local.images;
 
   if (guideChanged) {
     const clip = latest.clips![0];

@@ -1,3 +1,12 @@
+import { VaultImageCache } from "./image-cache";
+import { prepareImageBytes, saveImageAttachment } from "./image-import";
+import { newImageElement, placeImageBox } from "../model/images";
+import { InsertImage } from "../model/commands";
+import { attachmentFolder } from "../model/attachment-folders";
+import { NativePasteModal } from "./native-paste";
+import { copySelectionToSystemClipboard } from "./selection-clipboard";
+import { copyPictureToSystemClipboard } from "./picture-clipboard";
+import type { ClipboardTarget } from "./clipboard-read";
 import { type App, type TFile, Modal, Notice } from "obsidian";
 import type GoodObsidianPlugin from "../main";
 import { NOTEBOOK_FILE_SUFFIX, PALETTE, SIZES } from "../constants";
@@ -39,6 +48,9 @@ export function inlineToolbarOffset(viewportTop: number, blockTop: number, block
 
 export class InlineHandwriteSession {
   private surface: InkSurface | null = null;
+  private images: VaultImageCache | null = null;
+  private nativePaste: NativePasteModal | null = null;
+  private attachmentDirectory?: string;
   private toolbar: Toolbar | null = null;
   private toolState: ToolbarState;
   private closing: Promise<boolean> | null = null;
@@ -119,6 +131,7 @@ export class InlineHandwriteSession {
       const parsed = parseInkFile(content, plugin.settings.paperWidth);
       if (!parsed.doc) throw new Error("The handwriting notebook could not be read.");
       const page = dedicatedInkPage(parsed.doc, blockId);
+      this.attachmentDirectory = attachmentFolder(parsed.doc, "images");
       this.base = structuredClone(page);
       this.doc = {
         version: parsed.doc.version,
@@ -208,6 +221,7 @@ export class InlineHandwriteSession {
         },
         {
           inline: true,
+          onInlinePaste: () => this.surface?.pasteFromClipboard(),
           defaultSize: plugin.settings.defaultSize,
           writingPresets: plugin.settings.writingPresets ?? migrateWritingPresets(plugin.settings),
           onPresetsChange: (presets) => {
@@ -249,6 +263,16 @@ export class InlineHandwriteSession {
             this.revision++;
             this.handleStrokeCommitted();
           },
+          onCopySelection: (png, marker) => copySelectionToSystemClipboard(png, marker, () => {
+            new Notice("System clipboard copy failed. You can still paste the selection within FineNotes.");
+          }),
+          onCopyImage: (image, marker) => copyPictureToSystemClipboard(app, image, marker),
+          onPasteImage: (file, target) => void this.pastePicture(file, target),
+          onNativePaste: (pasted) => {
+            this.nativePaste?.close();
+            this.nativePaste = new NativePasteModal(app, pasted);
+            this.nativePaste.open();
+          },
           onHistoryChange: (canUndo, canRedo) => this.toolbar?.setHistoryState?.(canUndo, canRedo),
           onInlineViewportTop: (top) => {
             const offset = top === null ? 0 : inlineToolbarOffset(
@@ -262,6 +286,9 @@ export class InlineHandwriteSession {
           },
         },
       );
+      this.images = new VaultImageCache(app);
+      this.images.onReady = path => this.surface?.imageReady(path);
+      this.surface.setImagePainter(this.images);
       this.surface.setTool(this.toolState.tool);
       this.surface.setWritingGuides(this.guidesEnabled, this.writingGuides.style);
       this.toolbar?.syncWritingGuides();
@@ -308,6 +335,10 @@ export class InlineHandwriteSession {
           /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent);
         const mod = isMac ? evt.metaKey : evt.ctrlKey;
         if (mod && !evt.altKey) {
+          if (["c", "x", "v"].includes(evt.key.toLowerCase()) && this.surface?.handleKeyDown(evt)) {
+            evt.stopPropagation();
+            return;
+          }
           if (evt.key === "z" || evt.key === "Z") {
             evt.preventDefault();
             evt.stopPropagation();
@@ -326,8 +357,15 @@ export class InlineHandwriteSession {
           }
         }
       };
+      const onPaste = (event: ClipboardEvent) => {
+        if (this.surface?.handlePaste(event)) event.stopPropagation();
+      };
       containerEl.addEventListener("keydown", onKeyDown);
-      this.keydownCleanup = () => containerEl.removeEventListener("keydown", onKeyDown);
+      containerEl.addEventListener("paste", onPaste);
+      this.keydownCleanup = () => {
+        containerEl.removeEventListener("keydown", onKeyDown);
+        containerEl.removeEventListener("paste", onPaste);
+      };
 
     } catch (err) {
       new Notice(
@@ -443,6 +481,26 @@ Block: ${page.id}`,
     return this.closing;
   }
 
+  private async pastePicture(file: File, target: ClipboardTarget = {}): Promise<void> {
+    const surface = this.surface;
+    const doc = this.doc;
+    const page = this.currentPage;
+    if (!surface || !doc || !page || this.closing) return;
+    try {
+      const prepared = await prepareImageBytes(await file.arrayBuffer(), file.type);
+      if (this.surface !== surface || this.closing) return;
+      const asset = await saveImageAttachment(this.options.app, prepared, file.name || "Pasted image",
+        this.options.notebookFile.path, this.attachmentDirectory);
+      if (this.surface !== surface || this.closing) return;
+      const box = placeImageBox(prepared, page.geometry, surface.visibleRegion(0), undefined, target.at);
+      const image = newImageElement(doc, asset.path, box);
+      surface.applyCommand(new InsertImage(page.id, image));
+      surface.selectImage(page.id, image.id);
+    } catch (error) {
+      new Notice(`FineNotes could not paste the picture. ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private async finishClose(detached: boolean): Promise<boolean> {
     const { containerEl, onClosed } = this.options;
     this.surface?.finishPointerInput();
@@ -468,6 +526,10 @@ Block: ${page.id}`,
       this.toolbar = null;
       this.surface?.destroy();
       this.surface = null;
+      this.images?.destroy();
+      this.images = null;
+      this.nativePaste?.close();
+      this.nativePaste = null;
       containerEl.empty();
       containerEl.removeClass("finenotes-inline-active", "is-inline-locked");
       if (activeInlineSession === this) activeInlineSession = null;

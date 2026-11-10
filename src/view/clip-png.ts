@@ -77,10 +77,10 @@ export async function renderClipPng(
   const targetDpr = Math.min(2, Math.max(1, dpr));
   // Keep live embed image sizes bounded (up to 2 megapixels, max 2048px on an edge)
   // so large expandable regions do not stall the main thread during live PNG encoding.
-  // When highQuality is requested (for PDF export or publishing), scale at 3x / 300 DPI (up to 6000px).
+  // Final exports may sample at higher resolution, bounded by both area and edge length.
   let scale: number;
   if (options.highQuality) {
-    const exportScale = options.scale ?? 3.0;
+    const exportScale = options.scale ?? 6;
     scale = Math.min(exportScale, 6000 / Math.max(w, h), Math.sqrt(12_000_000 / (w * h)));
   } else {
     const maxPixels = 2_000_000;
@@ -128,7 +128,7 @@ export async function renderClipPng(
   if (includeBackground) {
     if (page.backdrop.kind === "pdf") {
       if (!options.pdf) throw new Error("PDF background unavailable");
-      const entry = await options.pdf.captureRegion(page.backdrop.path,page.backdrop.page,{geometry:geom,region:{minX,minY,maxX,maxY},sourceDpi:144});
+      const entry = await options.pdf.captureRegion(page.backdrop.path,page.backdrop.page,{geometry:geom,region:{minX,minY,maxX,maxY},sourceDpi:options.highQuality ? Math.min(576, Math.max(144, Math.round(scale * 96))) : 144});
       if (!entry.ok || !entry.box) throw new Error(entry.ok ? "Missing PDF region" : entry.reason);
       try { ctx.drawImage(entry.canvas,entry.box.x,entry.box.y,entry.box.w,entry.box.h); }
       finally { if("close" in entry.canvas) (entry.canvas as { close?: () => void }).close?.(); else {entry.canvas.width=0;entry.canvas.height=0;} }

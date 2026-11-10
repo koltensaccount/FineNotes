@@ -457,6 +457,7 @@ export interface ToolbarOptions {
   optionsPosition?: ToolbarPosition;
   /** Whether the toolbar is operating in compact inline Handwrite Here mode. */
   inline?: boolean;
+  onInlinePaste?: () => void;
   /** Action invoked when Done is tapped in inline mode. */
   onDone?: () => void;
   /** Action invoked when Open in Notebook is tapped in inline mode. */
@@ -718,6 +719,7 @@ export class Toolbar {
       this.renderToolsGroup();
 
       const doc = this.barEl.createDiv({ cls: "goodobsidian-bar-group goodobsidian-bar-doc" });
+      if (this.options.onInlinePaste) this.barButton(doc, "clipboard-paste", "Paste", this.options.onInlinePaste);
       if (this.options.onOpenNotebook) {
         this.barButton(doc, "external-link", "Open in Notebook", () => this.options.onOpenNotebook?.());
       }
@@ -1960,7 +1962,7 @@ export class Toolbar {
     body.createDiv({ cls: "goodobsidian-popover-label", text: "Include in selection" });
     const filter = lassoFilterFor(this.state);
     for (const key of LASSO_FILTER_KEYS) {
-      if (this.options.inline && (key === "images" || key === "textBoxes")) continue;
+      if (this.options.inline && key === "textBoxes") continue;
       this.switchRow(body, LASSO_FILTER_LABELS[key], filter[key], (on) => {
         this.state.lassoFilter = { ...lassoFilterFor(this.state), [key]: on };
         this.saveLasso();

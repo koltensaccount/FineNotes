@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { MultiTouchDoubleTap, type GesturePointer } from "../../src/input/multitouch-double-tap";
 import { FingerGesture } from "../../src/input/finger-gesture";
-function rig() {
+function rig(singleTap = false) {
   const invoke = vi.fn();
-  const gesture = new MultiTouchDoubleTap(invoke);
+  const gesture = new MultiTouchDoubleTap(invoke, singleTap);
   const pointer = (
     id: number,
     t: number,
@@ -18,6 +18,12 @@ function rig() {
   return { invoke, gesture, pointer, tap };
 }
 describe("touch chord double taps", () => {
+  it("accepts a single two- or three-finger tap in single-tap mode", () => {
+    const r = rig(true);
+    r.tap(2, 0);
+    r.tap(3, 150);
+    expect(r.invoke.mock.calls).toEqual([["undo"], ["redo"]]);
+  });
   it.each([
     [2, "undo"],
     [3, "redo"],
