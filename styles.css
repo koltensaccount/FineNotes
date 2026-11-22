@@ -22437,7 +22437,9 @@ button:not(.clickable-icon).goodobsidian-share-all,
  * - UI7-CHROME-UNIFIED, UI7-CANVAS-GLASS, UI7-MODALS-GLASS: Frosted empty-tab pill, on-canvas popups & modals
  * ========================================================================== */
 
-/* --- P5-SWATCH-FORK: Guaranteed circular 1:1 ink swatches across Obsidian themes --- */
+/* --- P5-SWATCH-FORK: Guaranteed circular 1:1 ink swatches across Obsidian themes ---
+   Preserve upstream's content-box padding (which gives each swatch its clean
+   circular dot & breathing room inside the touch target) while locking 1:1 circularity. */
 .goodobsidian-swatch,
 .goodobsidian-color-swatch,
 button.goodobsidian-swatch.clickable-icon,
@@ -22445,7 +22447,6 @@ button.goodobsidian-color-swatch.clickable-icon,
 .goodobsidian-color-grid button.clickable-icon {
   border-radius: 50% !important;
   aspect-ratio: 1 / 1;
-  padding: 0 !important;
   box-sizing: border-box;
 }
 
