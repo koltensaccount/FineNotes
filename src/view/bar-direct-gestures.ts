@@ -85,7 +85,7 @@ export function computeDockCandidate(
 export interface DirectBarGesturesHost {
   host: HTMLElement;
   barEl: HTMLElement;
-  zones: () => Record<Zone, HTMLElement>;
+  zones: () => Partial<Record<Zone, HTMLElement>>;
   barDock: () => BarDock;
   layout: () => ToolbarLayout;
   isEditing: () => boolean;
@@ -179,9 +179,11 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
     const coord = vertical ? clientY : clientX;
 
     // Pick the zone closest to the pointer along the bar's main axis.
-    let targetZone: HTMLElement = btn.parentElement ?? zones.middle;
+    let targetZone: HTMLElement | null = btn.parentElement ?? zones.middle ?? null;
+    if (!targetZone) return;
     let bestDist = Infinity;
     for (const z of [zones.start, zones.middle, zones.end]) {
+      if (!z) continue;
       const r = z.getBoundingClientRect();
       const lo = vertical ? r.top : r.left;
       const hi = vertical ? r.bottom : r.right;
@@ -219,7 +221,8 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
     if (!ctx.onCommitLayout) return;
     const prev = ctx.layout();
     const zones = ctx.zones();
-    const readZone = (el: HTMLElement): BarItemId[] => {
+    const readZone = (el: HTMLElement | undefined): BarItemId[] => {
+      if (!el) return [];
       const out: BarItemId[] = [];
       for (const child of Array.from(el.children)) {
         const id = (child as HTMLElement).getAttribute("data-item") as BarItemId | null;
