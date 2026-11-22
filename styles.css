@@ -22685,3 +22685,60 @@ button.goodobsidian-color-swatch.clickable-icon,
   .goodobsidian-tool-caret {
   opacity: 0.9;
 }
+
+/* --- Fix Record button solid dark strip inside Frosted Glass Audio sidebar --- */
+.goodobsidian-recordings-foot {
+  background: transparent;
+}
+
+/* --- Direct press-and-hold toolbar icon reorder & blank-space drag-to-dock --- */
+.goodobsidian-toolbar.is-bar-held {
+  outline: 1.5px solid var(--gob-active-fg);
+  outline-offset: -1.5px;
+}
+.goodobsidian-toolbar.is-reordering button.is-drag-held {
+  transform: scale(1.1);
+  background: var(--gob-well-strong);
+  color: var(--gob-active-fg);
+  box-shadow: var(--gob-shadow-float);
+  z-index: 4;
+}
+.goodobsidian-toolbar.is-reordering button.is-dragging {
+  opacity: 0.88;
+}
+.goodobsidian-dock-preview {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  border-radius: var(--gob-radius-l);
+  border: 2px dashed var(--gob-active-fg);
+  background: color-mix(in srgb, var(--interactive-accent) 18%, var(--gob-frost));
+  -webkit-backdrop-filter: var(--gob-blur);
+  backdrop-filter: var(--gob-blur);
+  box-shadow: var(--gob-shadow-float);
+  transition: all 0.14s ease-out;
+}
+.goodobsidian-dock-preview.is-dock-top {
+  top: 8px;
+  left: 12px;
+  right: 12px;
+  height: 52px;
+}
+.goodobsidian-dock-preview.is-dock-bottom {
+  bottom: 8px;
+  left: 12px;
+  right: 12px;
+  height: 52px;
+}
+.goodobsidian-dock-preview.is-dock-left {
+  top: 12px;
+  bottom: 12px;
+  left: 8px;
+  width: 52px;
+}
+.goodobsidian-dock-preview.is-dock-right {
+  top: 12px;
+  bottom: 12px;
+  right: 8px;
+  width: 52px;
+}

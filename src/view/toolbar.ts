@@ -119,6 +119,7 @@ import {
   FN_ICON_SAVED_PENS,
   FN_ICON_TAPE,
 } from "./finenotes-icons";
+import { bindDirectBarGestures } from "./bar-direct-gestures";
 import { ToolbarEditor } from "./toolbar-edit";
 import { DEFAULT_STICKY_COLOR, STICKY_COLORS } from "../model/sticky-notes";
 import {
@@ -1731,6 +1732,25 @@ export class Toolbar {
     );
     this.setLayout(this.options.layout ?? defaultLayout(), false);
     this.watchCrowding();
+    if (!this.practice) {
+      this.disposers.push(
+        bindDirectBarGestures({
+          host: this.host,
+          barEl: this.barEl,
+          zones: () => this.zoneEls,
+          barDock: () => this.barDock,
+          layout: () => this.laid(),
+          isEditing: () => this.editor !== null,
+          onCommitLayout: this.callbacks.onLayout
+            ? (next) => {
+                this.setLayout(next);
+                this.callbacks.onLayout?.(next);
+              }
+            : undefined,
+          onCommitDock: this.callbacks.onSetBarDock,
+        }),
+      );
+    }
   }
 
   /**
