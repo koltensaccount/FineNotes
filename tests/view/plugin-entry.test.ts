@@ -571,6 +571,7 @@ describe("registration", () => {
         "next-look-palette",
         "next-look-style",
         "open-library",
+        "publish-garden-high-quality",
         "read-handwriting-on-device",
         "recognize-handwriting",
         "reread-scanned-pages",

@@ -22910,3 +22910,26 @@ button.goodobsidian-color-swatch.clickable-icon,
   font-size: 11px;
   color: var(--text-muted);
 }
+
+.finenotes-print-ink {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+
+.finenotes-print-copy {
+  display: none;
+}
+
+@media print {
+  .finenotes-print-copy {
+    display: block;
+  }
+  .finenotes-embed-card:has(.finenotes-print-copy) .finenotes-embed-canvas,
+  .finenotes-embed-edit-pill {
+    display: none !important;
+  }
+}
