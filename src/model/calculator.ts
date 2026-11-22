@@ -73,10 +73,15 @@ export function isUnknownNameError(error: string): boolean {
   );
 }
 
+/** Display notation for base-10 answers: normal, scientific (1.23×10⁴), or engineering (powers of 3). */
+export type NumberNotation = "norm" | "sci" | "eng";
+
 export interface FormatOptions {
   /** Show non-whole rationals as `n/d`. */
   fractions?: boolean;
   base?: NumberBase;
+  /** Number display notation (default `"norm"`). */
+  notation?: NumberNotation;
 }
 
 /** Significant digits shown. */
@@ -1772,12 +1777,24 @@ export function evaluate(expression: string, ctx: EvalContext = {}): EvalResult 
 
 // --- Display ------------------------------------------------------------------
 
-/** Digits and power of ten as text: fixed while it is short, else `m.mmmE±x`. */
-function layout(negative: boolean, mant: string, exp: number): string {
+/** Digits and power of ten as text: normal, scientific (`sci`), or engineering (`eng`). */
+function layout(
+  negative: boolean,
+  mant: string,
+  exp: number,
+  notation: NumberNotation = "norm",
+): string {
   const digits = mant.replace(/0+$/, "");
   if (digits === "") return "0";
   const minus = negative ? "-" : "";
-  if (exp >= -6 && exp < DISPLAY_DIGITS) {
+  if (notation === "eng") {
+    const engExp = Math.floor(exp / 3) * 3;
+    const shift = exp - engExp;
+    const int = digits.slice(0, shift + 1).padEnd(shift + 1, "0");
+    const frac = digits.slice(shift + 1);
+    return `${minus}${int}${frac ? `.${frac}` : ""}E${engExp}`;
+  }
+  if (notation === "norm" && exp >= -6 && exp < DISPLAY_DIGITS) {
     if (exp < 0) return `${minus}0.${"0".repeat(-exp - 1)}${digits}`;
     const int = digits.slice(0, exp + 1).padEnd(exp + 1, "0");
     const frac = digits.slice(exp + 1);
@@ -1785,6 +1802,30 @@ function layout(negative: boolean, mant: string, exp: number): string {
   }
   const m = digits.length > 1 ? `${digits[0]}.${digits.slice(1)}` : digits;
   return `${minus}${m}E${exp}`;
+}
+
+const SUPERSCRIPTS: Readonly<Record<string, string>> = {
+  "-": "⁻",
+  "+": "⁺",
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+};
+
+/** Pretty-print scientific/engineering `E` notation (`3.24E-9`) as `3.24×10⁻⁹` for the display. */
+export function formatDisplayScientific(text: string): string {
+  return text.replace(
+    /^(-?\d+(?:\.\d+)?)E([+-]?\d+)$/,
+    (_, mant: string, exp: string) =>
+      `${mant}×10${[...exp].map((ch) => SUPERSCRIPTS[ch] ?? ch).join("")}`,
+  );
 }
 
 /**
@@ -1800,16 +1841,17 @@ export function formatValue(value: CalcValue, options: FormatOptions = {}): stri
     const text = babs(whole.n).toString(base).toUpperCase();
     return whole.n < 0n ? `-${text}` : text;
   }
+  const notation = options.notation ?? "norm";
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return null;
     if (value === 0) return "0";
     const [m, e] = Math.abs(value)
       .toExponential(DISPLAY_DIGITS - 1)
       .split("e");
-    return layout(value < 0, m.replace(".", ""), Number(e));
+    return layout(value < 0, m.replace(".", ""), Number(e), notation);
   }
   const { n, d } = value;
-  if (options.fractions && d !== 1n) {
+  if (options.fractions && notation === "norm" && d !== 1n) {
     const top = n.toString();
     const bottom = d.toString();
     if (babs(n).toString().length <= DISPLAY_DIGITS && bottom.length <= DISPLAY_DIGITS) {
@@ -1817,7 +1859,7 @@ export function formatValue(value: CalcValue, options: FormatOptions = {}): stri
     }
   }
   const { mant, exp } = significant(n, d, DISPLAY_DIGITS);
-  return layout(n < 0n, mant, exp);
+  return layout(n < 0n, mant, exp, notation);
 }
 
 /** Evaluate and format in one step: what the display shows for `expression`. */

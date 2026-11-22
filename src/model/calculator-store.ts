@@ -9,7 +9,7 @@
  * ({@link renameCalculatorHistory}).
  */
 
-import { type AngleMode, NUMBER_BASES, type NumberBase } from "./calculator";
+import { type AngleMode, NUMBER_BASES, type NumberBase, type NumberNotation } from "./calculator";
 import { type KeyTab, isKeyTab } from "./calculator-keys";
 
 /** One line of history: what was typed and what it came to, as shown. */
@@ -21,6 +21,8 @@ export interface CalcEntry {
 export interface CalcPrefs {
   angle: AngleMode;
   fractions: boolean;
+  /** Number display notation: normal, scientific (`sci`), or engineering (`eng`). */
+  notation?: NumberNotation;
   base: NumberBase;
   /** The function keys' tab last used (Graph is never remembered: it belongs to editing a line). */
   tab: Exclude<KeyTab, "graph">;
@@ -86,11 +88,14 @@ export function parseCalculatorData(raw: unknown): CalculatorData {
   };
   if (!isRecord(raw)) return data;
   if (isRecord(raw.prefs)) {
-    const { angle, fractions, base, tab, mode } = raw.prefs;
+    const { angle, fractions, notation, base, tab, mode } = raw.prefs;
     if (isKeyTab(tab) && tab !== "graph") data.prefs.tab = tab;
     if (mode === "basic" || mode === "scientific") data.prefs.mode = mode;
     if (angle === "deg" || angle === "rad") data.prefs.angle = angle;
     if (typeof fractions === "boolean") data.prefs.fractions = fractions;
+    if (notation === "norm" || notation === "sci" || notation === "eng") {
+      data.prefs.notation = notation;
+    }
     if (NUMBER_BASES.includes(base as NumberBase)) data.prefs.base = base as NumberBase;
   }
   const calcWindow = parsePlace(raw.calcWindow);

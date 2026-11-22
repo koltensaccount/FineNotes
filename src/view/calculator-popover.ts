@@ -43,9 +43,11 @@ import {
   BASE_LABELS,
   type CalcValue,
   type NumberBase,
+  type NumberNotation,
   add,
   calculate,
   deleteLast,
+  formatDisplayScientific,
   formatValue,
   rational,
   subtract,
@@ -227,6 +229,7 @@ export class CalculatorPopover {
 
   private readonly angleChip: HTMLButtonElement;
   private readonly fractionChip: HTMLButtonElement;
+  private readonly notationChip: HTMLButtonElement;
   private readonly baseChip: HTMLElement;
   private readonly memoryChip: HTMLButtonElement;
   private readonly editChip: HTMLButtonElement;
@@ -300,6 +303,14 @@ export class CalculatorPopover {
       t("calculator.showAnswersAsFractions"),
     );
     this.fractionChip.setAttribute("aria-label", t("calculator.showFractions"));
+    this.notationChip = this.button(
+      flags,
+      "NORM",
+      () => this.cycleNotation(),
+      "goodobsidian-calc-chip",
+      "Cycle number notation: Normal, Scientific (SCI), Engineering (ENG)",
+    );
+    this.notationChip.setAttribute("aria-label", "Number notation");
     this.baseChip = flags.createSpan({ cls: "goodobsidian-calc-flag" });
     this.memoryChip = this.button(
       flags,
@@ -1076,7 +1087,25 @@ export class CalculatorPopover {
   }
 
   private toggleFractions(): void {
-    this.save(withPrefs(this.data, { fractions: !this.data.prefs.fractions }));
+    const next = !this.data.prefs.fractions;
+    this.save(
+      withPrefs(this.data, {
+        fractions: next,
+        ...(next ? { notation: "norm" as NumberNotation } : {}),
+      }),
+    );
+    this.refresh();
+  }
+
+  private cycleNotation(): void {
+    const cur: NumberNotation = this.data.prefs.notation ?? "norm";
+    const next: NumberNotation = cur === "norm" ? "sci" : cur === "sci" ? "eng" : "norm";
+    this.save(
+      withPrefs(this.data, {
+        notation: next,
+        ...(next !== "norm" ? { fractions: false } : {}),
+      }),
+    );
     this.refresh();
   }
 
@@ -1151,14 +1180,20 @@ export class CalculatorPopover {
   /** Redraw the display and the switches from the state. */
   private refresh(): void {
     const { base, fractions } = this.data.prefs;
+    const notation: NumberNotation = this.data.prefs.notation ?? "norm";
     const editing = this.editingLine !== null;
     const graphing = this.pane === "graph";
     this.angleChip.setText((graphing ? this.graphAngle() : this.angle()) === "deg" ? "DEG" : "RAD");
     this.angleChip.disabled = base !== 10 && !graphing;
-    this.fractionChip.toggleClass("is-active", fractions);
-    this.fractionChip.setAttribute("aria-pressed", String(fractions));
+    this.fractionChip.toggleClass("is-active", fractions && notation === "norm");
+    this.fractionChip.setAttribute("aria-pressed", String(fractions && notation === "norm"));
     this.fractionChip.disabled = base !== 10;
     this.fractionChip.toggleClass("is-hidden", graphing || editing);
+    this.notationChip.setText(notation.toUpperCase());
+    this.notationChip.toggleClass("is-active", notation !== "norm");
+    this.notationChip.setAttribute("aria-pressed", String(notation !== "norm"));
+    this.notationChip.disabled = base !== 10;
+    this.notationChip.toggleClass("is-hidden", graphing || editing);
     this.baseChip.setText(base === 10 ? "" : BASE_LABELS[base]);
     this.baseChip.toggleClass("is-hidden", base === 10 || graphing || editing);
     const memory = formatValue(session.memory, { base });
@@ -1225,7 +1260,9 @@ export class CalculatorPopover {
       text = result?.ok ? result.text : expr ? "" : "0";
       this.resultEl.addClass("is-preview");
     }
-    this.resultEl.setText(text);
+    this.resultEl.setText(
+      this.resultEl.hasClass("is-error") ? text : formatDisplayScientific(text),
+    );
     if (worked) {
       this.drawLines(
         this.resultEl.createSpan({ cls: "goodobsidian-calc-answer" }),

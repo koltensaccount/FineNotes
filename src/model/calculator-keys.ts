@@ -211,7 +211,7 @@ const BASIC: KeyRows = [
       continues: true,
       ...anyBase,
     }),
-    fn("EXP", "E", "calculator.helpTimesTen", {
+    fn("×10ˣ", "E", "calculator.helpTimesTen", {
       aria: "calculator.ariaTimesTen",
     }),
     fn("logₐ", `log(${BOX}, ${BOX})`, "calculator.helpLogBase", {
