@@ -65,6 +65,7 @@ import {
   type Backdrop,
   type ImageElement,
   type InkDocument,
+  type NotebookClip,
   type Page,
   type PageChapter,
   type PageRegion,
@@ -202,6 +203,8 @@ interface StoredPage {
   titleLevel?: ContentsLevel;
   sections?: PageSection[];
   regions?: PageRegion[];
+  clips?: NotebookClip[];
+  pageEmbedPath?: string;
   chapters?: PageChapter[];
   links?: InkLink[];
   tasks?: InkTask[];
@@ -387,6 +390,8 @@ function storePage(page: Page): StoredPage {
     graphs: page.graphs && page.graphs.length > 0 ? page.graphs : undefined,
     equations: page.equations && page.equations.length > 0 ? page.equations : undefined,
     comments: page.comments && page.comments.length > 0 ? page.comments : undefined,
+    clips: page.clips && page.clips.length > 0 ? page.clips : undefined,
+    pageEmbedPath: page.pageEmbedPath || undefined,
     strokes: pageInk.map(storeStroke),
   };
 }
@@ -1197,6 +1202,8 @@ function normalizePage(
     ...titleOf(page.title, page.titleLevel),
     ...sectionsOf(page.sections, seenSections),
     ...regionsOf(page.regions, seenRegions),
+    ...(Array.isArray(page.clips) && page.clips.length > 0 ? { clips: page.clips } : {}),
+    ...(typeof page.pageEmbedPath === "string" && page.pageEmbedPath ? { pageEmbedPath: page.pageEmbedPath } : {}),
     ...chaptersOf(page.chapters, seenSections),
     ...linksOf(page.links, strokes, seenLinks),
     ...tasksOf(page.tasks, strokes, seenTasks),

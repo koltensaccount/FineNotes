@@ -546,6 +546,13 @@ export interface GoodObsidianSettings {
    * where read (`parseCalculatorData`, model/calculator-store.ts).
    */
   calculator?: unknown;
+  /** Managed storage for Handwrite Here backing notebooks & embeds (fork compatibility). */
+  useManagedStorage?: boolean;
+  managedStorageRoot?: string;
+  /** Per-Markdown-note backing notebook associations for Handwrite Here. */
+  notebookAssociations?: Record<string, string>;
+  /** Whether inline handwriting embeds include a subtle paper background. */
+  embedBackground?: boolean;
 }
 
 // The records are copies, so a host that edits its settings in place cannot

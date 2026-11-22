@@ -22743,3 +22743,121 @@ button.goodobsidian-color-swatch.clickable-icon,
   right: 8px;
   width: 52px;
 }
+
+/* --- Handwrite Here: Inline Handwriting Card & Reused Upstream Toolbar --- */
+.finenotes-embed-card,
+.internal-embed.finenotes-legacy-wired {
+  position: relative;
+  border-radius: var(--gob-radius-l);
+  border: var(--gob-hairline);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+.finenotes-embed-card:hover {
+  border-color: var(--gob-active-fg);
+}
+.finenotes-embed-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+}
+.finenotes-embed-edit-pill.clickable-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--gob-radius-m);
+  border: var(--gob-hairline);
+  background: var(--gob-frost);
+  -webkit-backdrop-filter: var(--gob-blur);
+  backdrop-filter: var(--gob-blur);
+  color: var(--text-normal);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: var(--gob-shadow-float);
+  opacity: 0.92;
+}
+.finenotes-embed-edit-pill.clickable-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--gob-active-fg);
+}
+.finenotes-embed-error {
+  padding: 12px 14px;
+  border-radius: var(--gob-radius-m);
+  border: var(--gob-hairline);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.finenotes-inline-active {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--gob-radius-l);
+  border: 1.5px solid var(--gob-active-fg);
+  overflow: visible;
+  box-shadow: var(--gob-shadow-sheet);
+  margin: 8px 0;
+}
+.finenotes-inline-toolbar-host {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  border-radius: var(--gob-radius-l) var(--gob-radius-l) 0 0;
+}
+.finenotes-inline-toolbar-host .goodobsidian-toolbar {
+  border-radius: var(--gob-radius-l) var(--gob-radius-l) 0 0;
+  background: var(--gob-frost);
+  -webkit-backdrop-filter: var(--gob-blur);
+  backdrop-filter: var(--gob-blur);
+}
+.finenotes-inline-done.clickable-icon {
+  min-width: var(--gob-touch-compact);
+  height: var(--gob-touch-compact);
+  border-radius: var(--gob-tool-radius);
+  background: var(--gob-well-strong);
+  color: var(--gob-active-fg);
+}
+.finenotes-inline-canvas-host {
+  position: relative;
+  width: 100%;
+  min-height: 240px;
+  overflow: hidden;
+  border-radius: 0 0 var(--gob-radius-l) var(--gob-radius-l);
+}
+.finenotes-notebook-suggest-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.finenotes-suggest-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+.finenotes-suggest-icon {
+  display: inline-flex;
+  color: var(--gob-active-fg);
+}
+.finenotes-suggest-icon .svg-icon {
+  width: 15px;
+  height: 15px;
+}
+.finenotes-suggest-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gob-well-strong);
+  color: var(--gob-active-fg);
+}
+.finenotes-suggest-subtext {
+  font-size: 11px;
+  color: var(--text-muted);
+}

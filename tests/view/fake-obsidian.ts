@@ -115,6 +115,9 @@ export class Plugin extends Component {
     super();
   }
 
+  registerMarkdownCodeBlockProcessor(): void {}
+  registerMarkdownPostProcessor(): void {}
+
   addCommand(command: FakeCommand): FakeCommand {
     this.commands.push(command);
     return command;
@@ -287,6 +290,11 @@ export class SuggestModal extends Modal {}
 export class FuzzySuggestModal extends Modal {}
 export class AbstractInputSuggest extends Shell {}
 export class ToggleComponent extends Shell {}
+export class MarkdownRenderChild extends Component {
+  constructor(public containerEl: HTMLElement) {
+    super();
+  }
+}
 export class MarkdownRenderer {
   static render(): Promise<void> {
     return Promise.resolve();

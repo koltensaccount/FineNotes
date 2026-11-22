@@ -187,6 +187,8 @@ import {
   FN_ICON_SCAN_DOC,
   registerFineNotesIcons,
 } from "./view/finenotes-icons";
+import { HandwriteEmbedManager } from "./view/handwrite-embed";
+import { registerHandwriteHere } from "./view/handwrite-here";
 import { InkView } from "./view/ink-view";
 import { starsOf } from "./model/favorites";
 import { SIMPLE_CLASS, simpleClasses } from "./model/simple-mode";
@@ -666,6 +668,11 @@ export default class GoodObsidianPlugin extends Plugin {
     syncActiveAccentContrast();
     this.registerEvent(this.app.workspace.on("css-change", () => syncActiveAccentContrast()));
     this.register(() => clearActiveAccentContrast());
+    // Handwrite Here inline handwriting + backward-compatible Markdown embeds.
+    const handwriteEmbeds = new HandwriteEmbedManager(this.app, this);
+    handwriteEmbeds.register();
+    registerHandwriteHere(this, handwriteEmbeds);
+    this.register(() => handwriteEmbeds.destroy());
     addIcon(ICON_IMPORT_NOTEBOOK, ICON_IMPORT_NOTEBOOK_SVG);
     addIcon(ICON_LIBRARY, ICON_LIBRARY_SVG);
     addIcon(ICON_STYLUS_ONLY, ICON_STYLUS_ONLY_SVG);

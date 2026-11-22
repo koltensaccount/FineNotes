@@ -562,6 +562,7 @@ describe("registration", () => {
         "fit-board-drawing",
         "fit-reset-view",
         "go-to-board",
+        "handwrite-here",
         "import-pdf",
         "import-vault-pdf",
         "insert-new-notebook",

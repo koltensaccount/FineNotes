@@ -874,6 +874,10 @@ export interface Page {
    * the contents, or after it with `after` (discussion #185). Absent when
    * there are none.
    */
+  /** Inline Handwrite Here / region clips stored on this page (fork compatibility). */
+  clips?: NotebookClip[];
+  /** Legacy whole-page PNG embed path (fork compatibility). */
+  pageEmbedPath?: string;
   chapters?: PageChapter[];
   /** Ink on this page that links somewhere (FineNotes#20). Absent when there is none. */
   links?: InkLink[];
@@ -1264,4 +1268,36 @@ export function strokeBounds(stroke: Stroke): Bounds | null {
 function widen(box: Bounds, low: "minX" | "minY", high: "maxX" | "maxY", value: number): void {
   if (value < box[low]) box[low] = value;
   if (value > box[high]) box[high] = value;
+}
+
+
+/** A cropped region or dedicated Handwrite Here inline block stored on a page. */
+export interface NotebookClip {
+  id: string;
+  pageId: string;
+  bounds: Bounds;
+  imagePath?: string;
+  isExpandable?: boolean;
+  originY?: number;
+  writingGuides?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Resolve a clip's current bounds on its page. */
+export function clipCurrentBounds(_page: Page, clip: NotebookClip): Bounds {
+  return { ...clip.bounds };
+}
+
+/** Find a clip by id across all pages of a document. */
+export function findClip(
+  doc: InkDocument,
+  clipId: string,
+): { clip: NotebookClip; page: Page; pageIndex: number } | null {
+  for (let i = 0; i < doc.pages.length; i++) {
+    const page = doc.pages[i];
+    const clip = page.clips?.find((c) => c.id === clipId);
+    if (clip) return { clip, page, pageIndex: i };
+  }
+  return null;
 }

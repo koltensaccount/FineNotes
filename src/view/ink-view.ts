@@ -545,7 +545,7 @@ const UPDATE_TIP_DELAY_MS = 1500;
  * The tools as the settings left them, for a view that has just opened: the
  * pen last written with, in any notebook (FineNotes#24), else the defaults.
  */
-function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
+export function toolStateFrom(s: GoodObsidianSettings): ToolbarState {
   const last = savedPenOf(s.lastPen);
   // Without a last pen, a notebook opens with the Fountain pen, a pressure pen.
   const spec = PEN_TYPES.find((type) => type.id === last?.type) ?? PEN_TYPES[0];
