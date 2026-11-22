@@ -554,6 +554,9 @@ export interface GoodObsidianSettings {
   notebookAssociations?: Record<string, string>;
   /** Whether inline handwriting embeds include a subtle paper background. */
   embedBackground?: boolean;
+  /** Notebook-wide non-printing Writing Guides overlay state & style. */
+  writingGuidesEnabled?: boolean;
+  writingGuides?: Record<string, unknown>;
 }
 
 // The records are copies, so a host that edits its settings in place cannot

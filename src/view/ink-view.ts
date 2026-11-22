@@ -1,3 +1,5 @@
+import { writingGuidesOf, type WritingGuideStyle } from "../model/writing-guides";
+import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
 /**
  * The notebook view: one ink note (`.notebook.md`, `.page.md`, or the older
  * `.ink.md`) open in a tab. Obsidian reads and writes the file; this view
@@ -1358,7 +1360,13 @@ export class InkView extends TextFileView {
     this.surface?.onlyStylusChanged();
   }
 
+  private guidePopover: WritingGuidePopover | null = null;
+  private readonly guideListeners = new Set<() => void>();
+
   override async onClose(): Promise<void> {
+    this.guidePopover?.close();
+    this.guidePopover = null;
+    this.guideListeners.clear();
     this.presenter?.stop();
     window.clearTimeout(this.sheetInviteTimer);
     this.recordLastPage();
@@ -3663,6 +3671,8 @@ export class InkView extends TextFileView {
           this.toolbar?.setRulerOut(this.surface?.rulerOut ?? false);
           this.plugin.saveRuler(kind, snap);
         },
+        writingGuidesEnabled: () => this.settings.writingGuidesEnabled === true,
+        onWritingGuides: (anchor) => this.toggleWritingGuides(anchor),
         onEraserChange: (mode, size) => this.plugin.saveEraser(mode, size),
         sizePreviewScales: () => this.surface?.sizePreviewScales() ?? { pen: 1, eraser: 1 },
         paintSizePaper: (canvas, width, height) =>
@@ -4104,6 +4114,9 @@ export class InkView extends TextFileView {
     };
     this.backdrops.setDeviceScale(this.surface.deviceScale);
     this.surface.setImagePainter(this.images);
+    if (this.settings.writingGuidesEnabled === true) {
+      this.surface.setWritingGuides(true, writingGuidesOf(this.settings.writingGuides));
+    }
     // A decoded picture repaints only the tiles and thumbnails that show it.
     this.images.onReady = (path) => {
       this.surface?.imageReady(path);
@@ -7645,6 +7658,44 @@ export class InkView extends TextFileView {
    * wrote around it stay. Undo brings the ink back, not the transcription;
    * running it again does.
    */
+  private toggleWritingGuides(anchor: HTMLElement): void {
+    if (this.guidePopover?.isOpen) {
+      const sameAnchor = this.guidePopover.anchorEl === anchor;
+      this.guidePopover.close();
+      this.guidePopover = null;
+      if (sameAnchor) return;
+    }
+    const apply = (enabled: boolean, style: WritingGuideStyle): void => {
+      this.settings.writingGuidesEnabled = enabled;
+      this.settings.writingGuides = { ...style };
+      void this.plugin.saveSettings();
+      this.surface?.setWritingGuides(enabled, style);
+      this.toolbar?.syncWritingGuides();
+      for (const fn of this.guideListeners) fn();
+    };
+    const host: WritingGuideHost = {
+      state: () => ({
+        enabled: this.settings.writingGuidesEnabled === true,
+        style: writingGuidesOf(this.settings.writingGuides),
+        ...(this.surface?.writingGuideContext() ?? {
+          eligible: true,
+          paper: "#ffffff",
+          scale: 1,
+        }),
+      }),
+      enable: (enabled) => apply(enabled, writingGuidesOf(this.settings.writingGuides)),
+      configure: (patch) =>
+        apply(true, writingGuidesOf({ ...writingGuidesOf(this.settings.writingGuides), ...patch })),
+      subscribe: (fn) => {
+        this.guideListeners.add(fn);
+        return () => this.guideListeners.delete(fn);
+      },
+    };
+    this.guidePopover = new WritingGuidePopover(anchor, host, () => {
+      this.guidePopover = null;
+    });
+  }
+
   private clearPage(): void {
     const surface = this.surface;
     const page = this.doc.pages[surface?.currentPage ?? 0];

@@ -118,6 +118,7 @@ import {
   FN_ICON_MORE_TOOLS,
   FN_ICON_SAVED_PENS,
   FN_ICON_TAPE,
+  FN_ICON_WRITING_GUIDES,
 } from "./finenotes-icons";
 import { bindDirectBarGestures } from "./bar-direct-gestures";
 import { ToolbarEditor } from "./toolbar-edit";
@@ -993,6 +994,10 @@ export interface ToolbarCallbacks {
   onEditPens?: () => void;
   /** Bring the ruler out or put it away. Without it the bar has no ruler. */
   onRuler?: () => void;
+  /** Open/toggle the Writing Guides popover anchored to the primary toolbar button. */
+  onWritingGuides?: (anchor: HTMLElement) => void;
+  /** Whether Writing Guides are currently enabled in this notebook. */
+  writingGuidesEnabled?: () => boolean;
   /** Open the sticker picker; `anchor` is the button. Without it the bar has no stickers. */
   onStickers?: (anchor: HTMLElement) => void;
   /**
@@ -1138,6 +1143,7 @@ const FOLD_RANK = {
   tape: 8.4,
   settings: 8,
   ruler: 8.5,
+  guides: 8.6,
   shape: 9,
   text: 10,
   select: 11,
@@ -1320,6 +1326,7 @@ export class Toolbar {
   private addPageButton: HTMLButtonElement | null = null;
   /** The ruler's button, shown on while the ruler is out (`setRulerOut`). */
   private rulerButton: HTMLButtonElement | null = null;
+  private guidesButton: HTMLButtonElement | null = null;
   /** Insert PDF: its pages become pages, which an endless board has not. */
   private insertPdfButton: HTMLButtonElement | null = null;
   /** Bar buttons a practice file hides: everything but the pen, the eraser and the page's own. */
@@ -1641,6 +1648,23 @@ export class Toolbar {
         this.closePopover();
         this.callbacks.onRuler?.();
       });
+    }
+    if (cb.onWritingGuides) {
+      const guides = this.foldButton(
+        tools,
+        FOLD_RANK.guides,
+        FN_ICON_WRITING_GUIDES,
+        "Writing guides",
+        (anchor) => {
+          this.closePopover();
+          this.callbacks.onWritingGuides?.(anchor);
+        },
+      );
+      this.guidesButton = item("guides", guides, (anchor) => {
+        this.closePopover();
+        this.callbacks.onWritingGuides?.(anchor);
+      });
+      this.syncWritingGuides();
     }
     const action = (
       id: BarItemId,
@@ -2799,6 +2823,14 @@ export class Toolbar {
    * chevron shows, and a tap there opens its kinds and its snapping, as the
    * lasso's chevron does.
    */
+  syncWritingGuides(): void {
+    const button = this.guidesButton;
+    if (!button) return;
+    const on = this.callbacks.writingGuidesEnabled?.() === true;
+    button.toggleClass("is-on", on);
+    button.setAttribute("aria-pressed", String(on));
+  }
+
   private addRulerButton(parent: HTMLElement): HTMLButtonElement {
     const button = parent.createEl("button", {
       cls: "goodobsidian-tool goodobsidian-ruler-button has-caret",

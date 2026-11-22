@@ -31,7 +31,7 @@ describe("the default layout", () => {
   it("is the bar as it was built before it could be customized", () => {
     expect(defaultLayout()).toEqual({
       start: ["home", "thumbnails", "search", "ai", "calculator", "undo", "redo"],
-      middle: ["select", "pen", "eraser", "text", "shape", "image", "pdf", "accessories"],
+      middle: ["select", "pen", "eraser", "text", "shape", "guides", "image", "pdf", "accessories"],
       end: ["fullscreen", "addPage", "share", "more", "settings"],
       off: [],
     });
@@ -115,7 +115,7 @@ describe("normalizeLayout", () => {
 
 describe("migrateLayout: the settings of 2.7 and before", () => {
   it("reads a default 2.7 vault as the default layout", () => {
-    expect(migrateLayout(["select", "pen", "eraser", "text", "shape", "image", "pdf"], [])).toEqual(
+    expect(migrateLayout(["select", "pen", "eraser", "text", "shape", "guides", "image", "pdf"], [])).toEqual(
       defaultLayout(),
     );
   });
@@ -150,7 +150,7 @@ describe("places", () => {
     expect(placeOf(layout, "share")).toBe("end");
     expect(placeOf(layout, "pan")).toBe("menu");
     expect(placeOf(moveTo(layout, "pan", "off"), "pan")).toBe("off");
-    expect(barItems(layout)).toHaveLength(20);
+    expect(barItems(layout)).toHaveLength(21);
   });
 });
 

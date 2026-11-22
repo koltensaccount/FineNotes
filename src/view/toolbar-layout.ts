@@ -25,6 +25,7 @@ import {
   FN_ICON_IMPORT_PDF,
   FN_ICON_MORE_TOOLS,
   FN_ICON_TAPE,
+  FN_ICON_WRITING_GUIDES,
 } from "./finenotes-icons";
 import { ICON_STYLUS_ONLY } from "../constants";
 import { t } from "../i18n/translate";
@@ -51,6 +52,7 @@ export type CoreItemId =
   | "sticker"
   | "sticky"
   | "ruler"
+  | "guides"
   | "tape"
   | "record"
   | "fill"
@@ -128,6 +130,7 @@ export const BAR_ITEMS: readonly CoreItemId[] = [
   "sticker",
   "sticky",
   "ruler",
+  "guides",
   "tape",
   "record",
   "fill",
@@ -198,7 +201,7 @@ export type ItemPlace = Zone | "menu" | "off";
 export function defaultLayout(): ToolbarLayout {
   return {
     start: ["home", "thumbnails", "search", "ai", "calculator", "undo", "redo"],
-    middle: ["select", "pen", "eraser", "text", "shape", "image", "pdf", "accessories"],
+    middle: ["select", "pen", "eraser", "text", "shape", "guides", "image", "pdf", "accessories"],
     end: ["fullscreen", "addPage", "share", "more", "settings"],
     off: [],
   };
@@ -365,6 +368,9 @@ export const BAR_ITEM_LABELS: Record<CoreItemId, string> = {
   get ruler() {
     return t("toolbar.tool.ruler");
   },
+  get guides() {
+    return "Writing guides";
+  },
   get tape() {
     return t("toolbar.tool.coverTape");
   },
@@ -430,6 +436,7 @@ export const BAR_ITEM_ICONS: Record<CoreItemId, string> = {
   sticker: "sticker",
   sticky: "sticky-note",
   ruler: "ruler",
+  guides: FN_ICON_WRITING_GUIDES,
   tape: FN_ICON_TAPE,
   record: "mic",
   fill: FN_ICON_FILL,
