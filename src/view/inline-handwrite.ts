@@ -167,14 +167,19 @@ export class InlineHandwriteSession {
 
       const barHost = containerEl.createDiv({ cls: "finenotes-inline-toolbar-host" });
       const canvasHost = containerEl.createDiv({ cls: "finenotes-inline-canvas-host" });
+      let widthLocked = dedicated;
       const syncHeight = (): void => {
         const h = this.doc?.pages[0]?.geometry.height ?? 360;
         const w = this.doc?.pages[0]?.geometry.width ?? 800;
-        const availW = Math.max(300, canvasHost.clientWidth || containerEl.clientWidth || w);
-        const scaledH = Math.max(260, Math.round((h * availW) / w));
+        const availW = canvasHost.clientWidth || w;
+        const scale = widthLocked ? availW / w : Math.min(1, availW / w);
+        const scaledH = Math.max(260, Math.ceil(h * scale));
         canvasHost.style.height = `${scaledH}px`;
       };
       syncHeight();
+      const resize = new ResizeObserver(syncHeight);
+      resize.observe(canvasHost);
+      this.cleanups.push(() => resize.disconnect());
 
       const palette = [...PALETTE, ...(plugin.settings.customColors ?? [])];
 
@@ -251,6 +256,7 @@ export class InlineHandwriteSession {
           },
           onOnlyStylusMode: (on) => {
             this.onlyStylus = on;
+            this.toolbar?.setOnlyStylusMode(on);
             this.surface?.onlyStylusChanged();
           },
           onLayout: (next) => {
@@ -270,6 +276,26 @@ export class InlineHandwriteSession {
       const barEl = barHost.querySelector<HTMLElement>(".goodobsidian-toolbar");
       if (barEl) {
         const endGroup = barEl.querySelector<HTMLElement>(".goodobsidian-bar-doc") ?? barEl;
+
+        if (dedicated) {
+          const widthBtn = endGroup.createEl("button", {
+            cls: "clickable-icon finenotes-inline-width",
+          });
+          const syncWidthButton = (): void => {
+            const label = widthLocked ? "Unlock page width" : "Lock page width";
+            setIcon(widthBtn, widthLocked ? "lock" : "lock-open");
+            widthBtn.setAttribute("aria-pressed", String(widthLocked));
+            widthBtn.setAttribute("aria-label", label);
+            widthBtn.title = label;
+          };
+          syncWidthButton();
+          widthBtn.addEventListener("click", () => {
+            widthLocked = !widthLocked;
+            syncWidthButton();
+            syncHeight();
+            this.surface?.setInlineWidthLocked(widthLocked);
+          });
+        }
 
         const openBtn = endGroup.createEl("button", {
           cls: "clickable-icon finenotes-inline-open",
@@ -315,6 +341,7 @@ export class InlineHandwriteSession {
         },
         {
           onlyStylusMode: () => this.onlyStylus,
+          fingerDrawing: () => !this.onlyStylus,
           onCopyImage: (image) => copyPictureToSystemClipboard(app, image),
           onPasteImage: (file, at) => void this.pastePicture(file, at),
           onHistoryChange: (undo, redo) => this.toolbar?.setHistoryState(undo, redo),
@@ -336,6 +363,7 @@ export class InlineHandwriteSession {
           },
         },
       );
+      this.surface.setInlineWidthLocked(widthLocked);
       this.images.onReady = (path) => this.surface?.imageReady(path);
       this.surface.setImagePainter(this.images);
       this.surface.setTool(this.toolState.tool);

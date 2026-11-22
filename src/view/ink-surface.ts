@@ -5289,7 +5289,12 @@ export class InkSurface {
     this.joined = joined;
     if (rejoined) this.strokeIndex?.rebuild(this.doc.pages);
     // A board among the pages (discussion #160) is left out of their column.
-    this.pageLayout = layoutNotebook(this.doc.pages, { direction, joined });
+    const locked = this.inlineWidthLocked;
+    this.pageLayout = layoutNotebook(this.doc.pages, {
+      direction,
+      joined,
+      ...(locked ? { marginX: 0, marginY: 0 } : {}),
+    });
     renderer.setLayout(this.pageLayout);
     // Fit the page stack to the available width, but never magnify past 1:1 —
     // on a wide desktop pane an upscaled page looks like a zoom bug, and the
@@ -5298,10 +5303,11 @@ export class InkSurface {
     // point of the whole design.
     // A row fits one page (and its margins) to the pane, not the whole row.
     const fit = this.pageLayout.fitWidth;
-    this.baseScale = fit > 0 ? Math.min(1, cssW / fit) : 1;
+    this.baseScale = fit > 0 ? (locked ? cssW / fit : Math.min(1, cssW / fit)) : 1;
     // The options row opening or closing is no new pane: the page keeps its
     // size, as for the keyboard, and only moves (`followTopShift` below).
     this.updateZoomFloor(cssH, topShift !== 0);
+    if (locked) this.userZoom = 1;
     // A panel opening beside a page that is zoomed in keeps the page the size
     // it was, instead of shrinking it with the pane (a notebook of wide
     // slides and narrow pages fits so small that the sidebar halved it).
@@ -5847,6 +5853,19 @@ export class InkSurface {
    */
   private freePageEdges = false;
 
+  private inlineWidthLocked = false;
+
+  setInlineWidthLocked(locked: boolean): void {
+    if (this.inlineWidthLocked === locked) return;
+    this.inlineWidthLocked = locked;
+    this.scroller.cancel();
+    this.pinch = null;
+    this.zoomAnim = null;
+    this.userZoom = 1;
+    this.scroller.setPosition(0, 0);
+    this.layout();
+  }
+
   /** The setting "Lock fit to width", read at each layout (`ScrollExtent.holdX`). */
   holdFitWidth: () => boolean = () => false;
 
@@ -6339,6 +6358,7 @@ export class InkSurface {
    * value past the limits, everything else clamps first.
    */
   private applyZoom(nextZoom: number, anchorX: number, anchorY: number): void {
+    if (this.inlineWidthLocked) return;
     let before = this.toLayout(anchorX, anchorY);
     // A row's pages slide together as it zooms in (`syncRowGap`): keep the
     // point of the page under the fingers fixed, not the layout point.
@@ -6411,6 +6431,7 @@ export class InkSurface {
   }
 
   private onWheel(event: WheelEvent): void {
+    if (this.inlineWidthLocked) return;
     event.preventDefault();
     this.releaseBoardHold();
     const unit = event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? this.cssH : 1;
@@ -8753,6 +8774,7 @@ export class InkSurface {
         this.scroller.cancel();
         return;
       }
+      if (this.inlineWidthLocked) return;
       this.zoomAnim = null;
       this.rowSettle = null;
       this.pinch = { raw: this.userZoom, centerX, centerY };

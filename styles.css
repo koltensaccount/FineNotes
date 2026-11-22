@@ -22823,6 +22823,15 @@ button.goodobsidian-color-swatch.clickable-icon,
   -webkit-backdrop-filter: var(--gob-blur);
   backdrop-filter: var(--gob-blur);
 }
+.finenotes-inline-width.clickable-icon {
+  min-width: var(--gob-touch-compact);
+  height: var(--gob-touch-compact);
+  color: var(--text-muted);
+}
+.finenotes-inline-width.clickable-icon .svg-icon {
+  width: 15px;
+  height: 15px;
+}
 .finenotes-inline-open.clickable-icon,
 .finenotes-inline-done.clickable-icon {
   min-width: var(--gob-touch-compact);
