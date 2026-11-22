@@ -22659,3 +22659,29 @@ button.goodobsidian-color-swatch.clickable-icon,
 .goodobsidian-library-folder-front .svg-icon {
   stroke-width: var(--gob-icon-stroke);
 }
+
+/* --- Fix Lasso (.has-caret) width jump / Pen tool overlap ---
+   Reserve the chevron width consistently on the Lasso button when floating
+   popovers are active so selecting or leaving Lasso never jumps width,
+   shoves sibling icons, or overlaps the adjacent Pen tool. */
+.goodobsidian-toolbar:not(.has-docked-row):not(.is-upright)
+  button[data-item="select"].has-caret {
+  min-width: 54px;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+.goodobsidian-toolbar:not(.has-docked-row):not(.is-upright)
+  button[data-item="select"].has-caret.is-active {
+  min-width: 54px;
+  padding-right: 16px;
+}
+.goodobsidian-toolbar:not(.has-docked-row):not(.is-upright)
+  button[data-item="select"].has-caret
+  .goodobsidian-tool-caret {
+  opacity: 0.45;
+}
+.goodobsidian-toolbar:not(.has-docked-row):not(.is-upright)
+  button[data-item="select"].has-caret.is-active
+  .goodobsidian-tool-caret {
+  opacity: 0.9;
+}

@@ -179,6 +179,10 @@ import {
   recordUse,
 } from "./model/nudges";
 import {
+  clearActiveAccentContrast,
+  syncActiveAccentContrast,
+} from "./view/accent-contrast";
+import {
   FN_ICON_IMPORT_PDF,
   FN_ICON_SCAN_DOC,
   registerFineNotesIcons,
@@ -658,6 +662,10 @@ export default class GoodObsidianPlugin extends Plugin {
     });
     // FineNotes' own icons, before any button that uses them is made.
     registerFineNotesIcons(addIcon);
+    // Automatic WCAG contrast guard for --gob-active-fg on the Neutral Well.
+    syncActiveAccentContrast();
+    this.registerEvent(this.app.workspace.on("css-change", () => syncActiveAccentContrast()));
+    this.register(() => clearActiveAccentContrast());
     addIcon(ICON_IMPORT_NOTEBOOK, ICON_IMPORT_NOTEBOOK_SVG);
     addIcon(ICON_LIBRARY, ICON_LIBRARY_SVG);
     addIcon(ICON_STYLUS_ONLY, ICON_STYLUS_ONLY_SVG);
