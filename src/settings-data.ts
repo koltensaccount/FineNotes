@@ -8,6 +8,8 @@
  * `tests/settings/settings-data.test.ts` pins all of it.
  */
 
+import type { CompanionStore } from "./model/companion-pdf";
+import type { PdfQuality } from "./export/pdf-quality";
 import type { FolderStyles } from "./model/library-style";
 import { LLM_PROVIDER_ID } from "./recognition/llm-request";
 import type { AskVaultScope } from "./recognition/vault-context";
@@ -557,6 +559,10 @@ export interface GoodObsidianSettings {
   /** Notebook-wide non-printing Writing Guides overlay state & style. */
   writingGuidesEnabled?: boolean;
   writingGuides?: Record<string, unknown>;
+  /** Optional versioned Companion PDF association registry (fork compatibility). */
+  companionPdfs?: CompanionStore;
+  /** Default raster detail for Companion PDF exports. */
+  pdfExportQuality?: PdfQuality;
 }
 
 // The records are copies, so a host that edits its settings in place cannot

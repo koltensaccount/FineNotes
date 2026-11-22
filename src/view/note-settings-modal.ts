@@ -23,7 +23,8 @@
  * The text fields follow the iPad keyboard (`DialogKeyboard`).
  */
 
-import { type App, type EventRef, Modal, Setting, setIcon } from "obsidian";
+import { type App, type EventRef, Modal, Notice, Setting, setIcon } from "obsidian";
+import type { PdfQuality } from "../export/pdf-quality";
 import type { ScrollDirection } from "../model/document";
 import type { NotebookFurniture } from "../model/furniture";
 import { formatFileSize } from "../model/notebook-info";
@@ -85,6 +86,29 @@ export interface NoteSettingsHost {
    * Resolves `false` when there is no cover to paint.
    */
   paintCover?: (canvas: HTMLCanvasElement, cssWidth: number) => Promise<boolean>;
+  /** Optional Companion PDF controls for `.notebook.md` notebooks. */
+  companion?: {
+    state: () => {
+      enabled: boolean;
+      followName: boolean;
+      pdfPath: string;
+      pdfQuality: PdfQuality | null;
+      globalQuality: PdfQuality;
+      status: string;
+      dirty: boolean;
+      error?: string;
+      running: boolean;
+      pdfExists: boolean;
+    };
+    configure: (patch: {
+      enabled?: boolean;
+      followName?: boolean;
+      pdfPath?: string;
+      pdfQuality?: PdfQuality | null;
+    }) => Promise<void>;
+    update: () => Promise<void>;
+    openPdf: () => void;
+  };
 }
 
 /** The summary card's cover, in CSS px. */
@@ -146,7 +170,120 @@ export class NoteSettingsModal extends Modal {
     if (!this.host.board) this.renderPages(group);
     this.renderEditing(group);
     this.renderLook(group);
+    if (this.host.companion) this.renderCompanion(contentEl);
     this.renderAllSettings(contentEl);
+  }
+
+  private renderCompanion(parent: HTMLElement): void {
+    const host = this.host.companion;
+    if (!host) return;
+    const state = host.state();
+    const card = parent.createDiv({ cls: "goodobsidian-ns-group goodobsidian-ns-companion" });
+    const run = async (action: () => Promise<void>): Promise<void> => {
+      try {
+        await action();
+      } catch (error) {
+        new Notice(
+          `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (this.modalEl.isConnected) this.render();
+    };
+
+    const head = new Setting(card).setDesc(
+      "Keeps a synced vector PDF copy of this notebook (updates on close or on demand).",
+    );
+    const titleWrap = head.nameEl.createDiv({ cls: "goodobsidian-ns-companion-head" });
+    titleWrap.createSpan({ text: "Companion PDF" });
+    const badge = titleWrap.createSpan({
+      cls: "goodobsidian-ns-companion-badge",
+      text: state.enabled ? (state.error ? "Error" : state.running ? "Updating…" : !state.pdfExists ? "Missing" : state.dirty ? "Needs update" : "Up to date") : "Off",
+    });
+    if (!state.enabled) badge.addClass("is-off");
+    else if (state.error || !state.pdfExists) badge.addClass("is-error");
+    else if (state.running) badge.addClass("is-running");
+    else if (state.dirty) badge.addClass("is-dirty");
+    else badge.addClass("is-synced");
+
+    head.addToggle((toggle) =>
+      toggle.setValue(state.enabled).onChange((on) => {
+        void run(() => host.configure({ enabled: on }));
+      }),
+    );
+
+    if (!state.enabled) return;
+
+    // Target PDF path + quick Open PDF button
+    const pathRow = new Setting(card).setName("PDF path");
+    const pathWrap = pathRow.controlEl.createDiv({ cls: "goodobsidian-ns-companion-path" });
+    const input = pathWrap.createEl("input", {
+      cls: "goodobsidian-ns-companion-input",
+      attr: {
+        type: "text",
+        placeholder: "Folder/Notebook.pdf",
+        spellcheck: "false",
+        "aria-label": "Companion PDF path",
+      },
+    });
+    input.value = state.pdfPath;
+    const commitPath = (): void => {
+      const next = input.value.trim();
+      if (!next || next === state.pdfPath) {
+        input.value = state.pdfPath;
+        return;
+      }
+      void run(() => host.configure({ pdfPath: next, followName: false }));
+    };
+    input.addEventListener("change", commitPath);
+    onEnterKey(input, () => input.blur());
+    this.keyboard.watch(input, card);
+
+    if (state.pdfExists) {
+      const openBtn = pathWrap.createEl("button", {
+        cls: "clickable-icon goodobsidian-ns-companion-open",
+        attr: { type: "button", "aria-label": "Open companion PDF" },
+      });
+      setIcon(openBtn, "external-link");
+      openBtn.addEventListener("click", () => {
+        this.close();
+        host.openPdf();
+      });
+    }
+
+    // Filename mode segmented control (Follow name | Custom)
+    const nameRow = new Setting(card).setName("Filename");
+    const seg = nameRow.controlEl.createDiv({
+      cls: "goodobsidian-ns-segmented",
+      attr: { role: "radiogroup", "aria-label": "Companion PDF filename mode" },
+    });
+    for (const [follow, label] of [
+      [true, "Follow name"],
+      [false, "Custom"],
+    ] as const) {
+      const btn = seg.createEl("button", {
+        cls: "goodobsidian-ns-segment",
+        text: label,
+        attr: { type: "button", role: "radio", "aria-checked": String(state.followName === follow) },
+      });
+      btn.toggleClass("is-active", state.followName === follow);
+      btn.addEventListener("click", () => {
+        if (state.followName !== follow) {
+          void run(() => host.configure({ followName: follow }));
+        }
+      });
+    }
+
+    // Update now action row
+    const syncRow = new Setting(card)
+      .setName("Sync PDF")
+      .setDesc(state.error ? state.status : "Vector ink & embedded PDFs stay sharp.");
+    syncRow.addButton((button) => {
+      button
+        .setButtonText(state.running ? "Updating…" : "Update PDF now")
+        .setDisabled(state.running)
+        .setCta()
+        .onClick(() => void run(host.update));
+    });
   }
 
   /** A row: its name and its one line, as every row in Settings. */

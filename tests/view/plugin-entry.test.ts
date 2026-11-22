@@ -569,6 +569,7 @@ describe("registration", () => {
         "learn-handwriting",
         "new-from-template",
         "normalize-handwrite-white-ink",
+        "update-companion-pdf",
         "next-look-palette",
         "next-look-style",
         "open-library",

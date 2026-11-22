@@ -189,6 +189,7 @@ import {
 } from "./view/finenotes-icons";
 import { HandwriteEmbedManager } from "./view/handwrite-embed";
 import { registerHandwriteHere } from "./view/handwrite-here";
+import { CompanionPdfManager } from "./view/companion-pdf";
 import { InkView } from "./view/ink-view";
 import { starsOf } from "./model/favorites";
 import { SIMPLE_CLASS, simpleClasses } from "./model/simple-mode";
@@ -561,6 +562,12 @@ export default class GoodObsidianPlugin extends Plugin {
     return resolveProvider(this.providers, this.settings.recognitionProviderId);
   }
 
+  /** Companion PDF associations & atomic journalled writer (backwards compatible with v1 store). */
+  readonly companionPdfs = new CompanionPdfManager(this.app, async (store) => {
+    this.settings.companionPdfs = store;
+    await this.saveSettings();
+  });
+
   override async onload(): Promise<void> {
     this.startup.mark("onload");
     this.watchStartup();
@@ -673,6 +680,19 @@ export default class GoodObsidianPlugin extends Plugin {
     handwriteEmbeds.register();
     registerHandwriteHere(this, handwriteEmbeds);
     this.register(() => handwriteEmbeds.destroy());
+    // Companion PDFs: load v1 registry and recover any interrupted atomic write.
+    this.companionPdfs.load(this.settings.companionPdfs);
+    void this.companionPdfs.recoverAll();
+    this.addCommand({
+      id: "update-companion-pdf",
+      name: "Update companion PDF now",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(InkView);
+        if (!view || !view.hasCompanionPdf) return false;
+        if (!checking) void view.updateCompanionPdf(true);
+        return true;
+      },
+    });
     addIcon(ICON_IMPORT_NOTEBOOK, ICON_IMPORT_NOTEBOOK_SVG);
     addIcon(ICON_LIBRARY, ICON_LIBRARY_SVG);
     addIcon(ICON_STYLUS_ONLY, ICON_STYLUS_ONLY_SVG);
@@ -756,7 +776,16 @@ export default class GoodObsidianPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
-        this.fileMoves.renamed(file, oldPath);
+        if (!this.companionPdfs.isInternal(oldPath) && !this.companionPdfs.isInternal(file.path)) {
+          this.fileMoves.renamed(file, oldPath);
+        }
+        void this.companionPdfs
+          .renamed(file, oldPath)
+          .catch((error) =>
+            new Notice(
+              `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
         this.keepFolderNotebookPaired(file, oldPath);
         this.libraryPathChanged(oldPath, file.path);
         this.calculatorFileMoved(oldPath, file.path);
@@ -767,7 +796,21 @@ export default class GoodObsidianPlugin extends Plugin {
         }
       }),
     );
-    this.registerEvent(this.app.vault.on("delete", (file) => this.libraryPathChanged(file.path)));
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        this.libraryPathChanged(file.path);
+        void this.companionPdfs
+          .deleted(file.path)
+          .catch(() => new Notice("FineNotes: could not save companion PDF status."));
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        this.companionPdfs.modified(file.path);
+        if (this.companionPdfs.isInternal(file.path)) return;
+        for (const view of this.openNotebooks()) view.companionResourceChanged(file.path);
+      }),
+    );
     this.register(() => this.fileMoves.destroy());
     this.wordCheck.answered = (count) => this.remindToRelearn(count);
     void loadSharing({
