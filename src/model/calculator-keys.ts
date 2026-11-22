@@ -580,20 +580,60 @@ function hasUnmatchedClose(expr: string, from: number): boolean {
   return false;
 }
 
+/** Start index of the single operand immediately before `at` (for wrapping a fraction numerator). */
+function numeratorStart(expr: string, at: number): number {
+  let i = at;
+  while (i > 0 && expr[i - 1] === " ") i--;
+  if (i === 0) return at;
+  if (expr[i - 1] === ")") {
+    let depth = 0;
+    let j = i - 1;
+    for (; j >= 0; j--) {
+      if (expr[j] === ")") depth++;
+      else if (expr[j] === "(" && --depth === 0) break;
+    }
+    if (j < 0) return at;
+    // Include any function name before `(` (e.g. `√(2)`, `sin(30)`, `d/dx(...)`).
+    while (j > 0 && /[A-Za-z0-9√∫ΣΠ/]/.test(expr[j - 1])) j--;
+    return j;
+  }
+  // Number (including decimals / E-notation) or identifier / constant (Ans, π, x, etc.).
+  let j = i;
+  while (j > 0 && /[0-9A-Za-z.πθ∞²³!]/.test(expr[j - 1])) j--;
+  return j;
+}
+
 export function typeInto(entry: Entry, insert: string, continues: boolean): Entry {
   if (entry.fresh) {
+    if (insert === `÷(${BOX})`) {
+      const expr = continues ? `(Ans)÷(${BOX})` : `(${BOX})÷(${BOX})`;
+      return { expr, cursor: expr.indexOf(BOX), fresh: false };
+    }
     const expr = (continues ? "Ans" : "") + insert;
     return { expr, cursor: after(insert, expr.length - insert.length), fresh: false };
   }
   const at = cursorOf(entry);
   const filling = entry.expr[at] === BOX;
-  // Typing ÷(▢) into an empty slot (or at the start of an expression) creates a
-  // full fraction template ▢÷(▢) with the cursor in the numerator, Casio-style.
-  let effective =
-    insert === `÷(${BOX})` &&
-    (filling || at === 0 || "(,=+−×÷^".includes(entry.expr[at - 1] ?? ""))
-      ? `${BOX}÷(${BOX})`
-      : insert;
+  // Typing ÷(▢):
+  // - In an empty slot or after an operator: insert `(${BOX})÷(${BOX})` (cursor in numerator).
+  // - Right after a numerator operand: wrap that operand as `(num)÷(${BOX})` (unless already
+  //   a parenthesized group) so the cursor can step cleanly BEFORE the fraction as well as
+  //   inside the numerator, and operators in the numerator stay in the numerator.
+  if (insert === `÷(${BOX})`) {
+    const emptyBefore = filling || at === 0 || "(,=+−×÷^".includes(entry.expr[at - 1] ?? "");
+    if (emptyBefore) {
+      const tmpl = `(${BOX})÷(${BOX})`;
+      const expr = entry.expr.slice(0, at) + tmpl + entry.expr.slice(filling ? at + 1 : at);
+      return { expr, cursor: after(tmpl, at), fresh: false };
+    }
+    const start = numeratorStart(entry.expr, at);
+    const num = entry.expr.slice(start, at);
+    const alreadyGrouped = num.startsWith("(") && closingBracket(num, 0) === num.length - 1;
+    const wrapped = alreadyGrouped ? `${num}÷(${BOX})` : `(${num})÷(${BOX})`;
+    const expr = entry.expr.slice(0, start) + wrapped + entry.expr.slice(at);
+    return { expr, cursor: after(wrapped, start), fresh: false };
+  }
+  let effective = insert;
   // Wrapping an existing expression: if the user already typed a closing `)` later
   // and moved left to insert `√(▢)` / `sin(▢)` / etc., pair with that `)` instead
   // of inserting an extra empty `▢)`.
@@ -675,9 +715,10 @@ const UNIT = /d\/dx(?=\()|[A-Za-z]+(?=\()|ans|pi|theta|inf|mod/gi;
  */
 export function isStop(expr: string, at: number): boolean {
   if (at < 0 || at > expr.length) return false;
-  // Never stand between ÷ or ^ and its hidden grouping "(" — typing there would
-  // land outside the denominator/exponent instead of inside it.
+  // Never stand between ÷ or ^ and its hidden grouping "(" — or between a numerator's
+  // hidden ")" and "÷" — so ◀/▶ step cleanly between numerator and denominator in one tap.
   if ((expr[at - 1] === "÷" || expr[at - 1] === "^") && expr[at] === "(") return false;
+  if (expr[at - 1] === ")" && expr[at] === "÷") return false;
   // Beside a box the cursor stands on it instead: typing there would not fill it.
   if (expr[at] !== BOX) {
     if (expr[at - 1] === BOX) return false;

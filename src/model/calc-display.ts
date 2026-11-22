@@ -117,6 +117,18 @@ function closedGroup(node: CalcNode): { inner: MathBox; after: boolean } {
   return { inner: grouped(node), after: false };
 }
 
+/**
+ * Mirror of {@link closedGroup} for the left side of a grouped numerator: when
+ * the cursor stands just before the numerator's hidden `(`, draw it outside
+ * BEFORE the fraction (`|[a/b]`) so ◀ can step out in front of the fraction.
+ */
+function openedGroup(node: CalcNode): { inner: MathBox; before: boolean } {
+  if (node.k === "call" && node.fn === "(" && node.caretBefore) {
+    return { inner: grouped({ ...node, caretBefore: undefined }), before: true };
+  }
+  return { inner: grouped(node), before: false };
+}
+
 /** `b`, with the cursor after it when `after`. */
 function thenCaret(b: MathBox, after: boolean): MathBox {
   return after ? row(b, { t: "caret" }) : b;
@@ -180,8 +192,11 @@ function shape(node: CalcNode): MathBox {
     case "bin":
       switch (node.op) {
         case "/": {
+          const num = openedGroup(node.a);
           const den = closedGroup(node.b);
-          return thenCaret({ t: "frac", num: grouped(node.a), den: den.inner }, den.after);
+          const frac: MathBox = { t: "frac", num: num.inner, den: den.inner };
+          const withBefore = num.before ? row({ t: "caret" }, frac) : frac;
+          return thenCaret(withBefore, den.after);
         }
         case "^": {
           const exp = closedGroup(node.b);

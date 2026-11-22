@@ -540,7 +540,7 @@ describe("editing inside what the display draws as one thing", () => {
     expect(drawn(entry("89÷89", 4))).toBe("[89/8|9]");
   });
 
-  it("keeps multiplication inside a fraction denominator inside a square root and navigates in/out cleanly", () => {
+  it("keeps multiplication inside a fraction denominator inside a square root and navigates in/out cleanly (Desmos-style)", () => {
     let e = entry("", 0);
     e = typeKey(e, "√(▢)", false);
     e = typeKey(e, "1", false);
@@ -548,31 +548,37 @@ describe("editing inside what the display draws as one thing", () => {
     e = typeKey(e, "2", false);
     e = typeKey(e, "×", true);
     e = typeKey(e, "3", false);
-    expect(e.expr).toBe("√(1÷(2×3))");
+    expect(e.expr).toBe("√((1)÷(2×3))");
     expect(drawn(e)).toBe("√{[1/2×3|]}");
     // ▶ steps out of the denominator (still under √), then out of √
     e = moveCursor(e, 1);
     expect(drawn(e)).toBe("√{[1/2×3]|}");
     e = moveCursor(e, 1);
     expect(drawn(e)).toBe("√{[1/2×3]}|");
-    // ◀ steps cleanly back into √ and into the denominator
+    // ◀ steps cleanly back into √, denominator, numerator, and IN FRONT OF the fraction!
     e = moveCursor(e, -1);
     expect(drawn(e)).toBe("√{[1/2×3]|}");
     e = moveCursor(e, -1);
     expect(drawn(e)).toBe("√{[1/2×3|]}");
+    // Stepping left through numerator reaches both [|1/2×3] and |[1/2×3]
+    const atNumFront = entry("(1)÷(2)", 1);
+    expect(drawn(atNumFront)).toBe("[|1/2]");
+    const beforeFrac = moveCursor(atNumFront, -1);
+    expect(beforeFrac.cursor).toBe(0);
+    expect(drawn(beforeFrac)).toBe("|[1/2]");
   });
 
   it("typing ÷ inside an empty root creates a numerator/denominator fraction template", () => {
     let e = entry("", 0);
     e = typeKey(e, "√(▢)", false);
     e = typeKey(e, "÷(▢)", true);
-    expect(e.expr).toBe("√(▢÷(▢))");
+    expect(e.expr).toBe("√((▢)÷(▢))");
     e = typeKey(e, "1", false);
     e = moveCursor(e, 1);
     e = typeKey(e, "2", false);
     e = typeKey(e, "×", true);
     e = typeKey(e, "3", false);
-    expect(e.expr).toBe("√(1÷(2×3))");
+    expect(e.expr).toBe("√((1)÷(2×3))");
   });
 
   it("allows ◀/▶ navigation in 1-line raw mode (unbalanced ')') and wraps cleanly with √ or (", () => {
