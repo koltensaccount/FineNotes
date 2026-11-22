@@ -22491,6 +22491,7 @@ button.goodobsidian-color-swatch.clickable-icon,
   .goodobsidian-library-preview,
   .goodobsidian-library-continue-card,
   .goodobsidian-pagesidebar,
+  .goodobsidian-pagesidebar-selectbar,
   .goodobsidian-search-panel,
   .goodobsidian-ask-frame,
   .goodobsidian-present-bar {
@@ -22498,6 +22499,13 @@ button.goodobsidian-color-swatch.clickable-icon,
     -webkit-backdrop-filter: var(--gob-blur);
     backdrop-filter: var(--gob-blur);
     border: var(--gob-hairline);
+  }
+
+  /* Keep Frosted Glass blur active during the entire pop-in/out animation
+     (overrides upstream's opaque-paper `.is-moving { backdrop-filter: none }`). */
+  .goodobsidian-popover.is-moving {
+    -webkit-backdrop-filter: var(--gob-blur) !important;
+    backdrop-filter: var(--gob-blur) !important;
   }
 
   .modal.goodobsidian-modal,
@@ -22530,11 +22538,55 @@ button.goodobsidian-color-swatch.clickable-icon,
   color: var(--text-normal);
 }
 
-/* --- UI3-SIDE-GLASS & UI3-RIGHT-FLOAT: Floating 12px Frosted Page Sidebar & Right Panels --- */
-.goodobsidian-pagesidebar:not(.is-hidden),
+/* --- UI3-SIDE-GLASS & UI3-RIGHT-FLOAT: True Floating 12px Frosted Sidebars over the Desk --- */
+.goodobsidian-pagesidebar:not(.is-hidden):not(.is-overview) {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 8px;
+  z-index: 15;
+  margin: 0;
+  border-radius: var(--gob-radius-l);
+  box-shadow: var(--gob-shadow-float);
+}
+.goodobsidian-pagesidebar.is-overview {
+  margin: 0;
+  border-radius: 0;
+}
+.goodobsidian-pagesidebar-top {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--background-primary) 72%, transparent) calc(100% - var(--gob-island-fade)),
+    transparent
+  );
+}
+
+/* Fix Select Pages bottom action bar (Move, Duplicate, Bookmark, Export, Delete):
+   upstream's --gob-sel-bg was scoped only to selection-bar, leaving this bar transparent. */
+.goodobsidian-pagesidebar-selectbar {
+  background: color-mix(in srgb, var(--background-primary) 90%, transparent) !important;
+  border: 1px solid var(--gob-line) !important;
+  border-radius: var(--gob-radius-l);
+  box-shadow: var(--gob-shadow-sheet);
+  color: var(--text-normal);
+}
+.goodobsidian-pagesidebar-selectbar .goodobsidian-pagesidebar-selectbar-button.clickable-icon {
+  color: var(--text-normal);
+}
+.goodobsidian-pagesidebar-selectbar
+  .goodobsidian-pagesidebar-selectbar-button.clickable-icon:hover:not(:disabled) {
+  background: var(--gob-well-strong);
+  color: var(--text-normal);
+}
+
 .goodobsidian-search-panel:not(.is-hidden),
 .goodobsidian-ask-frame:not(.is-hidden) {
-  margin: 8px;
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  right: 8px;
+  z-index: 15;
+  margin: 0;
   border-radius: var(--gob-radius-l);
   box-shadow: var(--gob-shadow-float);
 }
