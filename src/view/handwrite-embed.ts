@@ -45,6 +45,11 @@ function pageBounds(page: Page): Bounds {
   return { minX: 0, minY: 0, maxX: page.geometry.width, maxY: page.geometry.height };
 }
 
+function isReadOnlyPreview(el: HTMLElement): boolean {
+  if (el.closest(".markdown-source-view, .cm-editor")) return false;
+  return Boolean(el.closest(".markdown-reading-view, .markdown-preview-view"));
+}
+
 function blockBounds(
   page: Page,
   clip: Parameters<typeof resolveBlockBounds>[1],
@@ -146,14 +151,16 @@ export class HandwriteEmbedManager {
           continue;
         }
         if (LEGACY_EMBED_PNG.exec(src)?.[1].toLowerCase() === "page") continue;
+        if (isReadOnlyPreview(embed)) continue;
 
         const btn = embed.createEl("button", {
           cls: "clickable-icon finenotes-embed-edit-pill",
-          attr: { "aria-label": "Edit handwriting inline", title: "Edit handwriting inline" },
+          attr: { "aria-label": "Edit handwriting inline" },
         });
         setIcon(btn, "pencil");
         btn.createSpan({ text: "Edit" });
         btn.addEventListener("click", (e) => {
+          if (isReadOnlyPreview(embed)) return;
           e.preventDefault();
           e.stopPropagation();
           void this.openLegacyPngInline(embed, imgFile, ctx.sourcePath);
@@ -422,6 +429,7 @@ export class HandwriteEmbedManager {
     notebookFile: TFile,
     blockId: string,
     onEdit: (() => void) | null,
+    options?: { readOnly?: boolean },
   ): Promise<void> {
     if (getActiveInlineSession()?.hostContainer === containerEl) return;
 
@@ -449,12 +457,14 @@ export class HandwriteEmbedManager {
 
       const { page, clip } = found;
       const bounds = blockBounds(page, clip, blockId);
+      const readOnly = options?.readOnly === true;
       containerEl.empty();
-      if (!onEdit) {
+      if (!onEdit && !readOnly) {
         await this.addPrintImage(containerEl, page, bounds);
         return;
       }
       containerEl.addClass("finenotes-embed-card");
+      containerEl.toggleClass("is-readonly", readOnly);
       const transparent = this.plugin.settings.embedBackground !== true;
       containerEl.toggleClass("is-transparent", transparent);
 
@@ -478,6 +488,8 @@ export class HandwriteEmbedManager {
           this.paint(canvas, page, bounds, width, dpr, dark, transparent);
           this.paint(printCanvas, page, bounds, width, dpr, false, transparent);
         });
+
+      if (readOnly || !onEdit) return;
 
       const editBtn = containerEl.createEl("button", {
         cls: "clickable-icon finenotes-embed-edit-pill",
@@ -548,7 +560,10 @@ class HandwriteBlockChild extends MarkdownRenderChild {
       return;
     }
 
+    let renderedReadOnly = isReadOnlyPreview(this.containerEl);
+
     const startEdit = (): void => {
+      if (isReadOnlyPreview(this.containerEl)) return;
       void startInlineHandwriteSession({
         plugin: this.plugin,
         app: this.app,
@@ -557,25 +572,36 @@ class HandwriteBlockChild extends MarkdownRenderChild {
         blockId: this.blockId,
         sourcePath: this.sourcePath,
         onClosed: () => {
-          void this.manager.renderBlockPreview(this.containerEl, file, this.blockId, startEdit);
+          render();
         },
       });
     };
 
     const render = (): void => {
-      void this.manager.renderBlockPreview(this.containerEl, file, this.blockId, startEdit);
+      renderedReadOnly = isReadOnlyPreview(this.containerEl);
+      void this.manager.renderBlockPreview(
+        this.containerEl,
+        file,
+        this.blockId,
+        renderedReadOnly ? null : startEdit,
+        { readOnly: renderedReadOnly },
+      );
     };
 
     this.untrack = this.manager.trackCard(render);
 
     // Nested Live Preview callouts can attach after the processor's first frame.
-    // Render a usable preview immediately and consume auto-activation only on mount.
+    // Render a usable preview immediately and reconcile read-only state / auto-activation on mount.
     render();
     const mount = (framesLeft: number): void => {
       this.mountFrame = this.containerEl.ownerDocument.defaultView!.requestAnimationFrame(() => {
         this.mountFrame = null;
         if (this.containerEl.isConnected) {
-          if (this.manager.consumePendingActivation(file.path, this.blockId)) startEdit();
+          const nowReadOnly = isReadOnlyPreview(this.containerEl);
+          if (nowReadOnly !== renderedReadOnly) render();
+          if (!nowReadOnly && this.manager.consumePendingActivation(file.path, this.blockId)) {
+            startEdit();
+          }
         } else if (framesLeft > 0) {
           mount(framesLeft - 1);
         }

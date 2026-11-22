@@ -22760,6 +22760,25 @@ button.goodobsidian-color-swatch.clickable-icon,
 .finenotes-embed-card:hover {
   border-color: var(--gob-active-fg);
 }
+.finenotes-embed-card.is-readonly,
+.markdown-reading-view .finenotes-embed-card,
+.markdown-reading-view .internal-embed.finenotes-legacy-wired {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.finenotes-embed-card.is-readonly:hover,
+.markdown-reading-view .finenotes-embed-card:hover {
+  border-color: transparent;
+}
+.finenotes-embed-card.is-readonly .finenotes-embed-canvas,
+.markdown-reading-view .finenotes-embed-canvas {
+  cursor: default;
+}
+.finenotes-embed-card.is-readonly .finenotes-embed-edit-pill,
+.markdown-reading-view .finenotes-embed-edit-pill {
+  display: none !important;
+}
 .finenotes-embed-canvas {
   display: block;
   width: 100%;
