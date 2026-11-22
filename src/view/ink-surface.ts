@@ -1592,6 +1592,16 @@ const clipboard = new InkClipboard();
 // Text FineNotes copies (Copy text, a page link) is newer than any ink held.
 onSystemTextWritten(() => clipboard.noteSystemCopy());
 
+async function blobSha256(blob: Blob): Promise<string | null> {
+  if (typeof crypto === "undefined" || !crypto.subtle) return null;
+  try {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+    return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A move, resize, stretch or rotate of the selected image, from pointerdown
  * to lift. The document is untouched until the lift commits one
@@ -15522,13 +15532,22 @@ export class InkSurface {
       if (!this.paste({ pageId, at }) && !ink) new Notice(t("surface.notice.nothingToPaste"));
       return;
     }
-    void readSystemClipboard().then((found) => {
+    void readSystemClipboard().then(async (found) => {
       const index = this.doc.pages.findIndex((page) => page.id === pageId);
       if (index < 0 || this.callbacks.isLocked?.()) return;
       const onImage = this.imagesShown ? this.callbacks.onPasteImage : undefined;
-      if (found.kind === "image" && onImage) {
-        onImage(found.file, { pageIndex: index, x: at.x, y: at.y });
-        return;
+      if (found.kind === "image") {
+        if (clipboard.canPaste(this.imagesShown) && clipboard.hasOwnPngSize(found.file.size)) {
+          const hash = await blobSha256(found.file);
+          if (hash && clipboard.matchesOwnPng(found.file.size, hash)) {
+            this.paste({ pageId, at });
+            return;
+          }
+        }
+        if (onImage) {
+          onImage(found.file, { pageIndex: index, x: at.x, y: at.y });
+          return;
+        }
       }
       if (found.kind === "text") {
         this.addPastedText(index, at, found.text);
@@ -15697,6 +15716,14 @@ export class InkSurface {
         },
         bounds,
       );
+      const copyVersion = clipboard.version;
+      const png = this.selectionPicture(group, null).then(async (shot) => {
+        if (!shot) throw new Error("Selection could not be rendered");
+        const hash = await blobSha256(shot.blob);
+        if (hash) clipboard.noteOwnPng(shot.blob.size, hash, copyVersion);
+        return shot.blob;
+      });
+      void writePngToClipboard(png);
       this.syncActionBar();
       return true;
     }
@@ -15853,6 +15880,16 @@ export class InkSurface {
     }
     if (file && onImage) {
       event.preventDefault();
+      if (clipboard.canPaste(this.imagesShown) && clipboard.hasOwnPngSize(file.size)) {
+        void blobSha256(file).then((hash) => {
+          if (hash && clipboard.matchesOwnPng(file.size, hash)) {
+            this.paste();
+          } else {
+            onImage(file);
+          }
+        });
+        return true;
+      }
       onImage(file);
       return true;
     }
@@ -15962,6 +15999,7 @@ export class InkSurface {
     const dpr = Math.min(3, 2048 / Math.max(width, height));
     renderPageThumbnail(canvas, page, { paint: () => undefined }, width, dpr, {
       transparent: true,
+      highlighterAlpha: this.options.highlighterAlpha,
       usePressure: this.inkPressure,
       ...(this.imagePainter ? { images: this.imagePainter } : {}),
     });
