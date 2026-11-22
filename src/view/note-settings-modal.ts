@@ -30,6 +30,7 @@ import type { NotebookFurniture } from "../model/furniture";
 import { formatFileSize } from "../model/notebook-info";
 import { DialogKeyboard } from "./dialog-keyboard";
 import { onEnterKey } from "./enter-key";
+import { FolderSuggestModal } from "./folder-suggest";
 import { t, tn } from "../i18n/translate";
 
 /** What the summary card shows. */
@@ -213,30 +214,36 @@ export class NoteSettingsModal extends Modal {
 
     if (!state.enabled) return;
 
-    // Target PDF path + quick Open PDF button
-    const pathRow = new Setting(card).setName("PDF path");
+    // Target PDF folder (native Obsidian fuzzy folder picker) + quick Open PDF button
+    const slashIdx = state.pdfPath.lastIndexOf("/");
+    const currentFolder = slashIdx >= 0 ? state.pdfPath.slice(0, slashIdx) : "";
+    const currentFile = slashIdx >= 0 ? state.pdfPath.slice(slashIdx + 1) : state.pdfPath;
+
+    const pathRow = new Setting(card).setName("Folder");
     const pathWrap = pathRow.controlEl.createDiv({ cls: "goodobsidian-ns-companion-path" });
-    const input = pathWrap.createEl("input", {
-      cls: "goodobsidian-ns-companion-input",
-      attr: {
-        type: "text",
-        placeholder: "Folder/Notebook.pdf",
-        spellcheck: "false",
-        "aria-label": "Companion PDF path",
-      },
+    const folderBtn = pathWrap.createEl("button", {
+      cls: "goodobsidian-ns-companion-folder",
+      attr: { type: "button", "aria-label": "Choose companion PDF folder" },
     });
-    input.value = state.pdfPath;
-    const commitPath = (): void => {
-      const next = input.value.trim();
-      if (!next || next === state.pdfPath) {
-        input.value = state.pdfPath;
-        return;
-      }
-      void run(() => host.configure({ pdfPath: next, followName: false }));
-    };
-    input.addEventListener("change", commitPath);
-    onEnterKey(input, () => input.blur());
-    this.keyboard.watch(input, card);
+    const folderIcon = folderBtn.createSpan({ cls: "goodobsidian-ns-companion-folder-icon" });
+    setIcon(folderIcon, "folder");
+    folderBtn.createSpan({
+      cls: "goodobsidian-ns-companion-folder-label",
+      text: currentFolder || "/",
+    });
+    folderBtn.addEventListener("click", () => {
+      new FolderSuggestModal(
+        this.app,
+        (chosen) => {
+          const next = chosen ? `${chosen}/${currentFile}` : currentFile;
+          if (next !== state.pdfPath) {
+            void run(() => host.configure({ pdfPath: next }));
+          }
+        },
+        "Choose folder for companion PDF…",
+        currentFolder,
+      ).open();
+    });
 
     if (state.pdfExists) {
       const openBtn = pathWrap.createEl("button", {
@@ -261,7 +268,7 @@ export class NoteSettingsModal extends Modal {
       [false, "Custom"],
     ] as const) {
       const btn = seg.createEl("button", {
-        cls: "goodobsidian-ns-segment",
+        cls: "goodobsidian-ns-segment clickable-icon",
         text: label,
         attr: { type: "button", role: "radio", "aria-checked": String(state.followName === follow) },
       });
@@ -271,6 +278,35 @@ export class NoteSettingsModal extends Modal {
           void run(() => host.configure({ followName: follow }));
         }
       });
+    }
+
+    if (!state.followName) {
+      const customRow = new Setting(card).setName("Custom name");
+      const nameInput = customRow.controlEl.createEl("input", {
+        cls: "goodobsidian-ns-companion-input",
+        attr: {
+          type: "text",
+          placeholder: "Notebook.pdf",
+          spellcheck: "false",
+          "aria-label": "Custom companion PDF filename",
+        },
+      });
+      nameInput.value = currentFile;
+      const commitName = (): void => {
+        let nextFile = nameInput.value.trim();
+        if (!nextFile) {
+          nameInput.value = currentFile;
+          return;
+        }
+        if (!nextFile.toLowerCase().endsWith(".pdf")) nextFile += ".pdf";
+        const nextPath = currentFolder ? `${currentFolder}/${nextFile}` : nextFile;
+        if (nextPath !== state.pdfPath) {
+          void run(() => host.configure({ pdfPath: nextPath, followName: false }));
+        }
+      };
+      nameInput.addEventListener("change", commitName);
+      onEnterKey(nameInput, () => nameInput.blur());
+      this.keyboard.watch(nameInput, card);
     }
 
     // Update now action row

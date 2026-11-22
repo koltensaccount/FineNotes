@@ -190,6 +190,7 @@ import {
 import { HandwriteEmbedManager } from "./view/handwrite-embed";
 import { registerHandwriteHere } from "./view/handwrite-here";
 import { CompanionPdfManager } from "./view/companion-pdf";
+import { FolderSuggestModal } from "./view/folder-suggest";
 import { InkView } from "./view/ink-view";
 import { starsOf } from "./model/favorites";
 import { SIMPLE_CLASS, simpleClasses } from "./model/simple-mode";
@@ -750,7 +751,15 @@ export default class GoodObsidianPlugin extends Plugin {
           item
             .setTitle(t("notebooks.menu.newFromPdf"))
             .setIcon(ICON_NEW_NOTEBOOK)
-            .onClick(() => void this.createNotebookFromPdf(file)),
+            .onClick(() => {
+              const initial = file.parent && !file.parent.isRoot() ? file.parent.path : "";
+              new FolderSuggestModal(
+                this.app,
+                (chosen) => void this.createNotebookFromPdf(file, true, chosen),
+                "Choose folder for new notebook…",
+                initial,
+              ).open();
+            }),
         );
         const view = this.app.workspace.getActiveViewOfType(InkView);
         if (!view) return;
@@ -3728,8 +3737,17 @@ export default class GoodObsidianPlugin extends Plugin {
    * the last notebook choices for size and folder layout. The PDF is only
    * read: it stays where it is, and the notebook follows it if it moves.
    */
-  async createNotebookFromPdf(pdf: TFile, open = true): Promise<TFile | null> {
-    const folder = pdf.parent && !pdf.parent.isRoot() ? pdf.parent.path : "";
+  async createNotebookFromPdf(
+    pdf: TFile,
+    open = true,
+    targetFolder?: string,
+  ): Promise<TFile | null> {
+    const folder =
+      targetFolder !== undefined
+        ? targetFolder
+        : pdf.parent && !pdf.parent.isRoot()
+          ? pdf.parent.path
+          : "";
     return this.createNotebookFromPdfBytes(
       pdf.basename,
       this.pdfNotebookChoices(),
