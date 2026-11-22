@@ -11,7 +11,7 @@ import type GoodObsidianPlugin from "../main";
 import type { Bounds, Page } from "../model/document";
 import { handwritingForBackground } from "../canvas/handwriting-contrast";
 import { paintWritingGuides } from "../canvas/writing-guides";
-import { embedWritingGuidesOf } from "../model/writing-guides";
+import { embedWritingGuidesOf, writingGuidesOf } from "../model/writing-guides";
 import { parseInkFile } from "../model/serialize";
 import { findBlockInDocument, resolveBlockBounds } from "../model/handwrite-block";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
@@ -246,7 +246,8 @@ export class HandwriteEmbedManager {
       let bytes = 0;
       const stage = async (asset: TFile, page: Page, bounds: Bounds): Promise<void> => {
         if (assets.has(asset.path)) return;
-        const png = await this.exportPng(page, bounds, true, false);
+        const transparent = this.plugin.settings.embedBackground !== true;
+        const png = await this.exportPng(page, bounds, transparent, false);
         bytes += png.size;
         if (bytes > 32_000_000)
           throw new Error("Handwriting images exceed the 32 MB publish budget.");
@@ -340,7 +341,28 @@ export class HandwriteEmbedManager {
       },
     );
     const guides = embedWritingGuidesOf(page.clips?.[0]?.writingGuides);
-    if (guides?.enabled && guides.includeInPreview) {
+    const backdropGuide =
+      transparent &&
+      !(guides?.enabled && guides.includeInPreview) &&
+      (page.backdrop.kind === "grid" ||
+        page.backdrop.kind === "lined" ||
+        page.backdrop.kind === "dotted")
+        ? writingGuidesOf({
+            style:
+              page.backdrop.kind === "lined"
+                ? "lines"
+                : page.backdrop.kind === "dotted"
+                  ? "dots"
+                  : "grid",
+            spacing: page.backdrop.spacing ?? 32,
+            opacity: 0.14,
+            thickness: 1,
+            colorMode: "auto",
+          })
+        : null;
+    const guideStyle =
+      guides?.enabled && guides.includeInPreview ? guides.style : backdropGuide;
+    if (guideStyle) {
       const ctx = canvas.getContext("2d");
       const cropW = bounds.maxX - bounds.minX;
       if (ctx && cropW > 0) {
@@ -350,7 +372,7 @@ export class HandwriteEmbedManager {
         // transparent background without obscuring ink strokes.
         if (transparent) ctx.globalCompositeOperation = "destination-over";
         ctx.setTransform(k, 0, 0, k, -bounds.minX * k, -bounds.minY * k);
-        paintWritingGuides(ctx, page, bounds, guides.style, paper.paper, width / cropW, k);
+        paintWritingGuides(ctx, page, bounds, guideStyle, paper.paper, width / cropW, k);
         ctx.restore();
       }
     }
@@ -387,7 +409,8 @@ export class HandwriteEmbedManager {
     bounds: Bounds,
     replace = false,
   ): Promise<void> {
-    const png = await this.exportPng(page, bounds, false, false, host.ownerDocument);
+    const transparent = this.plugin.settings.embedBackground !== true;
+    const png = await this.exportPng(page, bounds, transparent, false, host.ownerDocument);
     const src = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));

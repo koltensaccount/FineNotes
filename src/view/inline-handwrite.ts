@@ -1,10 +1,12 @@
 import { type App, type TFile, Notice, setIcon } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import { attachmentDefaults } from "../settings-data";
+import { attachmentDefaults, penPreferencesOf } from "../settings-data";
 import { NOTEBOOK_FILE_SUFFIX, PALETTE, SIZES } from "../constants";
+import { pushRecentColor } from "../model/colors";
 import { InsertImage } from "../model/commands";
 import { resolveAttachmentFolder } from "../model/attachment-folders";
 import { newImageElement, placeImageBox } from "../model/images";
+import { addSavedPen, samePen, savedPensOf } from "../model/saved-pens";
 import type { InkDocument, Page } from "../model/document";
 import {
   contentBoundsOnPage,
@@ -29,6 +31,7 @@ import { copyPictureToSystemClipboard } from "./picture-clipboard";
 import { VaultImageCache } from "./image-cache";
 import { InkSurface } from "./ink-surface";
 import { toolStateFrom } from "./ink-view";
+import { SavedPenModal } from "./saved-pen-modal";
 import { penOfState, Toolbar, type ToolbarState } from "./toolbar";
 import type { BarItemId, ToolbarLayout } from "./toolbar-layout";
 import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
@@ -91,7 +94,7 @@ export class InlineHandwriteSession {
   private cleanups: Array<() => void> = [];
 
   constructor(private readonly options: InlineSessionOptions) {
-    this.onlyStylus = options.plugin.settings.onlyStylusMode === true;
+    this.onlyStylus = options.plugin.stylusOnly;
     this.paperIsDark =
       options.containerEl.ownerDocument?.body?.classList.contains("theme-dark") ?? false;
     this.toolState = toolStateFrom(options.plugin.settings);
@@ -214,23 +217,92 @@ export class InlineHandwriteSession {
         {
           returnToPenOnReselect: () => plugin.settings.returnToPenOnReselect === true,
           onToolChange: (tool) => this.surface?.setTool(tool),
-          onColorChange: () => this.rememberPen(),
-          onSizeChange: () => this.rememberPen(),
-          onPressureToggle: () => this.surface?.refreshPenCursor(),
-          onPenTypeChange: () => {
+          onColorChange: () => {
             this.surface?.refreshPenCursor();
             this.rememberPen();
           },
+          onSizeChange: () => {
+            this.surface?.refreshPenCursor();
+            this.rememberPen();
+          },
+          onPressureToggle: () => this.surface?.refreshPenCursor(),
+          onPenTypeChange: () => {
+            this.toolbar?.syncActive();
+            this.surface?.refreshPenCursor();
+            this.rememberPen();
+          },
+          savedPens: () => savedPensOf(plugin.settings.savedPens),
+          onReorderPens: (pens) => plugin.saveSavedPens(pens),
+          onDeletePen: (id) =>
+            plugin.saveSavedPens(
+              savedPensOf(plugin.settings.savedPens).filter((pen) => pen.id !== id),
+            ),
+          onSavePen: (pen) =>
+            plugin.saveSavedPens(addSavedPen(savedPensOf(plugin.settings.savedPens), pen)),
+          onNewPen: (start, onMade) => {
+            new SavedPenModal(app, {
+              pen: start,
+              index: null,
+              pens: savedPensOf(plugin.settings.savedPens),
+              highlighterAlpha: plugin.settings.highlighterAlpha,
+              recent: plugin.settings.recentColors,
+              palette: plugin.settings.customColors,
+              onCustomColor: (color) => {
+                plugin.settings.recentColors = pushRecentColor(
+                  plugin.settings.recentColors,
+                  color,
+                );
+                void plugin.saveSettings();
+              },
+              onSave: (pen) => {
+                plugin.saveSavedPens(addSavedPen(savedPensOf(plugin.settings.savedPens), pen));
+                const made = savedPensOf(plugin.settings.savedPens).find((saved) =>
+                  samePen(saved, pen),
+                );
+                if (made) onMade(made);
+              },
+            }).open();
+          },
+          onEditPens: () => plugin.openSettingsTab(),
+          onPenColors: (colors) => plugin.savePenColors(colors),
+          onPenTypeOrder: (order) => plugin.savePenTypeOrder(order),
+          onPenInks: (inks) => plugin.savePenInks(inks),
+          onPenStabilization: (all) => plugin.savePenStabilization(all),
+          penPreferences: () => penPreferencesOf(plugin.settings),
+          onPenPreferences: (patch) => plugin.savePenPreferences(patch),
           onWidthPresets: (presets) => plugin.saveWidthPresets(presets),
           onEraserPresets: (presets) => plugin.saveEraserPresets(presets),
           onEraserChange: (mode, size) => plugin.saveEraser(mode, size),
+          sizePreviewScales: () => this.surface?.sizePreviewScales() ?? { pen: 1, eraser: 1 },
+          paintSizePaper: (canvas, width, height) =>
+            this.surface?.paintPaperSample(canvas, width, height) ?? false,
           onEraserFilterChange: (filter) => plugin.saveEraserFilter(filter),
+          onEraserGreyChange: (on) => plugin.saveEraserGrey(on),
           onLassoChange: (mode, filter) => {
             this.surface?.refreshLassoChrome();
             plugin.saveLasso(mode, filter);
           },
           onPenGesturesChange: (gestures) => plugin.savePenGestures(gestures),
+          onShapeColorChange: (color) => {
+            this.surface?.refreshPenCursor();
+            plugin.saveShapeColor(color);
+          },
+          onShapeStyleChange: (style) => plugin.saveShapeStyle(style),
+          onFillGapChange: (gap) => plugin.saveFillGap(gap),
+          onFillColorChange: (color) => plugin.saveFillColor(color),
+          onTapeChange: (color, height, mode, heights) =>
+            plugin.saveTape(color, height, mode, heights),
+          onTapeSnapTextChange: (on) => plugin.saveTapeSnapText(on),
+          tapesShown: () => this.surface?.tapesShown() ?? null,
+          onShowTapes: (shown) => this.surface?.showTapes(shown),
+          onTableHeaderChange: (on) => plugin.saveTableHeader(on),
           onRecentColors: (colors) => plugin.saveRecentColors(colors),
+          onPickFromPage: (done) => {
+            if (this.surface) this.surface.pickColorFromPage(done);
+            else done(null);
+          },
+          onTextToolChange: (style, pinned, dragSize) =>
+            plugin.saveTextTool(style, pinned, dragSize),
           onTextStyle: (patch) => this.surface?.applyTextStyle(patch),
           onTextSizePreview: (size) => this.surface?.previewTextSize(size),
           onTextFieldDone: (to) => this.surface?.textFieldDone(to),
@@ -281,6 +353,7 @@ export class InlineHandwriteSession {
             this.onlyStylus = on;
             this.toolbar?.setOnlyStylusMode(on);
             this.surface?.onlyStylusChanged();
+            void plugin.setOnlyStylusMode(on);
           },
           onLayout: (next) => {
             plugin.settings.inlineToolbarLayout = next;
@@ -288,11 +361,14 @@ export class InlineHandwriteSession {
           },
         },
         {
+          defaultSize: plugin.settings.defaultSize,
+          reservedColors: [plugin.settings.defaultColor, ...(plugin.settings.customColors ?? [])],
           layout: plugin.settings.inlineToolbarLayout ?? INLINE_TOOLBAR_LAYOUT,
           allowedItems: INLINE_BAR_ITEMS,
           popoverBounds: containerEl,
           resetLayout: INLINE_TOOLBAR_LAYOUT,
-          onlyStylusMode: this.onlyStylus,
+          onlyStylusMode: plugin.stylusOnly,
+          fingerDrawing: plugin.fingerDrawing,
         },
       );
 
