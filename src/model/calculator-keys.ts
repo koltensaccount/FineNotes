@@ -463,7 +463,7 @@ export const NUMBER_ROWS: readonly (readonly CalcKey[])[] = [
       },
       "calculator.helpCloseBracket",
     ),
-    op("÷", "÷", "calculator.ariaDividedBy", "calculator.helpDivide"),
+    op("÷", `÷(${BOX})`, "calculator.ariaDividedBy", "calculator.helpDivide"),
   ],
   [
     digit(7),
@@ -574,8 +574,15 @@ export function typeInto(entry: Entry, insert: string, continues: boolean): Entr
   }
   const at = cursorOf(entry);
   const filling = entry.expr[at] === BOX;
-  const expr = entry.expr.slice(0, at) + insert + entry.expr.slice(filling ? at + 1 : at);
-  return { expr, cursor: after(insert, at), fresh: false };
+  // Typing ÷(▢) into an empty slot (or at the start of an expression) creates a
+  // full fraction template ▢÷(▢) with the cursor in the numerator, Casio-style.
+  const effective =
+    insert === `÷(${BOX})` &&
+    (filling || at === 0 || "(,=+−×÷^".includes(entry.expr[at - 1] ?? ""))
+      ? `${BOX}÷(${BOX})`
+      : insert;
+  const expr = entry.expr.slice(0, at) + effective + entry.expr.slice(filling ? at + 1 : at);
+  return { expr, cursor: after(effective, at), fresh: false };
 }
 
 /**
@@ -643,6 +650,9 @@ const UNIT = /d\/dx(?=\()|[A-Za-z]+(?=\()|ans|pi|theta|inf|mod/gi;
  */
 export function isStop(expr: string, at: number): boolean {
   if (at < 0 || at > expr.length) return false;
+  // Never stand between ÷ or ^ and its hidden grouping "(" — typing there would
+  // land outside the denominator/exponent instead of inside it.
+  if ((expr[at - 1] === "÷" || expr[at - 1] === "^") && expr[at] === "(") return false;
   // Beside a box the cursor stands on it instead: typing there would not fill it.
   if (expr[at] !== BOX) {
     if (expr[at - 1] === BOX) return false;
@@ -741,9 +751,9 @@ export function backspace(entry: Entry, deleteLast: (expr: string) => string): E
     const expr = refillBox(text, cursor);
     return { expr, cursor: nearestStop(expr, cursor), fresh: false };
   };
-  // An empty function, sin(▢) with the cursor in its box: ⌫ takes it whole.
+  // An empty function, sin(▢) or empty denominator ÷(▢) with cursor in its box: ⌫ takes it whole.
   if (entry.expr[at] === BOX && entry.expr[at + 1] === ")" && entry.expr[at - 1] === "(") {
-    const name = /(?:[a-zA-Z]+|√|d\/dx|∫|Σ|Π|\^|e\^|10\^)\($/.exec(entry.expr.slice(0, at));
+    const name = /(?:[a-zA-Z]+|√|d\/dx|∫|Σ|Π|\^|e\^|10\^|÷)\($/.exec(entry.expr.slice(0, at));
     const onlyBox = name && !entry.expr.slice(name.index, at).includes(",");
     if (onlyBox && name) {
       return done(entry.expr.slice(0, name.index) + entry.expr.slice(at + 2), name.index);
@@ -815,7 +825,7 @@ export function keyboardKey(
     case "*":
       return { insert: "×", continues: true };
     case "/":
-      return { insert: "÷", continues: true };
+      return { insert: `÷(${BOX})`, continues: true };
     case "-":
       return { insert: "−", continues: true };
     case "+":
