@@ -182,7 +182,7 @@ export const DEVICE_READ_NEXT_MS = 300;
  * the ribbon's "New notebook" button.
  */
 export const ICON_INK_VIEW = "pen-tool";
-export const ICON_NEW_NOTEBOOK = "notebook-pen";
+export const ICON_NEW_NOTEBOOK = "finenotes-new-notebook";
 
 /**
  * "Import notebook": FineNotes' own icon, registered with `addIcon` on load.

@@ -109,6 +109,16 @@ import {
   slotPenType,
   slotSavedId,
 } from "./toolbar-layout";
+import {
+  FN_ICON_ADD_PAGE,
+  FN_ICON_ERASER,
+  FN_ICON_FILL,
+  FN_ICON_IMPORT_PDF,
+  FN_ICON_LASER,
+  FN_ICON_MORE_TOOLS,
+  FN_ICON_SAVED_PENS,
+  FN_ICON_TAPE,
+} from "./finenotes-icons";
 import { ToolbarEditor } from "./toolbar-edit";
 import { DEFAULT_STICKY_COLOR, STICKY_COLORS } from "../model/sticky-notes";
 import {
@@ -1602,15 +1612,15 @@ export class Toolbar {
     };
     tool("select", "lasso", t("toolbar.tip.lasso"));
     tool("pen", "pen-tool", t("toolbar.tip.pen"));
-    tool("eraser", "eraser", t("toolbar.tip.eraser"));
+    tool("eraser", FN_ICON_ERASER, t("toolbar.tip.eraser"));
     tool("text", "type", t("toolbar.tip.textBox"));
     tool("shape", "shapes", t("toolbar.tip.shapes"));
     // Page navigation tools. In More tools by default.
     tool("pan", "hand", t("toolbar.tip.hand"));
     tool("zoom", "zoom-in", t("toolbar.tip.magnifier"));
-    tool("fill", "paint-bucket", t("toolbar.tool.fill"));
+    tool("fill", FN_ICON_FILL, t("toolbar.tool.fill"));
     // Cover tape: strips over the page that a tap shows through.
-    tool("tape", "bandage", t("toolbar.tool.coverTape"));
+    tool("tape", FN_ICON_TAPE, t("toolbar.tool.coverTape"));
     if (cb.onOnlyStylusMode) {
       const toggle = (): void => this.toggleOnlyStylusMode();
       const stylus = this.barButton(tools, ICON_STYLUS_ONLY, t("toolbar.stylusOff"), toggle);
@@ -1635,7 +1645,7 @@ export class Toolbar {
     this.insertPdfButton = action(
       "pdf",
       FOLD_RANK.pdf,
-      "file-text",
+      FN_ICON_IMPORT_PDF,
       t("toolbar.insertPdf"),
       cb.onInsertPdf,
     );
@@ -1662,7 +1672,7 @@ export class Toolbar {
     // Goodnotes' accessories: what the bar does not show, and the way to
     // choose what it shows. Pinned to the bar, and it never folds, as ⋯
     // never does.
-    const accessories = this.barButton(tools, "toolbox", t("toolbar.moreTools"), (button) =>
+    const accessories = this.barButton(tools, FN_ICON_MORE_TOOLS, t("toolbar.moreTools"), (button) =>
       this.toggleAccessories(button),
     );
     accessories.addClass("has-caret", "goodobsidian-accessories-button");
@@ -1690,7 +1700,7 @@ export class Toolbar {
     }
     this.addPageButton = item(
       "addPage",
-      this.foldButton(doc, FOLD_RANK.addPage, "plus", t("toolbar.addPage"), cb.onAddPage),
+      this.foldButton(doc, FOLD_RANK.addPage, FN_ICON_ADD_PAGE, t("toolbar.addPage"), cb.onAddPage),
       cb.onAddPage,
       false,
     );
@@ -3271,7 +3281,7 @@ export class Toolbar {
       const saved = this.optionsEl.createEl("button", {
         cls: "goodobsidian-saved-pens clickable-icon",
       });
-      iconOrText(saved, "star", t("toolbar.savedPens.title"));
+      iconOrText(saved, FN_ICON_SAVED_PENS, t("toolbar.savedPens.title"));
       saved.setAttribute("aria-label", t("toolbar.savedPens.tip"));
       saved.setAttribute("title", t("toolbar.savedPens.tip"));
       saved.setAttribute("aria-haspopup", "dialog");
@@ -6447,7 +6457,7 @@ export class Toolbar {
     });
     laser.toggleClass("is-active", this.state.tool === "laser");
     const laserIcon = laser.createSpan({ cls: "goodobsidian-laser-row-icon" });
-    iconOrText(laserIcon, "pointer", "");
+    iconOrText(laserIcon, FN_ICON_LASER, "");
     laser.createSpan({ text: t("toolbar.tool.laserPointer") });
     laser.createEl("kbd", { cls: "goodobsidian-saved-pen-key", text: "L" });
     laser.addEventListener("click", () => {
@@ -8701,7 +8711,7 @@ function flagPatch(
  */
 function eraserModeIcon(el: HTMLElement, mode: EraserMode, label: string): void {
   if (mode === "standard") {
-    iconOrText(el, "eraser", label);
+    iconOrText(el, FN_ICON_ERASER, label);
     return;
   }
   el.empty();
@@ -8713,36 +8723,39 @@ function eraserModeIcon(el: HTMLElement, mode: EraserMode, label: string): void 
     height: "24",
     fill: "none",
     stroke: "currentColor",
-    "stroke-width": "2",
+    "stroke-width": "1.6",
     "stroke-linecap": "round",
     "stroke-linejoin": "round",
     "aria-hidden": "true",
   })) {
     svg.setAttribute(key, value);
   }
-  const path = (parent: Element, d: string, dash?: string): void => {
+  const path = (parent: Element, d: string, dash?: string, cap?: string): void => {
     const p = activeDocument.createElementNS(SVG_NS, "path");
     p.setAttribute("d", d);
     if (dash) p.setAttribute("stroke-dasharray", dash);
-    // In a scaled group the line keeps the icon's own width.
+    if (cap) p.setAttribute("stroke-linecap", cap);
     if (parent !== svg) p.setAttribute("vector-effect", "non-scaling-stroke");
     parent.appendChild(p);
   };
+  // P1-ERASER-A Concept #2 block
   const eraser = (transform: string): void => {
     const g = activeDocument.createElementNS(SVG_NS, "g");
-    g.setAttribute("transform", transform);
-    path(g, "m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21");
-    path(g, "m5 11 9 9");
+    g.setAttribute("transform", `${transform} rotate(45 12 12)`);
+    path(g, "M8.25 19V5.6A1.6 1.6 0 0 1 9.85 4H14.15A1.6 1.6 0 0 1 15.75 5.6V19L13.75 21H10.25Z");
+    path(g, "M8.25 14.1H15.75", undefined, "butt");
     svg.appendChild(g);
   };
   if (mode === "stroke") {
-    eraser("translate(5 0) scale(0.78)");
+    // P1-ERASER-STROKE-B: P1-ERASER-A + OG upstream wavy ink stroke
+    eraser("translate(4.5 -0.5) scale(0.76)");
     path(svg, "M2 21c1.5-3.5 3-5.5 4.5-4s.5 4 2.5 3.5 2-2 3.5-3.2");
   } else {
-    path(svg, "M3 5h13");
-    path(svg, "M3 10.5h8", "2 2.6");
-    path(svg, "M3 16h5");
-    eraser("translate(10.5 10.5) scale(0.56)");
+    // P1-ERASER-LINE-A: P1-ERASER-A + ruled text lines
+    path(svg, "M3 5.5h13");
+    path(svg, "M3 11h8", "2 2.6");
+    path(svg, "M3 16.5h5");
+    eraser("translate(10 9.5) scale(0.58)");
   }
   el.appendChild(svg);
 }

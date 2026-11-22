@@ -401,7 +401,7 @@ describe("New notebook context menu", () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toMatchObject({
       title: "New notebook",
-      icon: "notebook-pen",
+      icon: "finenotes-new-notebook",
       section: "action-primary",
     });
     items[0].click();

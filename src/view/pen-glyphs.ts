@@ -51,55 +51,68 @@ const inkFill = (d: string): GlyphPart => ({
 /** Each pen type's outline icon, its tip in ink. Unknown types get the fountain pen's. */
 export function penIconParts(pen: string): GlyphPart[] {
   switch (pen) {
+    // P1-BALL-B: Click-top + integrated clip + live-ink cone & ball
     case "ball":
       return [
-        path("M9.8 1.5h4.4v11H9.8z"),
-        // The clip.
-        path("M14.2 3h1.3v6.5"),
-        // The cone in ink, then the ball.
-        inkFill("M9.4 12.5h5.2l-1.8 7.4h-1.6z"),
+        path("M10.8 1.2h2.4v1.6h-2.4z"),
+        path("M9.8 2.8h4.4v10.2H9.8z"),
+        path("M14.2 4.2h1.5v5.8"),
+        inkFill("M9.6 13h4.8l-1.5 6.8h-1.8z"),
         {
           tag: "circle",
-          attrs: { cx: "12", cy: "21.4", r: "1.2", transform: TILT, stroke: "none" },
+          attrs: { cx: "12", cy: "21.3", r: "1.25", transform: TILT, stroke: "none" },
           ink: true,
           fill: true,
         },
       ];
+    // P1-BRUSH-A: Double ferrule seam + soft curved live-ink tip
     case "brush":
       return [
-        path("M10.6 1.5h2.8l.4 9h-3.6z"),
-        // The ferrule, then the bristles.
-        path("M9.6 10.5h4.8v3H9.6z"),
-        inkFill("M9.6 13.5h4.8c0 3.6-1.4 6.2-2.4 9-1-2.8-2.4-5.4-2.4-9z"),
+        path("M10.4 1.6h3.2l.4 8.2h-4z"),
+        path("M9.6 9.8h4.8v3.4H9.6z"),
+        { tag: "path", attrs: { d: "M9.6 11.5h4.8", transform: TILT, "stroke-linecap": "butt" } },
+        inkFill("M9.7 13.2h4.6c.1 3.7-1.1 6.3-2.3 9.3-1.2-3-2.4-5.6-2.3-9.3z"),
       ];
+    // P1-CALLIGRAPHY-CODEX: Codex quill-cut-nib.svg (native 45° orientation)
     case "calligraphy":
       return [
-        // The holder, then the broad, square-cut nib.
-        path("M10.6 1.5h2.8v9.5h-2.8z"),
-        path("M9.8 11h4.4v2.5H9.8z"),
-        inkFill("M9.2 13.5h5.6l-.4 6.5-4.8 2z"),
-      ];
-    case "highlighter":
-      return [
-        path("M8.5 1.5h7v10h-7z"),
-        path("M9.2 11.5h5.6l-.6 3H9.8z"),
-        // The chisel tip.
-        inkFill("M9.8 14.5h4.4v3.2l-4.4 3.3z"),
-      ];
-    default:
-      return [
-        path("M10.2 1.5h3.6v7.5h-3.6z"),
-        // The grip, then the nib in ink, its breather hole and slit in the icon's colour.
-        path("M9.6 9h4.8v2.4H9.6z"),
-        inkFill(
-          "M12 22.5c-1.9-3.8-3-6.6-3-8.9 0-.9.3-1.6.8-2.2h4.4c.5.6.8 1.3.8 2.2 0 2.3-1.1 5.1-3 8.9z",
-        ),
         {
-          tag: "circle",
-          attrs: { cx: "12", cy: "14.8", r: "0.75", transform: TILT, stroke: "none" },
+          tag: "path",
+          attrs: {
+            d: "M6 17.4C5.5 11 11.2 4.1 20.8 3.1C20.6 5 20 6.7 19.1 8.2L17.2 8.8L18.3 9.4C17.6 10.9 16.6 12.3 15.3 13.5L12.9 13.9L14 14.8C11.7 16.8 8.8 18 6 17.4Z",
+            "stroke-width": "1.65",
+          },
+        },
+        {
+          tag: "path",
+          attrs: {
+            d: "M2.3 22L4.5 17.9C7.9 14.7 12 10.4 16.6 7.3C12.4 11.5 8.8 15.6 5.9 19.2Z",
+            stroke: "none",
+          },
+          ink: true,
           fill: true,
         },
-        { tag: "path", attrs: { d: "M12 16.3v3.8", transform: TILT, "stroke-width": "0.9" } },
+      ];
+    // P1-HIGHLIGHTER-A: Concept #2 barrel + angled chisel live-ink tip
+    case "highlighter":
+      return [
+        path("M9.25 14.6V4.2A1.6 1.6 0 0 1 10.85 2.6H13.15A1.6 1.6 0 0 1 14.75 4.2V14.6z"),
+        { tag: "path", attrs: { d: "M9.25 14.6H14.75", transform: TILT, "stroke-linecap": "butt" } },
+        path("M9.6 14.6h4.8l-.6 2.8h-3.6z"),
+        inkFill("M10 17.4h4v2.6l-4 2.2z"),
+      ];
+    // P1-FOUNTAIN-D: Oversized iconic diamond nib + collar + breather hole & slit
+    default:
+      return [
+        path("M10.1 1.6h3.8v6.6h-3.8z"),
+        path("M9.3 8.2h5.4v2.4H9.3z"),
+        inkFill("M9.3 10.6h5.4l1.2 4.1L12 22.6 8.1 14.7z"),
+        {
+          tag: "circle",
+          attrs: { cx: "12", cy: "14.4", r: "0.85", transform: TILT, stroke: "none" },
+          fill: true,
+        },
+        { tag: "path", attrs: { d: "M12 15.6v4.6", transform: TILT, "stroke-width": "0.95" } },
       ];
   }
 }

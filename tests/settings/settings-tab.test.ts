@@ -848,7 +848,7 @@ describe("which rows show", () => {
     try {
       const row = renderRow(named(rows(makeTab(makePlugin()).tab), "Shortcuts app"));
       expect(row.extras.map((b) => [b.icon, b.tooltip])).toEqual([
-        ["notebook-pen", "Add the New notebook shortcut"],
+        ["finenotes-new-notebook", "Add the New notebook shortcut"],
         ["file-input", "Add the PDF to notebook shortcut"],
       ]);
       for (const button of row.extras) await button.click();

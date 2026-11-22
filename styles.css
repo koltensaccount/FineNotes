@@ -55,16 +55,17 @@ body,
      pill: chips, toasts and segmented controls. Circles use 50%.
      The named ones below are the version's own sizes for one component each.
      A shape inside another takes the outer radius less the gap between. */
+  /* Locked UI1-RAD-12: Unified Crisp corner-radius scale (8 / 12 / 14px) */
   --gob-radius-s: 5px;
-  --gob-radius-m: 10px;
-  --gob-radius-l: 14px;
+  --gob-radius-m: 8px;
+  --gob-radius-l: 12px;
   --gob-radius-pill: 999px;
-  --gob-tool-radius: 10px;
-  --gob-well-radius: 9px;
-  --gob-card-radius: 14px;
-  --gob-pop-radius: 14px;
-  --gob-options-radius: 16px;
-  --gob-dialog-radius: 18px;
+  --gob-tool-radius: 8px;
+  --gob-well-radius: 8px;
+  --gob-card-radius: 12px;
+  --gob-pop-radius: 12px;
+  --gob-options-radius: 12px;
+  --gob-dialog-radius: 14px;
 
   /* Elevation, lowest first. */
   --gob-shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.2); /* a control raised off its track */
@@ -99,11 +100,11 @@ body,
   --gob-icon-size: 22px;
   --gob-icon-stroke: 1.6px;
 
-  /* What is active or selected: the only places the accent appears. */
+  /* Locked UI1-ACT-WELL: Neutral Well + Accent Icon active state (no border) */
   --gob-accent-tint: hsla(var(--interactive-accent-hsl), 0.18);
-  --gob-active-bg: var(--gob-accent-tint);
+  --gob-active-bg: var(--gob-well-strong);
   --gob-active-fg: var(--interactive-accent);
-  --gob-active-press: hsla(var(--interactive-accent-hsl), 0.28);
+  --gob-active-press: var(--gob-well-strong);
   --gob-size-active-bg: var(--gob-well-strong);
   --gob-size-active-ring: inset 0 0 0 1.5px var(--interactive-accent);
   --gob-size-active-fg: var(--text-normal);
@@ -118,9 +119,9 @@ body,
   --gob-pill-pad: 4px;
   --gob-pill-gap: 8px;
 
-  /* Frost, used only inside the @supports blocks that can draw it. */
-  --gob-frost: color-mix(in srgb, var(--background-primary) 78%, transparent);
-  --gob-blur: blur(24px) saturate(1.7);
+  /* Locked UI1-SURF-GLASS: Frosted Glass translucent blur */
+  --gob-frost: color-mix(in srgb, var(--background-primary) 82%, transparent);
+  --gob-blur: blur(18px) saturate(1.5);
 
   /* Motion (GoodNotes, measured). */
   --gob-ease-out: cubic-bezier(0.25, 0.8, 0.3, 1);
@@ -22418,4 +22419,191 @@ button:not(.clickable-icon).goodobsidian-share-all,
   font-size: var(--font-ui-small);
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+
+
+/* ============================================================================
+ * FineNotes Locked Visual Identity Layer (UI Parts 1–7 + Palettes 1–6)
+ *
+ * - UI1-RAD-12: Unified Crisp radii (8px buttons/HUD, 12px popovers/panels, 14px dialogs/windows)
+ * - UI1-SURF-GLASS: Frosted Glass translucent blur across floating chrome, sidebars & modals
+ * - UI1-ACT-WELL: Neutral Well + Accent Icon active states
+ * - P5-SWATCH-FORK & P5-SLIDER-FORK: Guaranteed circular 1:1 swatches & compact centered sliders
+ * - UI2-SELBAR-THEME: Theme-adaptive frosted selection bar & menu
+ * - UI3-SIDE-GLASS & UI3-RIGHT-FLOAT: Floating 12px frosted Page Sidebar, Search & Ask AI panels
+ * - UI4-SETTINGS-TIGHT: Tighter row padding on Settings & Customize sheets
+ * - UI5-HUD-GLASS, UI5-AUDIO-GLASS, UI5-WIN-GLASS: Frosted HUDs, Audio bar & Floating Windows
+ * - UI6-FTAB-SCULPTED & UI6-HOME-GLASS: Seamless single-SVG sloped 12px folder tabs & frosted Home
+ * - UI7-CHROME-UNIFIED, UI7-CANVAS-GLASS, UI7-MODALS-GLASS: Frosted empty-tab pill, on-canvas popups & modals
+ * ========================================================================== */
+
+/* --- P5-SWATCH-FORK: Guaranteed circular 1:1 ink swatches across Obsidian themes --- */
+.goodobsidian-swatch,
+.goodobsidian-color-swatch,
+button.goodobsidian-swatch.clickable-icon,
+button.goodobsidian-color-swatch.clickable-icon,
+.goodobsidian-color-grid button.clickable-icon {
+  border-radius: 50% !important;
+  aspect-ratio: 1 / 1;
+  padding: 0 !important;
+  box-sizing: border-box;
+}
+
+/* --- P5-SLIDER-FORK: Compact centered slider track & thumb --- */
+.goodobsidian-popover input[type="range"],
+.goodobsidian-sheet input[type="range"],
+.goodobsidian-modal input[type="range"] {
+  height: 22px;
+  background: transparent;
+}
+.goodobsidian-popover input[type="range"]::-webkit-slider-runnable-track,
+.goodobsidian-sheet input[type="range"]::-webkit-slider-runnable-track,
+.goodobsidian-modal input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+}
+.goodobsidian-popover input[type="range"]::-webkit-slider-thumb,
+.goodobsidian-sheet input[type="range"]::-webkit-slider-thumb,
+.goodobsidian-modal input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+}
+
+/* --- UI1-SURF-GLASS + UI2-SELBAR-THEME + UI5 + UI6 + UI7: Frosted Glass Surfaces --- */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .goodobsidian-pill,
+  .goodobsidian-popover,
+  .goodobsidian-selection-bar,
+  .goodobsidian-selection-menu,
+  .goodobsidian-empty-lasso-pill,
+  .goodobsidian-hud,
+  .goodobsidian-audio-bar,
+  .goodobsidian-audio-recording,
+  .goodobsidian-floating-window,
+  .goodobsidian-calc-card,
+  .goodobsidian-word-popover,
+  .goodobsidian-pull-add,
+  .goodobsidian-table-bar,
+  .goodobsidian-empty-tab-home,
+  .goodobsidian-library-head,
+  .goodobsidian-library-preview,
+  .goodobsidian-library-continue-card,
+  .goodobsidian-pagesidebar,
+  .goodobsidian-search-panel,
+  .goodobsidian-ask-frame,
+  .goodobsidian-present-bar {
+    background: var(--gob-frost) !important;
+    -webkit-backdrop-filter: var(--gob-blur);
+    backdrop-filter: var(--gob-blur);
+    border: var(--gob-hairline);
+  }
+
+  .modal.goodobsidian-modal,
+  .modal.goodobsidian-ask-modal,
+  .modal.goodobsidian-export-modal,
+  .modal.goodobsidian-new-notebook-modal,
+  .modal.goodobsidian-settings-modal,
+  .modal.goodobsidian-screenshot-modal,
+  .modal.goodobsidian-paper-designer-modal,
+  .modal.goodobsidian-comment-modal,
+  .modal.goodobsidian-welcome-modal,
+  .modal.goodobsidian-tips-modal {
+    background: var(--gob-frost);
+    -webkit-backdrop-filter: var(--gob-blur);
+    backdrop-filter: var(--gob-blur);
+    border-radius: var(--gob-dialog-radius);
+  }
+}
+
+/* --- UI2-SELBAR-THEME: Selection bar matches active Light/Dark theme cleanly --- */
+.goodobsidian-selection-bar,
+.goodobsidian-selection-menu {
+  border-radius: var(--gob-pop-radius);
+  color: var(--text-normal);
+  box-shadow: var(--gob-shadow-float);
+}
+.goodobsidian-selection-bar button.clickable-icon,
+.goodobsidian-selection-menu button.clickable-icon {
+  border-radius: var(--gob-tool-radius);
+  color: var(--text-normal);
+}
+
+/* --- UI3-SIDE-GLASS & UI3-RIGHT-FLOAT: Floating 12px Frosted Page Sidebar & Right Panels --- */
+.goodobsidian-pagesidebar:not(.is-hidden),
+.goodobsidian-search-panel:not(.is-hidden),
+.goodobsidian-ask-frame:not(.is-hidden) {
+  margin: 8px;
+  border-radius: var(--gob-radius-l);
+  box-shadow: var(--gob-shadow-float);
+}
+
+/* --- UI4-SETTINGS-TIGHT: Tighter row padding in Notebook Settings & Customize Toolbar --- */
+.goodobsidian-settings-modal .setting-item,
+.goodobsidian-note-settings .setting-item {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* --- UI5-HUD-GLASS, UI5-AUDIO-GLASS, UI5-WIN-GLASS --- */
+.goodobsidian-hud {
+  border-radius: var(--gob-radius-m);
+}
+.goodobsidian-audio-bar,
+.goodobsidian-audio-recording,
+.goodobsidian-calc-card,
+.goodobsidian-word-popover,
+.goodobsidian-pull-add,
+.goodobsidian-table-bar,
+.goodobsidian-empty-tab-home {
+  border-radius: var(--gob-radius-l);
+  box-shadow: var(--gob-shadow-float);
+}
+.goodobsidian-floating-window {
+  border-radius: var(--gob-dialog-radius);
+  box-shadow: var(--gob-shadow-sheet);
+}
+
+/* --- UI6-HOME-GLASS: Floating 12px Frosted Home Preview Drawer --- */
+.goodobsidian-library-preview {
+  margin: 8px;
+  border-radius: var(--gob-radius-l);
+  box-shadow: var(--gob-shadow-float);
+}
+
+/* --- UI6-FOLDER-OG + UI6-FTAB-SCULPTED: Seamless single-SVG sloped 12px folder tabs --- */
+.goodobsidian-library-folder-back {
+  inset: 0;
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+}
+.goodobsidian-library-folder-back::before {
+  display: none !important;
+  content: none !important;
+}
+.goodobsidian-library-folder-back-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.goodobsidian-library-folder-back-svg path {
+  fill: color-mix(in srgb, var(--gob-folder) 74%, #000);
+}
+.goodobsidian-library-folder-front {
+  height: 75%;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gob-folder) 86%, #fff),
+    var(--gob-folder)
+  );
+  box-shadow:
+    inset 0 1.25px 0 rgba(255, 255, 255, 0.44),
+    0 -2px 6px rgba(0, 0, 0, 0.12),
+    0 10px 16px -6px rgba(0, 0, 0, 0.45);
+}
+.goodobsidian-library-folder-front .svg-icon {
+  stroke-width: var(--gob-icon-stroke);
 }

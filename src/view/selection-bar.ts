@@ -106,7 +106,7 @@ export class SelectionActionBar {
     label: string,
   ) {
     this.el = parent.createDiv({
-      cls: "goodobsidian-selection-bar theme-dark is-hidden",
+      cls: "goodobsidian-selection-bar is-hidden",
       attr: { role: "toolbar", "aria-label": label },
     });
     stopPageInput(this.el);
@@ -352,7 +352,7 @@ export class SelectionActionBar {
     this.panelFor = id;
     const action = this.actions.find((a) => a.id === id);
     this.panelEl = this.parent.createDiv({
-      cls: "goodobsidian-selection-menu goodobsidian-colour-panel theme-dark",
+      cls: "goodobsidian-selection-menu goodobsidian-colour-panel",
       attr: { role: "dialog", "aria-label": action?.label ?? "" },
     });
     stopPageInput(this.panelEl);
@@ -573,7 +573,7 @@ export class SelectionActionBar {
     }
     this.closePanel();
     this.menuEl = this.parent.createDiv({
-      cls: "goodobsidian-selection-menu theme-dark",
+      cls: "goodobsidian-selection-menu",
       attr: { role: "menu" },
     });
     stopPageInput(this.menuEl);

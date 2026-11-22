@@ -18,6 +18,14 @@
  * PURE: no DOM, no Obsidian.
  */
 
+import {
+  FN_ICON_ADD_PAGE,
+  FN_ICON_ERASER,
+  FN_ICON_FILL,
+  FN_ICON_IMPORT_PDF,
+  FN_ICON_MORE_TOOLS,
+  FN_ICON_TAPE,
+} from "./finenotes-icons";
 import { ICON_STYLUS_ONLY } from "../constants";
 import { t } from "../i18n/translate";
 import {
@@ -411,20 +419,20 @@ export const BAR_ITEM_LABELS: Record<CoreItemId, string> = {
 export const BAR_ITEM_ICONS: Record<CoreItemId, string> = {
   select: "lasso",
   pen: "pen-tool",
-  eraser: "eraser",
+  eraser: FN_ICON_ERASER,
   text: "type",
   shape: "shapes",
   pan: "hand",
   zoom: "zoom-in",
   stylus: ICON_STYLUS_ONLY,
   image: "image",
-  pdf: "file-text",
+  pdf: FN_ICON_IMPORT_PDF,
   sticker: "sticker",
   sticky: "sticky-note",
   ruler: "ruler",
-  tape: "bandage",
+  tape: FN_ICON_TAPE,
   record: "mic",
-  fill: "paint-bucket",
+  fill: FN_ICON_FILL,
   calculator: "calculator",
   home: "house",
   thumbnails: "panel-left",
@@ -433,10 +441,10 @@ export const BAR_ITEM_ICONS: Record<CoreItemId, string> = {
   undo: "undo-2",
   redo: "redo-2",
   fullscreen: "maximize-2",
-  addPage: "plus",
+  addPage: FN_ICON_ADD_PAGE,
   share: "share",
   settings: "settings",
-  accessories: "toolbox",
+  accessories: FN_ICON_MORE_TOOLS,
   more: "more-horizontal",
 };
 

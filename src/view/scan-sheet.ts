@@ -23,6 +23,7 @@
  */
 
 import { type App, Modal, Notice, Platform, setIcon } from "obsidian";
+import { FN_ICON_SCAN_DOC } from "./finenotes-icons";
 import {
   type Quad,
   isUsableQuad,
@@ -236,7 +237,7 @@ export class ScanSheet extends Modal {
     this.loupeEl.setCssStyles({ width: `${LOUPE_SIZE}px`, height: `${LOUPE_SIZE}px` });
 
     this.emptyEl = stage.createDiv({ cls: "goodobsidian-scan-empty" });
-    setIcon(this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-icon" }), "scan-line");
+    setIcon(this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-icon" }), FN_ICON_SCAN_DOC);
     this.emptyText = this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-text" });
     const actions = this.emptyEl.createDiv({ cls: "goodobsidian-scan-empty-actions" });
     if (Platform.isMobile) {

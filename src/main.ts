@@ -178,6 +178,11 @@ import {
   parseNudges,
   recordUse,
 } from "./model/nudges";
+import {
+  FN_ICON_IMPORT_PDF,
+  FN_ICON_SCAN_DOC,
+  registerFineNotesIcons,
+} from "./view/finenotes-icons";
 import { InkView } from "./view/ink-view";
 import { starsOf } from "./model/favorites";
 import { SIMPLE_CLASS, simpleClasses } from "./model/simple-mode";
@@ -652,6 +657,7 @@ export default class GoodObsidianPlugin extends Plugin {
       void this.app.workspace.getLeftLeaf(false)?.setViewState({ type: VIEW_TYPE_NOTEBOOKS });
     });
     // FineNotes' own icons, before any button that uses them is made.
+    registerFineNotesIcons(addIcon);
     addIcon(ICON_IMPORT_NOTEBOOK, ICON_IMPORT_NOTEBOOK_SVG);
     addIcon(ICON_LIBRARY, ICON_LIBRARY_SVG);
     addIcon(ICON_STYLUS_ONLY, ICON_STYLUS_ONLY_SVG);
@@ -672,7 +678,7 @@ export default class GoodObsidianPlugin extends Plugin {
     this.register(
       registerImageMenuEntry({
         id: "scan",
-        icon: "scan-line",
+        icon: FN_ICON_SCAN_DOC,
         label: t("notebooks.imageMenu.scan"),
         order: 40,
         // A scan fills its page, and a board's page is metres across (FineNotes#46).
@@ -716,7 +722,7 @@ export default class GoodObsidianPlugin extends Plugin {
         menu.addItem((item) =>
           item
             .setTitle(t("notebooks.menu.importPdfInto"))
-            .setIcon("file-text")
+            .setIcon(FN_ICON_IMPORT_PDF)
             .onClick(() => void view.importVaultPdf(file.path)),
         );
       }),
