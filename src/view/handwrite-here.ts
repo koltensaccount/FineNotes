@@ -17,7 +17,12 @@ import {
 } from "obsidian";
 import type GoodObsidianPlugin from "../main";
 import { emptyDocument } from "../model/document";
-import { BLOCK_PADDING, createBlockPage } from "../model/handwrite-block";
+import {
+  BLOCK_PADDING,
+  createBlockPage,
+  isBlockPage,
+  normalizeBlockWhiteInkToBlack,
+} from "../model/handwrite-block";
 import {
   buildNewDocument,
   cleanTitle,
@@ -280,6 +285,15 @@ export function registerHandwriteHere(
     },
   });
 
+  plugin.addCommand({
+    id: "normalize-handwrite-white-ink",
+    name: "Normalize white ink to black in Handwrite Here blocks",
+    icon: FN_ICON_HANDWRITE_HERE,
+    callback: () => {
+      void normalizeAllHandwriteBlocks(plugin);
+    },
+  });
+
   plugin.registerEvent(
     plugin.app.vault.on("rename", (file, oldPath) => {
       if (!plugin.settings.notebookAssociations) return;
@@ -391,4 +405,53 @@ async function runHandwriteHere(
     offset,
     `\`\`\`finenotes\n${JSON.stringify({ notebook: notebook.path, block: blockId })}\n\`\`\``,
   );
+}
+
+
+async function normalizeAllHandwriteBlocks(plugin: GoodObsidianPlugin): Promise<void> {
+  const app = plugin.app;
+  const notebooks = app.vault.getFiles().filter((f) => /\.notebook\.md$/i.test(f.path));
+  let totalItems = 0;
+  let totalBlocks = 0;
+  let skippedOpen = 0;
+
+  for (const nb of notebooks) {
+    if (notebookIsOpen(app, nb)) {
+      skippedOpen++;
+      continue;
+    }
+    try {
+      const raw = await app.vault.cachedRead(nb);
+      if (!raw.includes("block-")) continue;
+      const parsed = parseInkFile(raw, plugin.settings.paperWidth);
+      if (!parsed.doc) continue;
+      const hasWhite = parsed.doc.pages.some(
+        (p) => isBlockPage(p) && normalizeBlockWhiteInkToBlack(structuredClone(p)) > 0,
+      );
+      if (!hasWhite) continue;
+
+      await editClosedNotebook(app, nb, plugin.settings.paperWidth, (doc) => {
+        for (const page of doc.pages) {
+          if (!isBlockPage(page)) continue;
+          const n = normalizeBlockWhiteInkToBlack(page);
+          if (n > 0) {
+            totalItems += n;
+            totalBlocks++;
+          }
+        }
+      });
+    } catch {
+      // Skip unreadable notebooks
+    }
+  }
+
+  const skippedNote = skippedOpen > 0 ? ` (${skippedOpen} open notebook(s) skipped)` : "";
+  if (totalItems === 0) {
+    new Notice(`FineNotes: no white ink found in Handwrite Here blocks.${skippedNote}`);
+  } else {
+    new Notice(
+      `FineNotes: converted ${totalItems} white-ink item(s) to black across ${totalBlocks} Handwrite Here block(s).${skippedNote}`,
+      7000,
+    );
+  }
 }

@@ -481,7 +481,7 @@ export class HandwriteEmbedManager {
 
       const editBtn = containerEl.createEl("button", {
         cls: "clickable-icon finenotes-embed-edit-pill",
-        attr: { "aria-label": "Write inline", title: "Tap to write inline" },
+        attr: { "aria-label": "Write inline" },
       });
       setIcon(editBtn, "pencil");
       editBtn.createSpan({ text: "Write" });

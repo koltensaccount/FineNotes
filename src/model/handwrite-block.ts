@@ -7,6 +7,7 @@ import {
   clipCurrentBounds,
   strokeBounds,
 } from "./document";
+import { parseHexColor } from "./colors";
 
 export const INITIAL_BLOCK_HEIGHT = 360;
 export const BLOCK_PADDING = 40;
@@ -182,4 +183,58 @@ export function findBlockInDocument(
     if (found) return { page, pageIndex: i, clip: found };
   }
   return null;
+}
+
+function isNearWhiteNeutral(color: string): boolean {
+  const s = color.trim().toLowerCase();
+  if (s === "white") return true;
+  const hex = parseHexColor(s);
+  if (hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return Math.min(r, g, b) >= 210 && Math.max(r, g, b) - Math.min(r, g, b) <= 35;
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*[,\s]\s*([\d.]+)/.exec(s);
+  if (rgb) {
+    const r = Number(rgb[1]);
+    const g = Number(rgb[2]);
+    const b = Number(rgb[3]);
+    return Math.min(r, g, b) >= 210 && Math.max(r, g, b) - Math.min(r, g, b) <= 35;
+  }
+  return false;
+}
+
+/**
+ * Converts accidental near-white neutral ink (`#ffffff`, etc.) to canonical
+ * black (`#1a1a1a`) inside a dedicated Handwrite Here block page ONLY.
+ * Plain notebook pages are never touched.
+ *
+ * Canonical black renders as black in Light mode and automatically inverts to
+ * crisp white in Dark mode (both in previews and in the active Dark editor).
+ */
+export function normalizeBlockWhiteInkToBlack(page: Page): number {
+  if (!isBlockPage(page)) return 0;
+  let changed = 0;
+  for (const stroke of page.strokes) {
+    if (stroke.tool === "highlighter" || stroke.onSticky) continue;
+    if (isNearWhiteNeutral(stroke.color)) {
+      stroke.color = "#1a1a1a";
+      changed++;
+    }
+  }
+  for (const box of page.textBoxes) {
+    if (box.onSticky || box.onShape) continue;
+    if (isNearWhiteNeutral(box.color)) {
+      box.color = "#1a1a1a";
+      changed++;
+    }
+  }
+  for (const eq of page.equations ?? []) {
+    if (isNearWhiteNeutral(eq.color)) {
+      eq.color = "#1a1a1a";
+      changed++;
+    }
+  }
+  return changed;
 }

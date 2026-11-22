@@ -10,6 +10,7 @@ import {
   contentBoundsOnPage,
   expandBlockPageIfNeeded,
   fitBlockPageHeight,
+  normalizeBlockWhiteInkToBlack,
 } from "../model/handwrite-block";
 import { dedicatedInkPage, mergeInlineInk } from "../model/inline-ink-merge";
 import { buildInkFile, parseInkFile } from "../model/serialize";
@@ -167,6 +168,10 @@ export class InlineHandwriteSession {
       const dedicated = page.id === blockId && page.clips?.length === 1 &&
         page.clips[0].id === blockId && page.clips[0].isExpandable === true;
       this.base = structuredClone(page);
+      if (dedicated && normalizeBlockWhiteInkToBlack(page) > 0) {
+        this.revision++;
+        this.scheduleSave();
+      }
       this.doc = {
         version: parsed.doc.version,
         view: { scrollY: 0, width: page.geometry.width, scale: 1 },
@@ -297,7 +302,7 @@ export class InlineHandwriteSession {
 
         const guidesBtn = endGroup.createEl("button", {
           cls: "clickable-icon finenotes-inline-guides",
-          attr: { "aria-label": "Writing guides", title: "Writing guides (Lines, Grid, Dots)" },
+          attr: { "aria-label": "Writing guides" },
         });
         setIcon(guidesBtn, FN_ICON_WRITING_GUIDES);
         let guidePopover: WritingGuidePopover | null = null;
@@ -389,7 +394,6 @@ export class InlineHandwriteSession {
             setIcon(widthBtn, widthLocked ? "lock" : "lock-open");
             widthBtn.setAttribute("aria-pressed", String(widthLocked));
             widthBtn.setAttribute("aria-label", label);
-            widthBtn.title = label;
           };
           syncWidthButton();
           widthBtn.addEventListener("click", () => {
@@ -402,7 +406,7 @@ export class InlineHandwriteSession {
 
         const openBtn = endGroup.createEl("button", {
           cls: "clickable-icon finenotes-inline-open",
-          attr: { "aria-label": "Open full notebook", title: "Open in full notebook" },
+          attr: { "aria-label": "Open in full notebook" },
         });
         setIcon(openBtn, "external-link");
         openBtn.addEventListener("click", (e) => {
@@ -420,7 +424,7 @@ export class InlineHandwriteSession {
 
         const doneBtn = endGroup.createEl("button", {
           cls: "clickable-icon finenotes-inline-done",
-          attr: { "aria-label": "Done writing", title: "Done writing (Esc)" },
+          attr: { "aria-label": "Done writing (Esc)" },
         });
         setIcon(doneBtn, "check");
         doneBtn.addEventListener("click", (e) => {

@@ -7,6 +7,7 @@ import {
   findBlockInDocument,
   fitBlockPageHeight,
   isBlockPage,
+  normalizeBlockWhiteInkToBlack,
 } from "../../src/model/handwrite-block";
 import { dedicatedInkPage, mergeInlineInk } from "../../src/model/inline-ink-merge";
 import { buildInkFile, parseInkFile } from "../../src/model/serialize";
@@ -58,5 +59,30 @@ describe("Handwrite Here backward compatibility & serialization", () => {
 
     mergeInlineInk(base, local, latest);
     expect(latest.geometry.height).toBe(INITIAL_BLOCK_HEIGHT);
+  });
+
+  it("normalizes accidental white ink to black ONLY in Handwrite Here block pages", () => {
+    const doc = emptyDocument();
+    const { page: blockPage } = createBlockPage(doc, "block-ink-1", 800, 360);
+    blockPage.strokes.push(
+      { id: "s1", tool: "pen", color: "#ffffff", size: 3, pts: [10, 10, 0.5, 20, 20, 0.5] },
+      { id: "s2", tool: "pen", color: "#e03131", size: 3, pts: [10, 30, 0.5, 20, 40, 0.5] },
+    );
+    const plainPage = doc.pages[0];
+    plainPage.strokes.push({
+      id: "p1",
+      tool: "pen",
+      color: "#ffffff",
+      size: 3,
+      pts: [10, 10, 0.5, 20, 20, 0.5],
+    });
+
+    expect(normalizeBlockWhiteInkToBlack(blockPage)).toBe(1);
+    expect(blockPage.strokes[0].color).toBe("#1a1a1a");
+    expect(blockPage.strokes[1].color).toBe("#e03131");
+
+    // Plain notebook pages are NEVER touched
+    expect(normalizeBlockWhiteInkToBlack(plainPage)).toBe(0);
+    expect(plainPage.strokes[0].color).toBe("#ffffff");
   });
 });
