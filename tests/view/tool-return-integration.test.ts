@@ -349,44 +349,25 @@ describe("secondary tool integration", () => {
       buildOptions: vi.fn(),
       syncActive: vi.fn(),
     });
-    // Tuck the pen's options away, pick the eraser: its options show.
+    // Without return-to-pen, sub-menu open/closed state stays consistent across tool switches:
+    bar.callbacks.returnToPenOnReselect = () => false;
+    // Closed -> tap another tool -> stays closed (requires second tap to open).
     run(bar, "tapTool", "pen", {});
     expect(bar.optionsVisible).toBe(false);
     run(bar, "tapTool", "eraser", {});
-    expect(bar.optionsVisible).toBe(true);
-    // Back to the pen after one use: the surface changes the shared state first.
-    state.tool = "pen";
-    run(bar, "setState", state);
     expect(bar.optionsVisible).toBe(false);
-    // The highlighter is a pen type, so it shares the pen's memory.
-    run(bar, "tapTool", "eraser", {});
-    state.tool = "highlighter";
-    run(bar, "setState", state);
-    expect(bar.optionsVisible).toBe(false);
-    // Shown again, the pen's options still start tucked the next time it is picked.
-    run(bar, "tapTool", "highlighter", {});
-    expect(bar.optionsVisible).toBe(true);
-    run(bar, "tapTool", "shape", {});
-    state.tool = "pen";
-    run(bar, "setState", state);
-    expect(bar.optionsVisible).toBe(false);
-    // Without the return, first tap selects and second tap opens: a switch
-    // never opens a pill, though one showing stays for the next tool.
-    bar.callbacks.returnToPenOnReselect = () => false;
-    run(bar, "tapTool", "eraser", {});
-    expect(bar.optionsVisible).toBe(false);
+    // Second tap on active tool opens its sub-menu.
     run(bar, "tapTool", "eraser", {});
     expect(bar.optionsVisible).toBe(true);
+    // Open -> tap another tool -> stays open and switches directly to the new tool's sub-menu.
     run(bar, "tapTool", "shape", {});
     expect(bar.optionsVisible).toBe(true);
-    // The eraser left showing comes back showing; tucked away, it comes back tucked.
-    run(bar, "tapTool", "eraser", {});
+    run(bar, "tapTool", "pen", {});
     expect(bar.optionsVisible).toBe(true);
-    run(bar, "tapTool", "eraser", {});
-    run(bar, "tapTool", "shape", {});
+    // Second tap closes it; switching away stays closed.
+    run(bar, "tapTool", "pen", {});
     expect(bar.optionsVisible).toBe(false);
     run(bar, "tapTool", "shape", {});
-    run(bar, "tapTool", "eraser", {});
     expect(bar.optionsVisible).toBe(false);
   });
   it("tucks the pen's options as a second tap would, when a stroke starts", () => {
@@ -396,11 +377,10 @@ describe("secondary tool integration", () => {
       state,
       drawingTool: "pen",
       optionsVisible: true,
-      tuckedTools: new Set(),
       optionsTool: "pen",
       // Not docked as a row (pill-row-model.ts): a docked pill never tucks.
       row: NO_PILL_ROW,
-      callbacks: { returnToPenOnReselect: () => true, onToolChange: vi.fn() },
+      callbacks: { returnToPenOnReselect: () => false, onToolChange: vi.fn() },
       closePopover: vi.fn(),
       showOptions,
       buildOptions: vi.fn(),
@@ -415,9 +395,10 @@ describe("secondary tool integration", () => {
     // A tap on the pen brings them back.
     run(bar, "tapTool", "pen", {});
     expect(bar.optionsVisible).toBe(true);
-    // Left tucked by a stroke, the pen comes back tucked after the eraser.
+    // Left tucked by a stroke, switching tools keeps options closed.
     run(bar, "tuckOptions");
     run(bar, "tapTool", "eraser", {});
+    expect(bar.optionsVisible).toBe(false);
     state.tool = "pen";
     run(bar, "setState", state);
     expect(bar.optionsVisible).toBe(false);

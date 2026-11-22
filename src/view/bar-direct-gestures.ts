@@ -195,7 +195,12 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
     }
 
     const siblings = (Array.from(targetZone.children) as HTMLElement[]).filter(
-      (el) => el !== btn && el.tagName === "BUTTON" && el.hasAttribute("data-item") && !el.hasClass("is-overflowed"),
+      (el) =>
+        el !== btn &&
+        el.tagName === "BUTTON" &&
+        el.hasAttribute("data-item") &&
+        !el.hasClass("is-overflowed") &&
+        !el.hasClass("is-unlisted"),
     );
 
     let before: HTMLElement | null = null;
@@ -221,12 +226,18 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
     if (!ctx.onCommitLayout) return;
     const prev = ctx.layout();
     const zones = ctx.zones();
+    // Only buttons currently placed on the bar belong in start/middle/end;
+    // hidden (`off`) and More-tools (`is-unlisted`) buttons stay in the DOM
+    // hidden via CSS and must NEVER be swept onto the bar.
+    const onBar = new Set<BarItemId>([...prev.start, ...prev.middle, ...prev.end]);
     const readZone = (el: HTMLElement | undefined): BarItemId[] => {
       if (!el) return [];
       const out: BarItemId[] = [];
       for (const child of Array.from(el.children)) {
-        const id = (child as HTMLElement).getAttribute("data-item") as BarItemId | null;
-        if (id && !out.includes(id)) out.push(id);
+        const html = child as HTMLElement;
+        if (html.hasClass("is-unlisted")) continue;
+        const id = html.getAttribute("data-item") as BarItemId | null;
+        if (id && onBar.has(id) && !out.includes(id)) out.push(id);
       }
       return out;
     };

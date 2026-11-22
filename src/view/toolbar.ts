@@ -1369,8 +1369,6 @@ export class Toolbar {
   private optionsVisible: boolean;
   /** The tool's pill was showing when Customize toolbar opened: it comes back when that closes. */
   private optionsBeforeCustomize = false;
-  /** Tools whose options were tucked away when they were left: they come back tucked. */
-  private readonly tuckedTools = new Set<ActiveTool>();
   /** A stroke tucked the options away ({@link tuckOptions}), not a tap: they may come back. */
   private tuckedByStroke = false;
   /**
@@ -3021,7 +3019,6 @@ export class Toolbar {
         this.handButton = "main";
         this.closePopover();
         this.tuckedByStroke = false;
-        this.optionsVisible = true;
         this.applySavedPen(own);
         return;
       }
@@ -3096,12 +3093,9 @@ export class Toolbar {
   private leaveToolFor(next: ActiveTool): void {
     if (optionsKey(next) === optionsKey(this.optionsTool)) return;
     this.tuckedByStroke = false;
-    if (this.optionsVisible) this.tuckedTools.delete(optionsKey(this.optionsTool));
-    else this.tuckedTools.add(optionsKey(this.optionsTool));
-    const remembered = !this.tuckedTools.has(optionsKey(next)) && !this.startsTucked(next);
     this.optionsVisible = optionsAfterSwitch(
       this.optionsVisible,
-      remembered,
+      true,
       this.callbacks.returnToPenOnReselect?.() === true,
     );
     this.optionsTool = next;
