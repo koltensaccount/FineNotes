@@ -108,7 +108,11 @@ export class InlineHandwriteSession {
         return;
       }
     }
-    if (this.closed || !containerEl.isConnected) return;
+    if (this.closed) return;
+    if (!containerEl.isConnected) {
+      await new Promise<void>((r) => window.requestAnimationFrame(() => r()));
+      if (this.closed) return;
+    }
     activeInlineSession = this;
 
     try {
@@ -116,7 +120,7 @@ export class InlineHandwriteSession {
         throw new Error("Close the full notebook editor before writing inline.");
       }
       const content = await app.vault.read(notebookFile);
-      if (this.closed || !containerEl.isConnected) {
+      if (this.closed) {
         await this.close();
         return;
       }
@@ -143,7 +147,7 @@ export class InlineHandwriteSession {
       };
 
       containerEl.empty();
-      containerEl.addClass("finenotes-inline-active", "goodobsidian-view");
+      containerEl.addClass("finenotes-inline-active");
 
       const barHost = containerEl.createDiv({ cls: "finenotes-inline-toolbar-host" });
       const canvasHost = containerEl.createDiv({ cls: "finenotes-inline-canvas-host" });
@@ -311,7 +315,7 @@ export class InlineHandwriteSession {
       this.toolbar?.destroy();
       this.toolbar = null;
       if (activeInlineSession === this) activeInlineSession = null;
-      this.options.containerEl.removeClass("finenotes-inline-active", "goodobsidian-view");
+      this.options.containerEl.removeClass("finenotes-inline-active");
       this.options.onClosed?.();
       return true;
     })();

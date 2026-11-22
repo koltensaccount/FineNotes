@@ -174,7 +174,6 @@ export class HandwriteEmbedManager {
     blockId: string,
     onEdit: () => void,
   ): Promise<void> {
-    if (!containerEl.isConnected) return;
     if (getActiveInlineSession()?.hostContainer === containerEl) return;
 
     try {
@@ -291,10 +290,14 @@ class HandwriteBlockChild extends MarkdownRenderChild {
 
     this.untrack = this.manager.trackCard(render);
 
-    if (this.manager.consumePendingActivation(file.path, this.blockId)) {
-      startEdit();
+    // Obsidian runs MarkdownCodeBlockProcessor before attaching containerEl to the live DOM.
+    // Defer activation by one frame so containerEl is connected and has real layout width.
+    const shouldActivate = this.manager.consumePendingActivation(file.path, this.blockId);
+    if (shouldActivate) {
+      this.containerEl.addClass("finenotes-embed-card");
+      window.requestAnimationFrame(() => startEdit());
     } else {
-      render();
+      window.requestAnimationFrame(() => render());
     }
   }
 

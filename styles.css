@@ -22827,9 +22827,39 @@ button.goodobsidian-color-swatch.clickable-icon,
 .finenotes-inline-canvas-host {
   position: relative;
   width: 100%;
-  min-height: 240px;
+  min-height: 280px;
+  height: 360px;
   overflow: hidden;
   border-radius: 0 0 var(--gob-radius-l) var(--gob-radius-l);
+}
+.finenotes-inline-canvas-host .goodobsidian-surface {
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Pen Options Pill: normalize all 5 pen sizes & remove boxes around unselected pens --- */
+.goodobsidian-pen-types button.goodobsidian-pentype {
+  width: var(--gob-touch-compact);
+  min-width: var(--gob-touch-compact);
+  height: var(--gob-touch-compact);
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--gob-tool-radius);
+}
+.goodobsidian-pen-types button.goodobsidian-pentype:hover:not(.is-active) {
+  background: var(--gob-well);
+}
+.goodobsidian-pen-types button.goodobsidian-pentype.is-active {
+  border: none;
+  background: var(--gob-size-active-bg);
+  box-shadow: none;
+  color: var(--gob-active-fg);
+}
+.goodobsidian-pen-types button.goodobsidian-pentype svg {
+  width: var(--gob-icon-size);
+  height: var(--gob-icon-size);
 }
 .finenotes-notebook-suggest-item {
   display: flex;
