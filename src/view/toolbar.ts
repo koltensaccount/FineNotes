@@ -416,6 +416,8 @@ export interface ToolbarCallbacks {
   onMore?: (anchor: HTMLElement) => void;
   onWritingGuides?: (anchor: HTMLElement) => void;
   writingGuidesEnabled?: () => boolean;
+  onWritingGuideSnapToggle?: () => void;
+  writingGuideSnapEnabled?: () => boolean;
   // --- The Text tool (0.5).
   /** A text control changed: apply `patch` to the box being edited, if there is one. */
   onTextStyle?: (patch: TextStylePatch) => void;
@@ -1490,8 +1492,18 @@ export class Toolbar {
       const guides = this.optionsEl.createEl("button", { cls: "goodobsidian-shape goodobsidian-writing-guide-anchor clickable-icon" });
       iconOrText(guides, "notebook-pen", "Guides");
       guides.addEventListener("click", () => this.callbacks.onWritingGuides?.(guides));
+      this.appendWritingGuideSnapButton();
       this.syncWritingGuides();
     }
+  }
+
+  private appendWritingGuideSnapButton(): void {
+    if (!this.callbacks.onWritingGuideSnapToggle) return;
+    const snap = this.optionsEl.createEl("button", {
+      cls: "goodobsidian-shape goodobsidian-writing-guide-snap clickable-icon",
+    });
+    iconOrText(snap, "magnet", "Snap");
+    snap.addEventListener("click", () => this.callbacks.onWritingGuideSnapToggle?.());
   }
 
   syncWritingGuides(): void {
@@ -1502,6 +1514,18 @@ export class Toolbar {
       button.setAttribute("title", `${label} — customize lines, grid or dots`);
       button.setAttribute("aria-pressed", String(on));
       button.toggleClass("is-active", on);
+    }
+    const snapOn = this.callbacks.writingGuideSnapEnabled?.() === true;
+    for (const button of this.optionsEl.querySelectorAll<HTMLElement>(".goodobsidian-writing-guide-snap")) {
+      const label = `Snap to writing guides: ${snapOn ? "on" : "off"}`;
+      const title = on
+        ? `${label} — snap image edges to ruled guides`
+        : `${label} — turn on ruled writing guides to snap images`;
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", title);
+      button.setAttribute("aria-pressed", String(snapOn));
+      button.toggleClass("is-active", snapOn && on);
+      button.toggleClass("is-armed-hidden", snapOn && !on);
     }
   }
 
@@ -1917,6 +1941,10 @@ export class Toolbar {
       this.barButton(this.optionsEl, "settings-2", "Lasso options", (button) =>
         this.toggleLassoPopover(button),
       );
+    if (this.callbacks.onWritingGuideSnapToggle) {
+      this.appendWritingGuideSnapButton();
+      this.syncWritingGuides();
+    }
   }
 
   /**

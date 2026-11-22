@@ -8,6 +8,12 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Beta 107 — Image snapping to ruled writing guides
+
+- Snap an image's top or bottom edge vertically to visible ruled writing guides while dragging in the full notebook, keeping horizontal movement free.
+- Highlight the caught guide line during the drag and clear it when pulling away, releasing, or canceling.
+- Add a quick Snap toggle beside Writing Guides (and in the Lasso options bar) so you can turn snapping off while keeping guides visible.
+
 ### Beta 106 — Inline clipboard and sharper previews
 
 - Keep cached sharp handwriting previews when switching to Editing View.

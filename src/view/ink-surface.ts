@@ -4,7 +4,8 @@ import { penDynamicsProfile } from "../model/pen-dynamics";
 import { connectRecognizedLine } from "../ink/line-connection";
 import type { PdfRegion } from "./pdf-region-copy";
 import { renderSelectionToPng, copySelectionToSystemClipboard } from "./selection-clipboard";
-import { guidesEligible, writingGuidesOf } from "../model/writing-guides";
+import { guidesEligible, writingGuidesOf, type WritingGuideStyle } from "../model/writing-guides";
+import { IMAGE_GUIDE_SNAP_PX, snapBoundsToRuledGuides } from "../canvas/guide-snap";
 import { adjustHeldShape, alignNewShape, scaledStrokeSize, shapeFrame, localPoint, worldPoint, resizeShape, scaleShape, editEndpoint, independentlyResizable, type ShapeFrame, type ShapeHandle } from "../ink/shape-edit";
 import { highlighterWetRuns } from "../ink/highlighter";
 import { constrainShape } from "../ink/shape-constraint";
@@ -1629,6 +1630,8 @@ export class InkSurface {
 
   destroy(): void {
     this.clipHighlightEl?.remove();
+    this.guideSnapEl?.remove();
+    this.guideSnapEl = null;
     if (this.handwritingGuideFrame) window.cancelAnimationFrame(this.handwritingGuideFrame);
     for (const el of this.handwritingGuideEls?.values() ?? []) el.remove();
     this.handwritingGuideEls?.clear();
@@ -1858,11 +1861,21 @@ export class InkSurface {
   // --- What the host can ask for -----------------------------------------------
 
   /** Switch this notebook's paper between white (default) and dark. */
-  private pendingWritingGuides: { style: ReturnType<typeof writingGuidesOf> | null } | null = null;
+  private pendingWritingGuides: { style: WritingGuideStyle | null } | null = null;
+  private activeWritingGuides: WritingGuideStyle | null = null;
+  private imageGuideSnapEnabled = false;
+  private guideSnapEl: HTMLElement | null = null;
   /** Coalesced with the existing paint frame, with no notebook/history callback. */
   setWritingGuides(enabled: boolean, raw: unknown): void {
-    this.pendingWritingGuides = { style: enabled ? writingGuidesOf(raw) : null };
+    const style = enabled ? writingGuidesOf(raw) : null;
+    this.activeWritingGuides = style;
+    this.pendingWritingGuides = { style };
+    if (!style || style.style !== "lines") this.showGuideSnap(null, null);
     this.requestFrame();
+  }
+  setImageGuideSnap(enabled: boolean): void {
+    this.imageGuideSnapEnabled = enabled;
+    if (!enabled) this.showGuideSnap(null, null);
   }
   writingGuideContext(): { eligible: boolean; paper: string; scale: number } {
     const page = this.doc.pages[this.pageIndex];
@@ -7972,10 +7985,52 @@ export class InkSurface {
     return before.x !== after.x || before.y !== after.y;
   }
 
+  private showGuideSnap(box: PageBox | null, guideY: number | null): void {
+    if (!box || guideY === null) {
+      this.guideSnapEl?.addClass("is-hidden");
+      return;
+    }
+    let el = this.guideSnapEl;
+    if (!el) {
+      el = this.paperEl.createDiv({
+        cls: "goodobsidian-guide-snap-line is-hidden",
+        attr: { "aria-hidden": "true" },
+      });
+      this.guideSnapEl = el;
+    }
+    const scale = this.unitScale;
+    el.setCssStyles({
+      left: `${box.x * scale}px`,
+      top: `${(box.y + guideY) * scale}px`,
+      width: `${box.width * scale}px`,
+    });
+    el.removeClass("is-hidden");
+  }
+
   private moveImageBody(drag: ImageDrag, source: PageBox, p: Pt): void {
     const target = this.dragTargetBox(source, p, drag.targetPageId);
     drag.targetPageId = target.id;
-    drag.draft = moveImage(drag.start, p.x + source.x-target.x-drag.from.x, p.y+source.y-target.y-drag.from.y, target);
+    let draft = moveImage(drag.start, p.x + source.x-target.x-drag.from.x, p.y+source.y-target.y-drag.from.y, target);
+    let snapY: number | null = null;
+    if (this.imageGuideSnapEnabled && this.activeWritingGuides) {
+      const page = this.doc.pages.find((candidate) => candidate.id === target.id);
+      if (page) {
+        const dpr = Math.min(2, this.paperEl.ownerDocument.defaultView?.devicePixelRatio || 1);
+        const snap = snapBoundsToRuledGuides(
+          imageBounds(draft),
+          page,
+          this.activeWritingGuides,
+          IMAGE_GUIDE_SNAP_PX / Math.max(0.01, this.unitScale),
+          this.unitScale * dpr,
+        );
+        if (snap.guideY !== null) {
+          draft = { ...draft, y: draft.y + snap.dy };
+          snapY = snap.guideY;
+        }
+      }
+    }
+    drag.draft = draft;
+    this.showGuideSnap(target, snapY);
   }
 
   /** Keep the last page through gutters; only body moves may choose a new destination. */
@@ -8136,6 +8191,7 @@ export class InkSurface {
    */
   private endImageDrag(commit: boolean): void {
     const drag = this.imageDrag;
+    this.showGuideSnap(null, null);
     if (!drag) return;
     this.imageDrag = null;
     this.selectionDragPointer = null; this.selectionScrollAt = 0;

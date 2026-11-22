@@ -2,17 +2,22 @@
 import type { Bounds, Page } from "../model/document";
 import { guideColor, guidesEligible, type WritingGuideStyle } from "../model/writing-guides";
 
-export function paintWritingGuides(ctx: CanvasRenderingContext2D, page: Page, region: Bounds, style: WritingGuideStyle | null, paper: string, screenScale: number, rasterScale: number): number {
-  if (!style || !guidesEligible(page) || !(screenScale > 0) || !(rasterScale > 0)) return 0;
-  const { width, height } = page.geometry;
-  const left = Math.max(0, region.minX), top = Math.max(0, region.minY), right = Math.min(width, region.maxX), bottom = Math.min(height, region.maxY);
-  if (!(right > left) || !(bottom > top)) return 0;
+/** Effective page-space pitch between rendered guides at `rasterScale`. */
+export function writingGuidePitch(style: WritingGuideStyle, rasterScale: number): number {
   // At tiny preview resolutions, omit intermediate guides rather than build
   // thousands of indistinguishable marks. Every retained mark stays at a
   // multiple of the original page-space pitch, across all tiles.
   const minPitch = style.style === "dots" ? 8 : 2;
   const stride = 2 ** Math.max(0, Math.ceil(Math.log2(minPitch / (style.spacing * rasterScale))));
-  const pitch = style.spacing * stride;
+  return style.spacing * stride;
+}
+
+export function paintWritingGuides(ctx: CanvasRenderingContext2D, page: Page, region: Bounds, style: WritingGuideStyle | null, paper: string, screenScale: number, rasterScale: number): number {
+  if (!style || !guidesEligible(page) || !(screenScale > 0) || !(rasterScale > 0)) return 0;
+  const { width, height } = page.geometry;
+  const left = Math.max(0, region.minX), top = Math.max(0, region.minY), right = Math.min(width, region.maxX), bottom = Math.min(height, region.maxY);
+  if (!(right > left) || !(bottom > top)) return 0;
+  const pitch = writingGuidePitch(style, rasterScale);
   const weight = style.thickness / screenScale;
   const pad = weight / 2;
   const firstX = Math.max(0, Math.ceil((left - pad) / pitch) * pitch), firstY = Math.max(0, Math.ceil((top - pad) / pitch) * pitch);

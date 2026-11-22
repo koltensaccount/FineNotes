@@ -277,6 +277,7 @@ export class InkView extends TextFileView {
   /** The ⋯ panel, while open. */
   private morePanel: MorePanel | null = null;
   private guidesEnabled = false;
+  private guideSnapEnabled = true;
   private guidePopover: WritingGuidePopover | null = null;
   private readonly guideSubscribers = new Set<() => void>();
   private guideContextKey = "";
@@ -1167,6 +1168,8 @@ export class InkView extends TextFileView {
         onMore: (anchor) => this.toggleMorePanel(anchor),
         onWritingGuides: (anchor) => this.toggleGuidePopover(anchor),
         writingGuidesEnabled: () => this.guidesEnabled,
+        onWritingGuideSnapToggle: () => this.setGuideSnapEnabled(!this.guideSnapEnabled),
+        writingGuideSnapEnabled: () => this.guideSnapEnabled,
         onToolbarLayoutChange: (order, hidden) => {
           this.settings.toolbarToolOrder = order;
           this.settings.hiddenToolbarTools = hidden;
@@ -1330,6 +1333,7 @@ export class InkView extends TextFileView {
       },
     );
     this.surface.setWritingGuides(this.guidesEnabled, this.settings.writingGuides);
+    this.surface.setImageGuideSnap(this.guideSnapEnabled);
     this.surface.setBackdropPainter(this.backdrops);
     // Audio (0.5). Strokes are stamped on the recorder's clock, so ink and
     // audio share one timeline even if the wall clock jumps mid-recording.
@@ -2601,6 +2605,11 @@ export class InkView extends TextFileView {
     this.toolbar?.syncWritingGuides();
     this.surface?.setWritingGuides(enabled, this.settings.writingGuides);
     for (const changed of this.guideSubscribers) changed();
+  }
+  private setGuideSnapEnabled(enabled: boolean): void {
+    this.guideSnapEnabled = enabled;
+    this.toolbar?.syncWritingGuides();
+    this.surface?.setImageGuideSnap(enabled);
   }
   private writingGuideHost(): WritingGuideHost {
     return {

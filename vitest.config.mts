@@ -30,6 +30,7 @@ export default defineConfig({
         "src/canvas/scroll-thumb.ts",
         "src/canvas/tile-grid.ts",
         "src/canvas/image-geometry.ts",
+        "src/canvas/guide-snap.ts",
         "src/canvas/image-crop.ts",
         "src/canvas/image-raster.ts",
         "src/canvas/pdf-raster.ts",

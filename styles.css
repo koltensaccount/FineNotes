@@ -6601,6 +6601,25 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
 .goodobsidian-guide-details summary { min-height: 44px; padding: 12px; cursor: pointer; font-weight: 500; }
 .goodobsidian-writing-guides .goodobsidian-color-mixer { background: var(--background-primary); }
 
+.goodobsidian-writing-guide-snap.is-armed-hidden {
+  opacity: 0.65;
+}
+
+.goodobsidian-guide-snap-line {
+  position: absolute;
+  height: 2px;
+  transform: translateY(-50%);
+  background: var(--interactive-accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0.95;
+  transition: opacity 90ms ease;
+}
+.goodobsidian-guide-snap-line.is-hidden {
+  display: none;
+}
+
 /* Obsidian/theme range rules can otherwise shrink these controls to their
    default slider width. Give adjustment tracks the editor's entire width. */
 .goodobsidian-thickness-editor .goodobsidian-thickness-slider,
