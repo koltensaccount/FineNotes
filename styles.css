@@ -14461,7 +14461,7 @@ button.clickable-icon.goodobsidian-calc-chip.is-hidden,
 .gob-m-frac {
   display: inline-flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   margin: 0 0.15em;
   font-size: 0.86em;
   line-height: 1.15;
@@ -14469,16 +14469,18 @@ button.clickable-icon.goodobsidian-calc-chip.is-hidden,
 }
 
 .gob-m-numer {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  padding: 0 0.2em 0.05em;
+  justify-content: center;
+  padding: 0 0.2em 0.08em;
   border-bottom: 1.5px solid currentColor;
 }
 
 .gob-m-denom {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  padding: 0.05em 0.2em 0;
+  justify-content: center;
+  padding: 0.08em 0.2em 0;
 }
 
 .gob-m-pow {
