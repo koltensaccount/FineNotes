@@ -1,4 +1,6 @@
 import { bindScrollThumb } from "./scroll-thumb-drag";
+import { paintWritingGuides } from "../canvas/writing-guides";
+import type { WritingGuideStyle } from "../model/writing-guides";
 import { type PdfRenderArea, boundsMeet } from "../canvas/pdf-raster";
 import {
   ALIGN_GUIDE_OVERSHOOT_PX,
@@ -4120,6 +4122,25 @@ export class InkSurface {
     this.syncTextBoxes();
     this.syncInkCursor();
     this.requestFrame();
+  }
+
+  private writingGuides: WritingGuideStyle | null = null;
+
+  setWritingGuides(enabled: boolean, style: WritingGuideStyle): void {
+    this.writingGuides = enabled ? style : null;
+    if (!this.renderer) return;
+    this.renderer.writingGuides = this.writingGuides;
+    this.renderer.invalidateAll();
+    this.requestFrame();
+  }
+
+  writingGuideContext(): { eligible: boolean; paper: string; scale: number } {
+    const page = this.doc.pages[this.currentPage] ?? this.doc.pages[0];
+    return {
+      eligible: Boolean(page && page.geometry.width > 0 && page.geometry.height > 0),
+      paper: page ? paperColorOf(page, this.paper) : this.paper.paper,
+      scale: this.renderer?.deviceScale ? this.renderer.deviceScale / (window.devicePixelRatio || 1) : 1,
+    };
   }
 
   get paperTheme(): PaperTheme {
@@ -8282,6 +8303,17 @@ export class InkSurface {
         region,
         paper: this.paper,
       });
+    }
+    if (this.writingGuides) {
+      paintWritingGuides(
+        ctx,
+        page,
+        region,
+        this.writingGuides,
+        paperColorOf(page, this.paper),
+        scale || 1,
+        s,
+      );
     }
     ctx.restore();
     return true;

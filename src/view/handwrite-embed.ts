@@ -10,6 +10,8 @@ import { type App, MarkdownRenderChild, Notice, TFile, setIcon } from "obsidian"
 import type GoodObsidianPlugin from "../main";
 import type { Bounds, Page } from "../model/document";
 import { handwritingForBackground } from "../canvas/handwriting-contrast";
+import { paintWritingGuides } from "../canvas/writing-guides";
+import { embedWritingGuidesOf } from "../model/writing-guides";
 import { parseInkFile } from "../model/serialize";
 import {
   findBlockInDocument,
@@ -334,6 +336,18 @@ export class HandwriteEmbedManager {
         images: this.images,
       },
     );
+    const guides = embedWritingGuidesOf(page.clips?.[0]?.writingGuides);
+    if (guides?.enabled && guides.includeInPreview) {
+      const ctx = canvas.getContext("2d");
+      const cropW = bounds.maxX - bounds.minX;
+      if (ctx && cropW > 0) {
+        const k = (width / cropW) * dpr;
+        ctx.save();
+        ctx.setTransform(k, 0, 0, k, -bounds.minX * k, -bounds.minY * k);
+        paintWritingGuides(ctx, page, bounds, guides.style, paper.paper, width / cropW, k);
+        ctx.restore();
+      }
+    }
   }
 
   private async exportPng(

@@ -10,6 +10,14 @@ import { contentBoundsOnPage, expandBlockPageIfNeeded } from "../model/handwrite
 import { dedicatedInkPage, mergeInlineInk } from "../model/inline-ink-merge";
 import { buildInkFile, parseInkFile } from "../model/serialize";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
+import {
+  DEFAULT_WRITING_GUIDES,
+  embedWritingGuidesOf,
+  writingGuidesOf,
+  type EmbedWritingGuides,
+} from "../model/writing-guides";
+import { FN_ICON_WRITING_GUIDES } from "./finenotes-icons";
+import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { pickImageFiles, prepareImageBytes, saveImageAttachment } from "./image-import";
 import { copyPictureToSystemClipboard } from "./picture-clipboard";
@@ -283,6 +291,85 @@ export class InlineHandwriteSession {
       if (barEl) {
         const endGroup = barEl.querySelector<HTMLElement>(".goodobsidian-bar-doc") ?? barEl;
 
+        const guidesBtn = endGroup.createEl("button", {
+          cls: "clickable-icon finenotes-inline-guides",
+          attr: { "aria-label": "Writing guides", title: "Writing guides (Lines, Grid, Dots)" },
+        });
+        setIcon(guidesBtn, FN_ICON_WRITING_GUIDES);
+        let guidePopover: WritingGuidePopover | null = null;
+        const guideListeners = new Set<() => void>();
+        const currentGuides = (): EmbedWritingGuides => {
+          const raw = this.doc?.pages[0]?.clips?.[0]?.writingGuides;
+          return (
+            embedWritingGuidesOf(raw) ?? {
+              enabled: false,
+              includeInPreview: false,
+              style: { ...DEFAULT_WRITING_GUIDES },
+            }
+          );
+        };
+        const syncGuidesButton = (): void => {
+          const on = currentGuides().enabled;
+          guidesBtn.toggleClass("is-active", on);
+          guidesBtn.setAttribute("aria-pressed", String(on));
+        };
+        const applyGuides = (patch: Partial<EmbedWritingGuides>): void => {
+          const clip = this.doc?.pages[0]?.clips?.[0];
+          if (!clip) return;
+          const next: EmbedWritingGuides = { ...currentGuides(), ...patch };
+          clip.writingGuides = next as unknown as Record<string, unknown>;
+          clip.updatedAt = Date.now();
+          this.revision++;
+          this.surface?.setWritingGuides(next.enabled, next.style);
+          syncGuidesButton();
+          for (const fn of guideListeners) fn();
+          this.scheduleSave();
+        };
+        const guideHost: WritingGuideHost = {
+          state: () => {
+            const g = currentGuides();
+            return {
+              enabled: g.enabled,
+              includeInPreview: g.includeInPreview,
+              style: g.style,
+              ...(this.surface?.writingGuideContext() ?? {
+                eligible: true,
+                paper: this.paperIsDark ? DARK_PAPER.paper : LIGHT_PAPER.paper,
+                scale: 1,
+              }),
+            };
+          },
+          enable: (enabled) => applyGuides({ enabled }),
+          includeInPreview: (includeInPreview) => applyGuides({ includeInPreview }),
+          configure: (patch) =>
+            applyGuides({
+              enabled: true,
+              style: writingGuidesOf({ ...currentGuides().style, ...patch }),
+            }),
+          subscribe: (fn) => {
+            guideListeners.add(fn);
+            return () => guideListeners.delete(fn);
+          },
+        };
+        syncGuidesButton();
+        guidesBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (guidePopover?.isOpen) {
+            guidePopover.close();
+            guidePopover = null;
+            return;
+          }
+          guidePopover = new WritingGuidePopover(guidesBtn, guideHost, () => {
+            guidePopover = null;
+          });
+        });
+        this.cleanups.push(() => {
+          guidePopover?.close();
+          guidePopover = null;
+          guideListeners.clear();
+        });
+
         if (dedicated) {
           const widthBtn = endGroup.createEl("button", {
             cls: "clickable-icon finenotes-inline-width",
@@ -375,6 +462,10 @@ export class InlineHandwriteSession {
       this.surface.setInlineWidthLocked(widthLocked);
       this.images.onReady = (path) => this.surface?.imageReady(path);
       this.surface.setImagePainter(this.images);
+      const initialGuides = embedWritingGuidesOf(this.doc.pages[0]?.clips?.[0]?.writingGuides);
+      if (initialGuides?.enabled) {
+        this.surface.setWritingGuides(true, initialGuides.style);
+      }
       this.surface.setTool(this.toolState.tool);
       this.toolbar.setNight(this.paperIsDark);
       this.syncUndoRedo();

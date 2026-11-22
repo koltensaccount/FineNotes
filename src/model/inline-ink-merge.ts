@@ -64,6 +64,12 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
   if (local.epoch !== base.epoch) {
     latest.epoch = local.epoch;
   }
+  const baseGuides = JSON.stringify(base.clips?.[0]?.writingGuides);
+  const localGuides = JSON.stringify(local.clips?.[0]?.writingGuides);
+  if (localGuides !== baseGuides && latest.clips?.[0]) {
+    latest.clips[0].writingGuides = local.clips?.[0]?.writingGuides;
+    latest.clips[0].updatedAt = Date.now();
+  }
   if (local.geometry.height > base.geometry.height && local.geometry.height > latest.geometry.height) {
     latest.geometry.height = local.geometry.height;
     const clip = latest.clips?.[0];

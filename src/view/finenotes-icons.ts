@@ -19,6 +19,7 @@ export const FN_ICON_ADD_PAGE = "finenotes-add-page";
 export const FN_ICON_CONVERT_NOTEBOOK = "finenotes-convert-notebook";
 export const FN_ICON_MORE_TOOLS = "finenotes-more-tools";
 export const FN_ICON_HANDWRITE_HERE = "finenotes-handwrite-here";
+export const FN_ICON_WRITING_GUIDES = "finenotes-writing-guides";
 
 const wrap = (inner: string): string =>
   `<g transform="scale(4.1667)" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</g>`;
@@ -133,6 +134,15 @@ const ICONS: ReadonlyArray<readonly [string, string]> = [
     wrap(
       '<path d="M4 5.5H10M4 19H20"/>' +
         '<path d="M8 15.5L8.9 12.2L15.4 5.7A1.7 1.7 0 0 1 17.8 8.1L11.3 14.6Z"/>',
+    ),
+  ],
+  // P3-GUIDES-B: Ruled lines + subtle grid overlay icon (1.6px stroke)
+  [
+    FN_ICON_WRITING_GUIDES,
+    wrap(
+      '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/>' +
+        '<path d="M3.5 9h17M3.5 14.5h17"/>' +
+        '<path d="M9.5 3.5v17M15 3.5v17" stroke-opacity="0.38" stroke-dasharray="2 2"/>',
     ),
   ],
 ];

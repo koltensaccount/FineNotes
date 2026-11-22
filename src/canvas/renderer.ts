@@ -1,3 +1,5 @@
+import { paintWritingGuides } from "./writing-guides";
+import type { WritingGuideStyle } from "../model/writing-guides";
 /**
  * Paginated wet/dry canvas renderer (DOM).
  *
@@ -729,6 +731,8 @@ export class Renderer {
    * Paper colours. Paper-white by default; dark pages are a view setting,
    * and whoever changes this must {@link invalidateAll}: tiles hold colour.
    */
+  /** Optional non-printing writing guide overlay painted above the page paper. */
+  writingGuides: WritingGuideStyle | null = null;
   paper: PaperTheme = LIGHT_PAPER;
   /** The desk the last frame was painted on (`deskFor`): the theme's, unless a page matched it. */
   desk = LIGHT_PAPER.desk;
@@ -2406,6 +2410,20 @@ export class Renderer {
         ...(painterRegion && Number.isFinite(region.minX) ? { region } : {}),
         ...(phase ? { phase } : {}),
       });
+    }
+    if (this.writingGuides) {
+      const guideRegion = Number.isFinite(region.minX)
+        ? region
+        : { minX: 0, minY: 0, maxX: box.width, maxY: box.height };
+      paintWritingGuides(
+        ctx,
+        page,
+        guideRegion,
+        this.writingGuides,
+        paperColorOf(page, this.paper),
+        level / (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1),
+        level,
+      );
     }
     if (this.doc) {
       const texts = furnitureText(this.doc, box.index, this.notebookTitle);
