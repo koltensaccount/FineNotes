@@ -447,6 +447,7 @@ export interface GoodObsidianSettings {
    * `toolbarItems`, `toolbarOff` and `toolbarHome`, read once on load.
    */
   toolbarLayout: ToolbarLayout;
+  inlineToolbarLayout?: ToolbarLayout;
   /**
    * Which layout the bar shows: the person's own (`toolbarLayout`) or the
    * Essentials preset (`toolbarEssentials`), whose tools are replaced, never

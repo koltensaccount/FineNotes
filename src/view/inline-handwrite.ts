@@ -1,21 +1,22 @@
-/**
- * Inline Handwrite Here session built directly on upstream 2.10.0's real
- * `Toolbar` and `InkSurface` — zero duplicated menus, 100% consistent with
- * the locked Visual Identity, and limited to only the tools that belong
- * inside a Markdown note.
- */
-
 import { type App, type TFile, Notice, setIcon } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import { PALETTE, SIZES } from "../constants";
+import { attachmentDefaults } from "../settings-data";
+import { NOTEBOOK_FILE_SUFFIX, PALETTE, SIZES } from "../constants";
+import { InsertImage } from "../model/commands";
+import { resolveAttachmentFolder } from "../model/attachment-folders";
+import { newImageElement, placeImageBox } from "../model/images";
 import type { InkDocument, Page } from "../model/document";
 import { contentBoundsOnPage, expandBlockPageIfNeeded } from "../model/handwrite-block";
 import { dedicatedInkPage, mergeInlineInk } from "../model/inline-ink-merge";
-import { parseInkFile } from "../model/serialize";
+import { buildInkFile, parseInkFile } from "../model/serialize";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
+import { ConfirmModal } from "../ui/confirm-modal";
+import { pickImageFiles, prepareImageBytes, saveImageAttachment } from "./image-import";
+import { copyPictureToSystemClipboard } from "./picture-clipboard";
+import { VaultImageCache } from "./image-cache";
 import { InkSurface } from "./ink-surface";
 import { toolStateFrom } from "./ink-view";
-import { Toolbar, type ToolbarState } from "./toolbar";
+import { penOfState, Toolbar, type ToolbarState } from "./toolbar";
 import type { BarItemId, ToolbarLayout } from "./toolbar-layout";
 import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
 
@@ -29,39 +30,28 @@ export interface InlineSessionOptions {
   onClosed?: () => void;
 }
 
-/**
- * Minimal inline toolbar layout: reuses upstream's real Toolbar with only
- * the tools needed for handwriting inside a Markdown note — hiding Home,
- * Page Sidebar, Search, AI, Calculator, Fullscreen, Add Page, Share/Export,
- * More, Settings, Record, PDF, Image, Stickers, Sticky Notes, Ruler, Pan,
- * Zoom, Fill, Tape, and More Tools.
- */
 const INLINE_TOOLBAR_LAYOUT: ToolbarLayout = {
   start: ["undo", "redo"],
-  middle: ["select", "pen", "eraser", "shape", "text"],
+  middle: ["select", "pen", "eraser", "shape", "text", "accessories"],
   end: ["stylus"],
-  off: [
-    "home",
-    "thumbnails",
-    "search",
-    "ai",
-    "calculator",
-    "fullscreen",
-    "addPage",
-    "share",
-    "settings",
-    "record",
-    "pdf",
-    "image",
-    "sticker",
-    "sticky",
-    "ruler",
-    "pan",
-    "zoom",
-    "fill",
-    "tape",
-  ] as BarItemId[],
+  off: [],
 };
+const INLINE_BAR_ITEMS = new Set<BarItemId>([
+  ...INLINE_TOOLBAR_LAYOUT.start,
+  ...INLINE_TOOLBAR_LAYOUT.middle,
+  ...INLINE_TOOLBAR_LAYOUT.end,
+  "ruler", "fill", "tape", "image",
+]);
+
+const ISOLATED_EVENTS = [
+  "mousedown",
+  "pointerdown",
+  "touchstart",
+  "touchend",
+  "click",
+  "dblclick",
+  "contextmenu",
+] as const;
 
 let activeInlineSession: InlineHandwriteSession | null = null;
 
@@ -72,18 +62,25 @@ export function getActiveInlineSession(): InlineHandwriteSession | null {
 export class InlineHandwriteSession {
   private surface: InkSurface | null = null;
   private toolbar: Toolbar | null = null;
+  private images: VaultImageCache | null = null;
   private toolState: ToolbarState;
   private doc: InkDocument | null = null;
   private base: Page | null = null;
   private closed = false;
-  private dirty = false;
+  private revision = 0;
+  private savedRevision = 0;
+  private saves: Promise<boolean> = Promise.resolve(true);
   private onlyStylus = false;
+  private paperIsDark = false;
+  private imageFolder: string | undefined;
   private closing: Promise<boolean> | null = null;
   private saveTimer: number | null = null;
-  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private cleanups: Array<() => void> = [];
 
   constructor(private readonly options: InlineSessionOptions) {
     this.onlyStylus = options.plugin.settings.onlyStylusMode === true;
+    this.paperIsDark =
+      options.containerEl.ownerDocument?.body?.classList.contains("theme-dark") ?? false;
     this.toolState = toolStateFrom(options.plugin.settings);
     if (
       this.toolState.tool !== "pen" &&
@@ -108,26 +105,41 @@ export class InlineHandwriteSession {
         return;
       }
     }
-    if (this.closed) return;
-    if (!containerEl.isConnected) {
-      await new Promise<void>((r) => window.requestAnimationFrame(() => r()));
-      if (this.closed) return;
-    }
+    if (this.closed || !containerEl.isConnected) return;
     activeInlineSession = this;
+    const contentEditable = containerEl.getAttribute("contenteditable");
+    containerEl.setAttribute("contenteditable", "false");
+    this.cleanups.push(() => {
+      if (contentEditable === null) containerEl.removeAttribute("contenteditable");
+      else containerEl.setAttribute("contenteditable", contentEditable);
+    });
+
+    // Isolate pointer/mouse/touch/click events so Obsidian Live Preview
+    // (CodeMirror 6) never moves the cursor into the ```finenotes``` fence
+    // and flips the active handwriting editor back into raw Markdown code.
+    const stopBubble = (e: Event): void => {
+      e.stopPropagation();
+    };
+    for (const evt of ISOLATED_EVENTS) {
+      containerEl.addEventListener(evt, stopBubble);
+      this.cleanups.push(() => containerEl.removeEventListener(evt, stopBubble));
+    }
 
     try {
       if (notebookIsOpen(app, notebookFile)) {
         throw new Error("Close the full notebook editor before writing inline.");
       }
       const content = await app.vault.read(notebookFile);
-      if (this.closed) {
+      if (this.closed || this.closing || !containerEl.isConnected) {
         await this.close();
         return;
+      }
+      if (notebookIsOpen(app, notebookFile)) {
+        throw new Error("Close the full notebook editor before writing inline.");
       }
       const parsed = parseInkFile(content, plugin.settings.paperWidth);
       if (!parsed.doc) throw new Error("The handwriting notebook could not be read.");
 
-      // Support both dedicated block pages (block-*) and legacy clip pages.
       let page: Page;
       try {
         page = dedicatedInkPage(parsed.doc, blockId);
@@ -139,6 +151,8 @@ export class InlineHandwriteSession {
         page = fallback;
       }
 
+      this.imageFolder = resolveAttachmentFolder(parsed.doc, "images", attachmentDefaults(plugin.settings));
+      const dedicated = page.id === blockId && blockId.startsWith("block-");
       this.base = structuredClone(page);
       this.doc = {
         version: parsed.doc.version,
@@ -147,7 +161,9 @@ export class InlineHandwriteSession {
       };
 
       containerEl.empty();
+      containerEl.removeClass("finenotes-embed-card");
       containerEl.addClass("finenotes-inline-active");
+      containerEl.tabIndex = -1;
 
       const barHost = containerEl.createDiv({ cls: "finenotes-inline-toolbar-host" });
       const canvasHost = containerEl.createDiv({ cls: "finenotes-inline-canvas-host" });
@@ -155,13 +171,12 @@ export class InlineHandwriteSession {
         const h = this.doc?.pages[0]?.geometry.height ?? 360;
         const w = this.doc?.pages[0]?.geometry.width ?? 800;
         const availW = Math.max(300, canvasHost.clientWidth || containerEl.clientWidth || w);
-        const scaledH = Math.max(240, Math.round((h * availW) / w));
+        const scaledH = Math.max(260, Math.round((h * availW) / w));
         canvasHost.style.height = `${scaledH}px`;
       };
       syncHeight();
 
       const palette = [...PALETTE, ...(plugin.settings.customColors ?? [])];
-      const darkPaper = containerEl.ownerDocument?.body?.classList.contains("theme-dark") ?? false;
 
       this.toolbar = new Toolbar(
         barHost,
@@ -171,9 +186,45 @@ export class InlineHandwriteSession {
         {
           returnToPenOnReselect: () => plugin.settings.returnToPenOnReselect === true,
           onToolChange: (tool) => this.surface?.setTool(tool),
-          onColorChange: () => {},
-          onSizeChange: () => {},
-          onPressureToggle: () => {},
+          onColorChange: () => this.rememberPen(),
+          onSizeChange: () => this.rememberPen(),
+          onPressureToggle: () => this.surface?.refreshPenCursor(),
+          onPenTypeChange: () => {
+            this.surface?.refreshPenCursor();
+            this.rememberPen();
+          },
+          onWidthPresets: (presets) => plugin.saveWidthPresets(presets),
+          onEraserPresets: (presets) => plugin.saveEraserPresets(presets),
+          onEraserChange: (mode, size) => plugin.saveEraser(mode, size),
+          onEraserFilterChange: (filter) => plugin.saveEraserFilter(filter),
+          onLassoChange: (mode, filter) => {
+            this.surface?.refreshLassoChrome();
+            plugin.saveLasso(mode, filter);
+          },
+          onPenGesturesChange: (gestures) => plugin.savePenGestures(gestures),
+          onRecentColors: (colors) => plugin.saveRecentColors(colors),
+          onTextStyle: (patch) => this.surface?.applyTextStyle(patch),
+          onTextSizePreview: (size) => this.surface?.previewTextSize(size),
+          onTextFieldDone: (to) => this.surface?.textFieldDone(to),
+          onTextList: (kind) => void this.surface?.applyTextList(kind),
+          onTextDelete: () => void this.surface?.deleteEditingTextBox(),
+          onInsertImage: () => {
+            void pickImageFiles(containerEl, false, "image/*", false).then(([file]) => {
+              if (file) void this.pastePicture(file);
+            });
+          },
+          onRuler: () => {
+            const surface = this.surface;
+            if (!surface) return;
+            surface.setRulerOut(!surface.rulerOut);
+            this.toolbar?.setRulerOut(surface.rulerOut);
+          },
+          onRulerChange: (kind, snap) => {
+            this.surface?.setRulerOut(true);
+            this.toolbar?.setRulerOut(true);
+            plugin.saveRuler(kind, snap);
+          },
+          pressureAllowed: () => plugin.settings.pressureWidth === true,
           onUndo: () => {
             this.surface?.undo();
             this.syncUndoRedo();
@@ -182,41 +233,75 @@ export class InlineHandwriteSession {
             this.surface?.redo();
             this.syncUndoRedo();
           },
-          onClear: () => {
-            this.surface?.clearStrokes();
-            this.syncUndoRedo();
+          onClear: async () => {
+            if (!this.surface) return;
+            if (!dedicated) {
+              new Notice("Open the full notebook to clear a page shared by multiple handwriting clips.");
+              return;
+            }
+            const confirmed = await ConfirmModal.confirm(app, {
+              title: "Clear block ink?",
+              message: "Remove handwriting and drawn shapes in this block? You can undo this action.",
+              cta: "Clear",
+            });
+            if (confirmed) {
+              this.surface?.clearStrokes();
+              this.syncUndoRedo();
+            }
           },
           onOnlyStylusMode: (on) => {
             this.onlyStylus = on;
             this.surface?.onlyStylusChanged();
           },
+          onLayout: (next) => {
+            plugin.settings.inlineToolbarLayout = next;
+            void plugin.saveSettings();
+          },
         },
         {
-          layout: INLINE_TOOLBAR_LAYOUT,
+          layout: plugin.settings.inlineToolbarLayout ?? INLINE_TOOLBAR_LAYOUT,
+          allowedItems: INLINE_BAR_ITEMS,
+          popoverBounds: containerEl,
+          resetLayout: INLINE_TOOLBAR_LAYOUT,
           onlyStylusMode: this.onlyStylus,
         },
       );
 
-      // Hide accessories & more buttons (pinned in upstream's bar model, not needed inline)
-      // and append a crisp SVG Done button to close & save cleanly.
       const barEl = barHost.querySelector<HTMLElement>(".goodobsidian-toolbar");
       if (barEl) {
-        barEl.querySelectorAll<HTMLElement>(
-          'button[data-item="accessories"], button[data-item="more"]',
-        ).forEach((el) => {
-          el.style.display = "none";
-        });
         const endGroup = barEl.querySelector<HTMLElement>(".goodobsidian-bar-doc") ?? barEl;
+
+        const openBtn = endGroup.createEl("button", {
+          cls: "clickable-icon finenotes-inline-open",
+          attr: { "aria-label": "Open full notebook", title: "Open in full notebook" },
+        });
+        setIcon(openBtn, "external-link");
+        openBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void (async () => {
+            if (!(await this.close())) return;
+            void app.workspace.openLinkText(
+              `${notebookFile.path}#^${blockId}`,
+              this.options.sourcePath,
+              false,
+            );
+          })();
+        });
+
         const doneBtn = endGroup.createEl("button", {
           cls: "clickable-icon finenotes-inline-done",
           attr: { "aria-label": "Done writing", title: "Done writing (Esc)" },
         });
         setIcon(doneBtn, "check");
-        doneBtn.addEventListener("click", () => {
+        doneBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           void this.close();
         });
       }
 
+      this.images = new VaultImageCache(app);
       this.surface = new InkSurface(
         canvasHost,
         this.doc,
@@ -224,41 +309,102 @@ export class InlineHandwriteSession {
         {
           desynchronizedCanvas: false,
           highlighterAlpha: plugin.settings.highlighterAlpha,
-          paper: darkPaper ? DARK_PAPER : LIGHT_PAPER,
+          paper: this.paperIsDark ? DARK_PAPER : LIGHT_PAPER,
           debug: false,
           palette,
         },
         {
           onlyStylusMode: () => this.onlyStylus,
+          onCopyImage: (image) => copyPictureToSystemClipboard(app, image),
+          onPasteImage: (file, at) => void this.pastePicture(file, at),
+          onHistoryChange: (undo, redo) => this.toolbar?.setHistoryState(undo, redo),
+          onTextEditing: (style) => this.toolbar?.setTextTarget(style),
+          onTextAnchor: (rect) => this.toolbar?.setTextAnchor(rect),
+          textPillState: () => this.toolbar?.textPillState ?? "-",
           onChange: () => {
-            this.dirty = true;
+            this.revision++;
             this.syncUndoRedo();
             const activePage = this.doc?.pages[0];
             if (activePage) {
               const bounds = contentBoundsOnPage(activePage);
-              if (bounds && expandBlockPageIfNeeded(activePage, bounds.maxY)) {
+              if (dedicated && bounds && expandBlockPageIfNeeded(activePage, bounds.maxY)) {
                 syncHeight();
+                this.surface?.layout();
               }
             }
             this.scheduleSave();
           },
         },
       );
-
+      this.images.onReady = (path) => this.surface?.imageReady(path);
+      this.surface.setImagePainter(this.images);
+      this.surface.setTool(this.toolState.tool);
+      this.toolbar.setNight(this.paperIsDark);
       this.syncUndoRedo();
+      containerEl.focus({ preventScroll: true });
 
-      this.keydownHandler = (e: KeyboardEvent) => {
-        if (e.key === "Escape") {
+      // Live Obsidian Dark/Light theme sync while writing inline.
+      const cssRef = app.workspace.on("css-change", () => {
+        const isDark = containerEl.ownerDocument?.body?.classList.contains("theme-dark") ?? false;
+        if (this.paperIsDark !== isDark) {
+          this.paperIsDark = isDark;
+          this.surface?.setPaperTheme(isDark ? DARK_PAPER : LIGHT_PAPER);
+          this.toolbar?.setNight(isDark);
+          this.toolbar?.syncActive();
+        }
+      });
+      this.cleanups.push(() => app.workspace.offref(cssRef));
+
+      const onKeyDown = (e: KeyboardEvent): void => {
+        if (e.defaultPrevented) return;
+        if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key === "Enter")) {
           e.preventDefault();
+          e.stopPropagation();
           void this.close();
+        } else if (this.surface?.handleKeyDown(e)) {
+          e.stopPropagation();
         }
       };
-      containerEl.ownerDocument.addEventListener("keydown", this.keydownHandler);
+      const onPaste = (e: ClipboardEvent): void => {
+        if (this.surface?.handlePaste(e)) e.stopPropagation();
+      };
+      containerEl.addEventListener("keydown", onKeyDown);
+      containerEl.addEventListener("paste", onPaste);
+      this.cleanups.push(() => containerEl.removeEventListener("keydown", onKeyDown));
+      this.cleanups.push(() => containerEl.removeEventListener("paste", onPaste));
     } catch (err) {
-      activeInlineSession = null;
-      this.closed = true;
       new Notice(`FineNotes: ${err instanceof Error ? err.message : String(err)}`);
-      this.options.onClosed?.();
+      await this.close();
+    }
+  }
+
+  private async pastePicture(file: File, at?: { x: number; y: number }): Promise<void> {
+    const { app, notebookFile } = this.options;
+    const surface = this.surface;
+    const doc = this.doc;
+    const page = doc?.pages[0];
+    if (!surface || !doc || !page || this.closing || this.closed) return;
+    try {
+      const prepared = await prepareImageBytes(await file.arrayBuffer(), file.type);
+      if (this.surface !== surface || this.closing) return;
+      const attachment = await saveImageAttachment(
+        app, prepared, file.name || "Pasted image", notebookFile.path, this.imageFolder,
+      );
+      if (this.surface !== surface || this.closing) return;
+      const region = at
+        ? { minX: at.x - 1, minY: at.y - 1, maxX: at.x + 1, maxY: at.y + 1 }
+        : surface.visibleRegion(0);
+      const image = newImageElement(doc, attachment.path, placeImageBox(prepared, page.geometry, region));
+      surface.applyCommand(new InsertImage(page.id, image));
+      surface.selectImage(page.id, image.id);
+    } catch (err) {
+      new Notice(`FineNotes: could not add image (${err instanceof Error ? err.message : String(err)}).`);
+    }
+  }
+
+  private rememberPen(): void {
+    if (this.toolState.tool === "pen" || this.toolState.tool === "highlighter") {
+      this.options.plugin.saveLastPen(penOfState(this.toolState));
     }
   }
 
@@ -271,15 +417,44 @@ export class InlineHandwriteSession {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
-      void this.flushSave();
+      void this.queueSave();
     }, 1200);
   }
 
+  private async writeRecoveryCheckpoint(page: Page): Promise<boolean> {
+    if (!this.doc) return false;
+    try {
+      const folder = this.options.notebookFile.path.slice(
+        0,
+        this.options.notebookFile.path.lastIndexOf("/") + 1,
+      );
+      const path = `${folder}FineNotes recovery ${crypto.randomUUID()}${NOTEBOOK_FILE_SUFFIX}`;
+      const copy = structuredClone(page);
+      delete copy.pageEmbedPath;
+      for (const c of copy.clips ?? []) delete c.imagePath;
+      const raw = buildInkFile(
+        `# Recovered handwriting\n\nSource notebook: ${this.options.notebookFile.path}\n\nBlock: ${page.id}`,
+        { version: this.doc.version, view: this.doc.view, pages: [copy] },
+      );
+      await this.options.app.vault.create(path, raw);
+      new Notice(`FineNotes recovery saved at ${path}`, 8000);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private queueSave(): Promise<boolean> {
+    this.saves = this.saves.then(() => this.flushSave());
+    return this.saves;
+  }
+
   private async flushSave(): Promise<boolean> {
-    if (!this.dirty || !this.doc || !this.base) return true;
+    if (this.savedRevision === this.revision || !this.doc || !this.base) return true;
     const { app, notebookFile, blockId, plugin } = this.options;
     const localPage = structuredClone(this.doc.pages[0]);
     const basePage = this.base;
+    const revision = this.revision;
     try {
       await editClosedNotebook(app, notebookFile, plugin.settings.paperWidth, (diskDoc) => {
         const latest =
@@ -289,36 +464,49 @@ export class InlineHandwriteSession {
         mergeInlineInk(basePage, localPage, latest);
       });
       this.base = localPage;
-      this.dirty = false;
+      this.savedRevision = revision;
       return true;
     } catch (err) {
-      new Notice(`FineNotes: could not save inline handwriting — ${err instanceof Error ? err.message : String(err)}`);
-      return false;
+      const recovered = !this.options.containerEl.isConnected &&
+        await this.writeRecoveryCheckpoint(localPage);
+      const reason = err instanceof Error ? err.message : String(err);
+      new Notice(
+        `FineNotes: could not save inline handwriting (${reason}). ${recovered ? "Recovery copy saved." : "Keep editor open and retry Done."}`,
+        9000,
+      );
+      return recovered;
     }
   }
 
   close(): Promise<boolean> {
+    if (this.closed) return Promise.resolve(true);
     if (this.closing) return this.closing;
+    const host = this.options.containerEl;
+    host.inert = true;
     this.closing = (async () => {
       if (this.saveTimer !== null) {
         window.clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
-      await this.flushSave();
+      if (!(await this.queueSave())) return false;
       this.closed = true;
-      if (this.keydownHandler) {
-        this.options.containerEl.ownerDocument.removeEventListener("keydown", this.keydownHandler);
-        this.keydownHandler = null;
-      }
+      for (const fn of this.cleanups) fn();
+      this.cleanups = [];
       this.surface?.destroy();
       this.surface = null;
       this.toolbar?.destroy();
       this.toolbar = null;
+      this.images?.destroy();
+      this.images = null;
       if (activeInlineSession === this) activeInlineSession = null;
-      this.options.containerEl.removeClass("finenotes-inline-active");
+      host.removeClass("finenotes-inline-active");
+      host.removeAttribute("tabindex");
       this.options.onClosed?.();
       return true;
-    })();
+    })().finally(() => {
+      host.inert = false;
+      this.closing = null;
+    });
     return this.closing;
   }
 }

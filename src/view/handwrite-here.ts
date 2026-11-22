@@ -227,9 +227,21 @@ export function insertHandwritingEmbed(
     const separator = quotedAnchor ? "" : newline;
     const inserted = `${separator}${quote}${newline}${quotedEmbed}${newline}${quote}${quotedAnchor ? newline : ""}`;
     editor.replaceRange(inserted, editor.offsetToPos(position));
-    editor.setCursor?.(
-      editor.offsetToPos(position + inserted.length - (quotedAnchor ? newline.length : 0)),
-    );
+    // Live Preview renders the entire callout as one widget. A caret on
+    // another quoted line still opens its raw Markdown, hiding the new block.
+    const updated = editor.getValue();
+    let outside = updated.indexOf("\n", position + inserted.length);
+    while (outside !== -1) {
+      const start = outside + 1;
+      const end = updated.indexOf("\n", start);
+      if (!updated.slice(start, end === -1 ? undefined : end).trim()) {
+        editor.setCursor(editor.offsetToPos(start));
+        return;
+      }
+      outside = end;
+    }
+    editor.replaceRange(newline, editor.offsetToPos(updated.length));
+    editor.setCursor(editor.offsetToPos(updated.length + newline.length));
     return;
   }
   const prefix = at > 0 && current[at - 1] !== "\n" ? "\n" : "";

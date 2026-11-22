@@ -18,6 +18,7 @@ describe("PDF toolbar button", () => {
       addRulerButton: vi.fn(),
       setLayout: vi.fn(),
       options: {},
+      practice: true,
       barItems: new Map(),
       itemRuns: new Map(),
       foldable: [],

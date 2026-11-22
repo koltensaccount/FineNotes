@@ -69,6 +69,8 @@ export interface ToolbarEditorHost {
   bar: HTMLElement;
   /** The notebook view the bar sits in: the tray, the scrim and the menu go here. */
   host: HTMLElement;
+  bounds?: HTMLElement;
+  resetLayout?: ToolbarLayout;
   /** The bar's three zone elements. */
   zones: () => Partial<Record<Zone, HTMLElement>>;
   /** The bar's button for an item, if this bar has it. */
@@ -409,7 +411,7 @@ export class ToolbarEditor {
     const lookIsDefault =
       !look || (look.style === LOOK_STYLES[0] && look.palette === LOOK_PALETTES[0]);
     // Reset gives back the layout the preset in use starts with.
-    const start = this.inPreset() ? essentialsLayout() : defaultLayout();
+    const start = this.h.resetLayout ?? (this.inPreset() ? essentialsLayout() : defaultLayout());
     reset.disabled = sameLayout(this.h.layout(), start) && lookIsDefault;
     reset.addEventListener("click", () => {
       if (!lookIsDefault) setLook?.(LOOK_STYLES[0], LOOK_PALETTES[0]);
@@ -545,6 +547,7 @@ export class ToolbarEditor {
   private place(): void {
     const host = this.h.host.getBoundingClientRect();
     const bar = this.h.bar.getBoundingClientRect();
+    const bounds = this.h.bounds?.getBoundingClientRect() ?? host;
     const dock = this.h.barDock();
     const style: Record<string, string> = { top: "", bottom: "", left: "", right: "" };
     // Clear of the bar, so the bar can be seen and scrolled while this is open.
@@ -558,10 +561,10 @@ export class ToolbarEditor {
     // Never taller than the room it has: past that it scrolls (styles.css).
     const room =
       dock === "top"
-        ? host.bottom - bar.bottom - gap - margin
+        ? bounds.bottom - bar.bottom - gap - margin
         : dock === "bottom"
-          ? bar.top - host.top - gap - margin
-          : host.height - 2 * margin;
+          ? bar.top - bounds.top - gap - margin
+          : bounds.height - 2 * margin;
     style.maxHeight = `${Math.max(120, Math.round(room))}px`;
     this.tray.setCssStyles(style);
     this.tray.toggleClass("is-beside", isBarUpright(dock));

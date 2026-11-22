@@ -22805,6 +22805,12 @@ button.goodobsidian-color-swatch.clickable-icon,
   box-shadow: var(--gob-shadow-sheet);
   margin: 8px 0;
 }
+.internal-embed.finenotes-legacy-wired.finenotes-inline-active {
+  overflow: visible;
+}
+.cm-embed-block:has(.finenotes-inline-active) .edit-block-button {
+  visibility: hidden;
+}
 .finenotes-inline-toolbar-host {
   position: sticky;
   top: 0;
@@ -22817,6 +22823,7 @@ button.goodobsidian-color-swatch.clickable-icon,
   -webkit-backdrop-filter: var(--gob-blur);
   backdrop-filter: var(--gob-blur);
 }
+.finenotes-inline-open.clickable-icon,
 .finenotes-inline-done.clickable-icon {
   min-width: var(--gob-touch-compact);
   height: var(--gob-touch-compact);

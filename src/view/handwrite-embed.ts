@@ -178,6 +178,7 @@ export class HandwriteEmbedManager {
 
     try {
       const raw = await this.app.vault.cachedRead(notebookFile);
+      if (getActiveInlineSession()?.hostContainer === containerEl) return;
       const parsed = parseInkFile(raw, this.plugin.settings.paperWidth);
       if (!parsed.doc) {
         containerEl.empty();
@@ -218,6 +219,14 @@ export class HandwriteEmbedManager {
       });
       setIcon(editBtn, "pencil");
       editBtn.createSpan({ text: "Write" });
+      const stopForLivePreview = (e: Event): void => {
+        e.stopPropagation();
+      };
+      for (const evt of ["mousedown", "pointerdown", "touchstart"] as const) {
+        editBtn.addEventListener(evt, stopForLivePreview);
+        canvas.addEventListener(evt, stopForLivePreview);
+      }
+
       editBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -226,6 +235,7 @@ export class HandwriteEmbedManager {
 
       canvas.addEventListener("click", (e) => {
         e.preventDefault();
+        e.stopPropagation();
         onEdit();
       });
     } catch (err) {
@@ -245,6 +255,7 @@ export class HandwriteEmbedManager {
 
 class HandwriteBlockChild extends MarkdownRenderChild {
   private untrack: (() => void) | null = null;
+  private mountFrame: number | null = null;
 
   constructor(
     containerEl: HTMLElement,
@@ -290,18 +301,27 @@ class HandwriteBlockChild extends MarkdownRenderChild {
 
     this.untrack = this.manager.trackCard(render);
 
-    // Obsidian runs MarkdownCodeBlockProcessor before attaching containerEl to the live DOM.
-    // Defer activation by one frame so containerEl is connected and has real layout width.
-    const shouldActivate = this.manager.consumePendingActivation(file.path, this.blockId);
-    if (shouldActivate) {
-      this.containerEl.addClass("finenotes-embed-card");
-      window.requestAnimationFrame(() => startEdit());
-    } else {
-      window.requestAnimationFrame(() => render());
-    }
+    // Nested Live Preview callouts can attach after the processor's first frame.
+    // Render a usable preview immediately and consume auto-activation only on mount.
+    render();
+    const mount = (framesLeft: number): void => {
+      this.mountFrame = this.containerEl.ownerDocument.defaultView!.requestAnimationFrame(() => {
+        this.mountFrame = null;
+        if (this.containerEl.isConnected) {
+          if (this.manager.consumePendingActivation(file.path, this.blockId)) startEdit();
+        } else if (framesLeft > 0) {
+          mount(framesLeft - 1);
+        }
+      });
+    };
+    mount(30);
   }
 
   override onunload(): void {
+    if (this.mountFrame !== null) {
+      this.containerEl.ownerDocument.defaultView?.cancelAnimationFrame(this.mountFrame);
+      this.mountFrame = null;
+    }
     this.untrack?.();
     this.untrack = null;
     if (getActiveInlineSession()?.hostContainer === this.containerEl) {
