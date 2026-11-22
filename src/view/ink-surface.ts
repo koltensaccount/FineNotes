@@ -1011,6 +1011,8 @@ export interface InkSurfaceCallbacks {
    * anything may have changed, anywhere.
    */
   onChange: (pages?: readonly string[]) => void;
+  /** Reserve room below the live ink on a dedicated embedded page. */
+  growInlinePage?: (y: number, buffer: number) => boolean;
   /** Something the host may display changed (stroke count, zoom, current page). */
   onStatus?: () => void;
   /** The Zoom box opened from a marquee or closed with its ×: the toolbar's switch follows. */
@@ -10940,6 +10942,20 @@ export class InkSurface {
     cancel: (box) => this.inkCancel(box),
   };
 
+  private extendInlineInk(box: PageBox, sample: PointerSample): PageBox {
+    if (!this.inlineWidthLocked || !this.callbacks.growInlinePage) return box;
+    const at = this.toPage(box, sample);
+    const buffer = 64 / this.unitScale;
+    if (at.x < 0 || at.x >= box.width || at.y < box.height - buffer ||
+        at.y > box.height + buffer) return box;
+    if (!this.callbacks.growInlinePage(at.y, buffer)) return box;
+    this.renderer?.invalidatePage(box.id);
+    this.layout();
+    const grown = this.pageLayout.boxes[box.index] ?? box;
+    this.activePage = grown;
+    return grown;
+  }
+
   private inkDown(box: PageBox, at: Pt, sample: PointerSample): void {
     const mode = this.toolState.tool === "shape" ? shapeModeFor(this.toolState) : "auto";
     if (mode !== "auto") {
@@ -10957,6 +10973,7 @@ export class InkSurface {
     builder.add({ ...sample, ...at });
     this.strokeInput = sample.pointerType ?? "";
     this.builder = builder;
+    box = this.extendInlineInk(box, sample);
     this.snap = null;
     this.diagHold = { fired: false, verdict: "" };
     this.restartHold(at);
@@ -11071,6 +11088,7 @@ export class InkSurface {
       this.scheduleWet();
       return;
     }
+    for (const sample of samples) box = this.extendInlineInk(box, sample);
     // Keeping a sample is cheap and happens at once; outlining the stroke is
     // not, so it waits for the next frame (`scheduleWet`), once however many
     // moves came in meanwhile.
@@ -11096,6 +11114,7 @@ export class InkSurface {
       return;
     }
     this.cancelCircleHold();
+    box = this.extendInlineInk(box, sample);
     this.finishStroke(box, { ...sample, ...this.toPage(box, sample) });
   }
 

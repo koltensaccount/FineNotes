@@ -22823,6 +22823,9 @@ button.goodobsidian-color-swatch.clickable-icon,
   -webkit-backdrop-filter: var(--gob-blur);
   backdrop-filter: var(--gob-blur);
 }
+:is(.cm-scroller, .markdown-preview-view):has(.finenotes-inline-active) {
+  overflow-anchor: none;
+}
 .finenotes-inline-width.clickable-icon {
   min-width: var(--gob-touch-compact);
   height: var(--gob-touch-compact);

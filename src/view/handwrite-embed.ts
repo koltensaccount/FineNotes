@@ -15,7 +15,7 @@ import {
 } from "obsidian";
 import type GoodObsidianPlugin from "../main";
 import { parseInkFile } from "../model/serialize";
-import { findBlockInDocument, resolveBlockBounds } from "../model/handwrite-block";
+import { findBlockInDocument, INITIAL_BLOCK_HEIGHT, resolveBlockBounds } from "../model/handwrite-block";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
 import { renderPageThumbnail } from "../canvas/renderer";
 import { VaultBackdropRenderer } from "./backdrop-renderer";
@@ -193,7 +193,11 @@ export class HandwriteEmbedManager {
       }
 
       const { page, clip } = found;
-      const bounds = resolveBlockBounds(page, clip);
+      const extended = page.id === blockId && clip.isExpandable &&
+        page.geometry.height > INITIAL_BLOCK_HEIGHT;
+      const bounds = extended
+        ? { minX: 0, minY: 0, maxX: page.geometry.width, maxY: page.geometry.height }
+        : resolveBlockBounds(page, clip);
       const cropW = Math.max(100, bounds.maxX - bounds.minX);
       const cropH = Math.max(80, bounds.maxY - bounds.minY);
       const dark = containerEl.ownerDocument?.body?.classList.contains("theme-dark") ?? false;
@@ -202,7 +206,8 @@ export class HandwriteEmbedManager {
       containerEl.addClass("finenotes-embed-card");
 
       const canvas = containerEl.createEl("canvas", { cls: "finenotes-embed-canvas" });
-      const cssWidth = Math.min(800, Math.max(320, containerEl.clientWidth || 680));
+      const cssWidth = Math.min(800, Math.max(320, containerEl.clientWidth || 680),
+        4096 * cropW / cropH);
       const dpr = Math.min(2, window.devicePixelRatio || 1);
 
       renderPageThumbnail(canvas, page, this.backdrop, cssWidth, dpr, {

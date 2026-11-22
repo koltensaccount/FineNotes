@@ -152,7 +152,8 @@ export class InlineHandwriteSession {
       }
 
       this.imageFolder = resolveAttachmentFolder(parsed.doc, "images", attachmentDefaults(plugin.settings));
-      const dedicated = page.id === blockId && blockId.startsWith("block-");
+      const dedicated = page.id === blockId && page.clips?.length === 1 &&
+        page.clips[0].id === blockId && page.clips[0].isExpandable === true;
       this.base = structuredClone(page);
       this.doc = {
         version: parsed.doc.version,
@@ -175,6 +176,11 @@ export class InlineHandwriteSession {
         const scale = widthLocked ? availW / w : Math.min(1, availW / w);
         const scaledH = Math.max(260, Math.ceil(h * scale));
         canvasHost.style.height = `${scaledH}px`;
+      };
+      const growPage = (y: number, buffer?: number): boolean => {
+        if (!dedicated || !expandBlockPageIfNeeded(page, y, buffer)) return false;
+        syncHeight();
+        return true;
       };
       syncHeight();
       const resize = new ResizeObserver(syncHeight);
@@ -348,16 +354,19 @@ export class InlineHandwriteSession {
           onTextEditing: (style) => this.toolbar?.setTextTarget(style),
           onTextAnchor: (rect) => this.toolbar?.setTextAnchor(rect),
           textPillState: () => this.toolbar?.textPillState ?? "-",
+          growInlinePage: (y, buffer) => {
+            if (!growPage(y, buffer)) return false;
+            this.revision++;
+            this.scheduleSave();
+            return true;
+          },
           onChange: () => {
             this.revision++;
             this.syncUndoRedo();
             const activePage = this.doc?.pages[0];
             if (activePage) {
               const bounds = contentBoundsOnPage(activePage);
-              if (dedicated && bounds && expandBlockPageIfNeeded(activePage, bounds.maxY)) {
-                syncHeight();
-                this.surface?.layout();
-              }
+              if (bounds && growPage(bounds.maxY)) this.surface?.layout();
             }
             this.scheduleSave();
           },
