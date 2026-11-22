@@ -1,9 +1,10 @@
-/** `src/canvas/laser-trail.ts` — the laser pointer's fading trail (FineNotes#25). */
+/** `src/canvas/laser-trail.ts` — the laser pointer's neon multi-stroke trail (FineNotes#25). */
 
 import { describe, expect, it } from "vitest";
 import {
   LASER_FADE_MS,
   LASER_FADE_STEPS,
+  LASER_HOLD_MS,
   LaserTrail,
   fade,
   laserPaths,
@@ -23,15 +24,57 @@ describe("fade", () => {
 });
 
 describe("LaserTrail", () => {
-  it("draws the pen's path, newest pieces strongest", () => {
+  it("holds the entire stroke 100% solid while the pen stays down", () => {
     const trail = new LaserTrail();
     trail.start({ x: 0, y: 0, t: 0 });
     trail.add({ x: 10, y: 0, t: 100 });
-    trail.add({ x: 20, y: 0, t: 200 });
-    const segments = trail.segments(200);
+    trail.add({ x: 20, y: 0, t: 5000 });
+    const frame = trail.activeStrokes(5000);
+    expect(frame.alpha).toBe(1);
+    expect(frame.strokes).toHaveLength(1);
+    expect(frame.strokes[0]).toHaveLength(3);
+    expect(frame.tip).toEqual({ x: 20, y: 0, t: 5000 });
+    const segments = trail.segments(5000);
     expect(segments).toHaveLength(2);
-    expect(segments[0].alpha).toBeLessThan(segments[1].alpha);
-    expect(segments[1]).toMatchObject({ a: { x: 10 }, b: { x: 20 }, alpha: 1 });
+    expect(segments.every((s) => s.alpha === 1)).toBe(true);
+  });
+
+  it("holds for LASER_HOLD_MS after lift, then fades out smoothly over LASER_FADE_MS", () => {
+    const trail = new LaserTrail();
+    trail.start({ x: 0, y: 0, t: 0 });
+    trail.add({ x: 10, y: 0, t: 10 });
+    trail.end(2000);
+    expect(trail.alpha(2000)).toBe(1);
+    expect(trail.alpha(2000 + LASER_HOLD_MS)).toBe(1);
+    expect(trail.visible(2000 + LASER_HOLD_MS)).toBe(true);
+
+    const midFade = trail.alpha(2000 + LASER_HOLD_MS + LASER_FADE_MS / 2);
+    expect(midFade).toBeGreaterThan(0);
+    expect(midFade).toBeLessThan(1);
+
+    expect(trail.visible(2000 + LASER_HOLD_MS + LASER_FADE_MS)).toBe(false);
+    expect(trail.segments(2000 + LASER_HOLD_MS + LASER_FADE_MS)).toEqual([]);
+  });
+
+  it("keeps previous strokes alive across quick consecutive strokes and resets hold on pen down", () => {
+    const trail = new LaserTrail();
+    trail.start({ x: 0, y: 0, t: 0 });
+    trail.add({ x: 10, y: 0, t: 10 });
+    trail.end(20);
+
+    // Start a second stroke before the hold + fade finishes: both stay solid and separate.
+    trail.start({ x: 100, y: 100, t: 500 });
+    trail.add({ x: 110, y: 100, t: 520 });
+    const frame = trail.activeStrokes(520);
+    expect(frame.alpha).toBe(1);
+    expect(frame.strokes).toHaveLength(2);
+    const segments = trail.segments(520);
+    expect(segments.some(({ a, b }) => a.x === 10 && b.x === 100)).toBe(false);
+    expect(segments.some(({ a, b }) => a.x === 100 && b.x === 110)).toBe(true);
+
+    trail.end(600);
+    expect(trail.alpha(600 + LASER_HOLD_MS)).toBe(1);
+    expect(trail.visible(600 + LASER_HOLD_MS + LASER_FADE_MS)).toBe(false);
   });
 
   describe("laserPaths", () => {
@@ -72,51 +115,6 @@ describe("LaserTrail", () => {
       ]);
       for (const path of paths) expect(path.runs).toHaveLength(1);
     });
-
-    it("uses at most the fade's steps and never drops a very faint piece", () => {
-      const segments = Array.from({ length: 60 }, (_, index) => ({
-        a: point(index, index),
-        b: point(index + 1, index + 1),
-        alpha: (index + 1) / 60,
-      }));
-      const paths = laserPaths(segments);
-      expect(paths.length).toBeLessThanOrEqual(LASER_FADE_STEPS);
-      expect(paths[0].alpha).toBeGreaterThan(0);
-      expect(paths[paths.length - 1].alpha).toBe(1);
-    });
-  });
-
-  it("lets the old part fade while the pen goes on, with no dot left behind", () => {
-    const trail = new LaserTrail();
-    trail.start({ x: 0, y: 0, t: 0 });
-    trail.add({ x: 10, y: 0, t: 10 });
-    trail.add({ x: 20, y: 0, t: 1000 });
-    expect(trail.segments(1000)).toHaveLength(1);
-    // Held still long after: no segment is left, and nothing is drawn.
-    expect(trail.segments(5000)).toHaveLength(0);
-    expect(laserPaths(trail.segments(5000))).toEqual([]);
-  });
-
-  it("fades out after the lift, from the lift", () => {
-    const trail = new LaserTrail();
-    trail.start({ x: 0, y: 0, t: 0 });
-    trail.add({ x: 10, y: 0, t: 10 });
-    trail.end(2000);
-    expect(trail.visible(2000)).toBe(true);
-    expect(trail.visible(2000 + LASER_FADE_MS)).toBe(false);
-    expect(trail.segments(2000 + LASER_FADE_MS)).toEqual([]);
-  });
-
-  it("does not join one trail to the next", () => {
-    const trail = new LaserTrail();
-    trail.start({ x: 0, y: 0, t: 0 });
-    trail.add({ x: 10, y: 0, t: 10 });
-    trail.end(20);
-    trail.start({ x: 100, y: 100, t: 30 });
-    trail.add({ x: 110, y: 100, t: 40 });
-    const segments = trail.segments(40);
-    expect(segments.some(({ a, b }) => a.x === 10 && b.x === 100)).toBe(false);
-    expect(segments.some(({ a, b }) => a.x === 100 && b.x === 110)).toBe(true);
   });
 
   it("takes no points while the pen is up, and a lift with none is nothing", () => {

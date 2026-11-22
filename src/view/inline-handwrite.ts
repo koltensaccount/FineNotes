@@ -56,7 +56,7 @@ const INLINE_BAR_ITEMS = new Set<BarItemId>([
   ...INLINE_TOOLBAR_LAYOUT.start,
   ...INLINE_TOOLBAR_LAYOUT.middle,
   ...INLINE_TOOLBAR_LAYOUT.end,
-  "ruler", "fill", "tape", "image",
+  "ruler", "fill", "tape", "laser", "image",
 ]);
 
 const ISOLATED_EVENTS = [
@@ -225,6 +225,10 @@ export class InlineHandwriteSession {
             this.surface?.refreshPenCursor();
             this.rememberPen();
           },
+          onLaserColorChange: (color) => {
+            plugin.settings.laserDefaultColor = color;
+            void plugin.saveSettings();
+          },
           onPressureToggle: () => this.surface?.refreshPenCursor(),
           onPenTypeChange: () => {
             this.toolbar?.syncActive();
@@ -369,6 +373,7 @@ export class InlineHandwriteSession {
           resetLayout: INLINE_TOOLBAR_LAYOUT,
           onlyStylusMode: plugin.stylusOnly,
           fingerDrawing: plugin.fingerDrawing,
+          laserColor: () => plugin.settings.laserDefaultColor,
         },
       );
 
@@ -521,6 +526,7 @@ export class InlineHandwriteSession {
           paper: this.paperIsDark ? DARK_PAPER : LIGHT_PAPER,
           debug: false,
           palette,
+          laserColor: () => plugin.settings.laserDefaultColor,
         },
         {
           onlyStylusMode: () => this.onlyStylus,

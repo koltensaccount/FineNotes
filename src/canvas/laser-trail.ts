@@ -1,28 +1,31 @@
 /**
- * The laser pointer's trail (FineNotes#25, GoodNotes' laser): a glowing line
- * behind the pen that fades as it ages, for pointing at a page while
- * presenting or explaining. It is never part of the notebook: nothing here
- * reaches the document, the history or a save.
+ * The laser pointer's neon trail (FineNotes#25): a glowing multi-stroke beam
+ * for pointing at a page while presenting or explaining. It is never part of
+ * the notebook: nothing here reaches the document, the history or a save.
  *
- * Points are kept in layout space, so the trail stays on the ink it points
- * at while the page scrolls under it, and each one fades out
- * {@link LASER_FADE_MS} after it was drawn. The line itself is continuous:
- * there is no dot at the tip or anywhere else along it.
+ * Points are kept in layout space, so the trail stays on the ink it points at
+ * while the page scrolls under it. Everything drawn stays 100% solid while the
+ * pen is down and across quick consecutive strokes; once you pause writing for
+ * {@link LASER_HOLD_MS}, the entire group fades away smoothly over
+ * {@link LASER_FADE_MS}.
  *
  * Pure: no DOM, no Obsidian.
  */
 
-/** How long a point of the trail takes to fade away, ms. */
+/** How long drawn laser strokes stay 100% solid after lifting the pen, ms. */
+export const LASER_HOLD_MS = 1000;
+
+/** How long the laser strokes take to fade away after the hold window, ms. */
 export const LASER_FADE_MS = 650;
 
-/** The trail's colour: GoodNotes' red laser. */
+/** The trail's colour: vivid neon red laser. */
 export const LASER_COLOR = "#ff3b30";
 
-/** The trail's core width, and its glow's blur radius, in screen px. */
+/** The trail's core width, and its glow's outer radius, in screen px. */
 export const LASER_WIDTH_PX = 4;
-export const LASER_GLOW_PX = 10;
+export const LASER_GLOW_PX = 22;
 
-/** How many opacity steps the trail is drawn in: smooth enough to read as a fade. */
+/** How many opacity steps legacy segmented callers bucket into. */
 export const LASER_FADE_STEPS = 24;
 
 export interface LaserPoint {
@@ -45,11 +48,16 @@ export interface LaserPath {
   runs: LaserPoint[][];
 }
 
+/** Snapshot of all currently visible neon laser strokes and their unified alpha. */
+export interface LaserFrame {
+  strokes: readonly (readonly LaserPoint[])[];
+  alpha: number;
+  /** Active stylus tip while touching the screen (used to paint a glowing dot even when stationary). */
+  tip: LaserPoint | null;
+}
+
 /**
- * The trail's segments gathered into opacity steps. A step holds every run
- * that shares its alpha, so a whole step is one path and one stroke: at a
- * turn, the lines meet inside a path instead of overlapping as separate
- * strokes, which would show as darker notches.
+ * The trail's segments gathered into opacity steps.
  */
 export function laserPaths(segments: readonly LaserSegment[]): LaserPath[] {
   const steps = new Map<number, LaserPoint[][]>();
@@ -72,66 +80,92 @@ export function laserPaths(segments: readonly LaserSegment[]): LaserPath[] {
 }
 
 export class LaserTrail {
-  private points: LaserPoint[] = [];
-  /** The pen is down: its last point does not fade. */
+  private strokes: LaserPoint[][] = [];
+  /** The pen is currently down: everything stays 100% solid. */
   private down = false;
+  /** Timestamp of the most recent pen lift, or null while drawing/empty. */
+  private liftedAt: number | null = null;
 
-  /** The pen came down at `p`: a new trail begins, the old one fading on. */
+  /** The pen came down at `p`: starts a new stroke and keeps any visible strokes solid. */
   start(p: LaserPoint): void {
+    this.prune(p.t);
     this.down = true;
-    // A break between the old trail and the new: a point that joins nothing.
-    this.points.push({ x: NaN, y: NaN, t: p.t }, p);
+    this.liftedAt = null;
+    this.strokes.push([p]);
   }
 
   add(p: LaserPoint): void {
-    if (this.down) this.points.push(p);
+    if (!this.down || this.strokes.length === 0) return;
+    const current = this.strokes[this.strokes.length - 1];
+    const last = current[current.length - 1];
+    // Skip duplicate coordinates so quadratic smoothing never collapses on zero-length spans.
+    if (last && Math.hypot(p.x - last.x, p.y - last.y) < 0.5) return;
+    current.push(p);
   }
 
-  /** The pen lifted at time `t`: from now the tip fades like the rest. */
+  /** The pen lifted at time `t`: hold solid for {@link LASER_HOLD_MS}, then fade out. */
   end(t: number): void {
     if (!this.down) return;
     this.down = false;
-    const last = this.points[this.points.length - 1];
-    // The tip starts fading at the lift, not when it was first drawn.
-    if (last && Number.isFinite(last.x)) this.points.push({ ...last, t });
+    this.liftedAt = t;
+  }
+
+  /** Current unified opacity (0–1) for all strokes at time `t`. */
+  alpha(t: number): number {
+    if (this.strokes.length === 0) return 0;
+    if (this.down || this.liftedAt === null) return 1;
+    const sinceLift = t - this.liftedAt;
+    if (sinceLift <= LASER_HOLD_MS) return 1;
+    return fade(sinceLift - LASER_HOLD_MS);
   }
 
   /** Whether anything is left to draw at time `t` (the frame loop keeps going while so). */
   visible(t: number): boolean {
     this.prune(t);
-    return this.down || this.points.some((p) => Number.isFinite(p.x));
+    return this.down || this.strokes.length > 0;
   }
 
-  /** The pieces to draw at time `t`, oldest first, each as strong as its newer end is young. */
-  segments(t: number): LaserSegment[] {
+  /** Complete smooth strokes and live tip for neon rendering at time `t`. */
+  activeStrokes(t: number): LaserFrame {
     this.prune(t);
+    const a = this.alpha(t);
+    if (!(a > 0) || this.strokes.length === 0) {
+      return { strokes: [], alpha: 0, tip: null };
+    }
+    const lastStroke = this.strokes[this.strokes.length - 1];
+    const tip = this.down && lastStroke.length > 0 ? lastStroke[lastStroke.length - 1] : null;
+    return { strokes: this.strokes, alpha: a, tip };
+  }
+
+  /** Legacy segment view at time `t`. */
+  segments(t: number): LaserSegment[] {
+    const frame = this.activeStrokes(t);
+    if (!(frame.alpha > 0)) return [];
     const out: LaserSegment[] = [];
-    for (let i = 1; i < this.points.length; i++) {
-      const a = this.points[i - 1];
-      const b = this.points[i];
-      if (!Number.isFinite(a.x) || !Number.isFinite(b.x)) continue;
-      const alpha = fade(t - b.t);
-      if (alpha > 0) out.push({ a, b, alpha });
+    for (const stroke of frame.strokes) {
+      for (let i = 1; i < stroke.length; i++) {
+        out.push({ a: stroke[i - 1], b: stroke[i], alpha: frame.alpha });
+      }
     }
     return out;
   }
 
   clear(): void {
-    this.points = [];
+    this.strokes = [];
     this.down = false;
+    this.liftedAt = null;
   }
 
-  /** Drop the points that have faded and lead nowhere still visible. */
+  /** Drop all strokes once the post-lift hold + fade has finished. */
   private prune(t: number): void {
-    let keep = 0;
-    // Keep one faded point before the first visible one, as the start of its segment.
-    while (keep < this.points.length - 1 && fade(t - this.points[keep + 1].t) <= 0) keep++;
-    if (keep > 0) this.points = this.points.slice(keep);
-    if (!this.down && this.points.length === 1) this.points = [];
+    if (!this.down && this.liftedAt !== null && this.alpha(t) <= 0) {
+      this.strokes = [];
+      this.liftedAt = null;
+    }
   }
 }
 
-/** How strong a point `age` ms old is: full, then down to nothing at {@link LASER_FADE_MS}. */
+/** Smooth ease-out fade from 1 to 0 over {@link LASER_FADE_MS}. */
 export function fade(age: number): number {
   if (age <= 0) return 1;
   if (age >= LASER_FADE_MS) return 0;

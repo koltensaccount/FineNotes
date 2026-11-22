@@ -46,6 +46,7 @@ describe("the default layout", () => {
       "sticky",
       "ruler",
       "tape",
+      "laser",
       "record",
       "fill",
     ]);
@@ -267,7 +268,7 @@ describe("an item shown nowhere has nothing left on", () => {
     );
     const allOff = withOff(BAR_ITEMS.filter((id) => id !== "pen"));
     expect(effectsOfOffItems(allOff, { ...nothing, tool: "highlighter" }).pen).toBe(false);
-    expect(effectsOfOffItems(allOff, { ...nothing, tool: "laser" }).pen).toBe(false);
+    expect(effectsOfOffItems(allOff, { ...nothing, tool: "laser" }).pen).toBe(true);
   });
 
   it("knows each tool's item, and which items are off", () => {

@@ -1141,6 +1141,7 @@ const FOLD_RANK = {
   zoom: 8.2,
   pan: 8.3,
   tape: 8.4,
+  laser: 8.45,
   settings: 8,
   ruler: 8.5,
   guides: 8.6,
@@ -1636,6 +1637,7 @@ export class Toolbar {
     tool("fill", FN_ICON_FILL, t("toolbar.tool.fill"));
     // Cover tape: strips over the page that a tap shows through.
     tool("tape", FN_ICON_TAPE, t("toolbar.tool.coverTape"));
+    tool("laser", FN_ICON_LASER, t("toolbar.tool.laserPointer"));
     if (cb.onOnlyStylusMode) {
       const toggle = (): void => this.toggleOnlyStylusMode();
       const stylus = this.barButton(tools, ICON_STYLUS_ONLY, t("toolbar.stylusOff"), toggle);
@@ -2260,7 +2262,9 @@ export class Toolbar {
                 ? FOLD_RANK.zoom
                 : tool === "tape"
                   ? FOLD_RANK.tape
-                  : undefined;
+                  : tool === "laser"
+                    ? FOLD_RANK.laser
+                    : undefined;
     if (rank !== undefined) {
       this.fold(rank, button, icon, label, (anchor) => this.tapTool(tool, anchor), tool);
     }
@@ -6508,24 +6512,6 @@ export class Toolbar {
     if (this.activePenType().tool === "highlighter" && this.renderHighlighterTip(body)) {
       body.createDiv({ cls: "goodobsidian-popover-divider" });
     }
-    // The laser pointer has no bar button (FineNotes#25): here, and L.
-    const laser = body.createEl("button", {
-      cls: "goodobsidian-wide goodobsidian-pen-row goodobsidian-laser-row",
-    });
-    laser.toggleClass("is-active", this.state.tool === "laser");
-    const laserIcon = laser.createSpan({ cls: "goodobsidian-laser-row-icon" });
-    iconOrText(laserIcon, FN_ICON_LASER, "");
-    laser.createSpan({ text: t("toolbar.tool.laserPointer") });
-    laser.createEl("kbd", { cls: "goodobsidian-saved-pen-key", text: "L" });
-    laser.addEventListener("click", () => {
-      this.closePopover();
-      this.leaveToolFor("laser");
-      this.state.tool = "laser";
-      this.callbacks.onToolChange("laser");
-      this.buildOptions();
-      this.syncActive();
-    });
-    body.createDiv({ cls: "goodobsidian-popover-divider" });
     this.popoverLink(body, t("toolbar.pen.settings"), "sliders-horizontal", openSettings);
     this.popoverLink(body, t("toolbar.pen.gestures"), "signature", openGestures);
   }

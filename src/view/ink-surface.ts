@@ -686,11 +686,8 @@ import {
 } from "../input/pen-modifiers";
 import {
   LASER_COLOR,
-  LASER_GLOW_PX,
-  LASER_WIDTH_PX,
   type LaserPoint,
   LaserTrail,
-  laserPaths,
 } from "../canvas/laser-trail";
 import { REJOIN_MS, REJOIN_PX, rejoinsStroke } from "../input/pen-rejoin";
 import { cancelsStylusTouch, hasStylusTouch } from "../input/stylus-touch";
@@ -10849,36 +10846,63 @@ export class InkSurface {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const t = now();
-    if (!this.laserTrail.visible(t)) return;
+    const { strokes, alpha, tip } = this.laserTrail.activeStrokes(t);
+    if (!(alpha > 0) || strokes.length === 0) return;
+
     const scale = this.unitScale;
     const scrollY = this.viewport.scrollY;
     const sx = (x: number): number => (x * scale + this.offsetX) * ratio;
     const sy = (y: number): number => (y - scrollY) * scale * ratio;
-    ctx.lineCap = "butt";
-    ctx.lineJoin = "round";
     const color = this.options.laserColor?.() ?? LASER_COLOR;
-    ctx.strokeStyle = color;
-    const paths = laserPaths(this.laserTrail.segments(t));
-    // A wide faint pass is the glow, a narrow one the beam: no canvas blur,
-    // which is slow on the iPad.
-    for (const [lineWidth, strength] of [
-      [LASER_GLOW_PX, 0.25],
-      [LASER_WIDTH_PX, 1],
-    ] as const) {
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Build one silky smooth quadratic-Bezier path for all active strokes, then
+    // paint 4 concentric neon passes (outer bloom -> mid aura -> saturated body
+    // -> incandescent white-hot core). Zero canvas blur so it stays 120fps on iPad.
+    const passes: ReadonlyArray<readonly [widthPx: number, strength: number, strokeColor: string]> = [
+      [24, 0.10, color],
+      [14, 0.26, color],
+      [6.5, 0.84, color],
+      [2.4, 0.96, "#ffffff"],
+    ];
+
+    for (const [lineWidth, strength, passColor] of passes) {
+      ctx.strokeStyle = passColor;
       ctx.lineWidth = lineWidth * ratio;
-      for (const { alpha, runs } of paths) {
+      ctx.globalAlpha = alpha * strength;
+      this.strokeLaserRuns(ctx, strokes, sx, sy);
+    }
+
+    // Subtle glowing tip bloom while the stylus/finger is touching the screen.
+    if (tip) {
+      const tx = sx(tip.x);
+      const ty = sy(tip.y);
+      const tipLayers: ReadonlyArray<readonly [radiusPx: number, strength: number, fill: string]> = [
+        [14, 0.14, color],
+        [8, 0.34, color],
+        [4.2, 0.88, color],
+        [2, 0.98, "#ffffff"],
+      ];
+      for (const [radiusPx, strength, fill] of tipLayers) {
+        ctx.fillStyle = fill;
         ctx.globalAlpha = alpha * strength;
-        this.strokeLaserRuns(ctx, runs, sx, sy);
+        ctx.beginPath();
+        ctx.arc(tx, ty, radiusPx * ratio, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
-    ctx.globalAlpha = 1;
+
+    ctx.restore();
     this.requestLaser();
   }
 
-  /** One path for every run of a fade level, stroked once: lines meet without overlapping. */
+  /** Smooth quadratic-Bezier path for every stroke (midpoint interpolation, round caps). */
   private strokeLaserRuns(
     ctx: CanvasRenderingContext2D,
-    runs: readonly LaserPoint[][],
+    runs: readonly (readonly LaserPoint[])[],
     sx: (x: number) => number,
     sy: (y: number) => number,
   ): void {
@@ -10886,11 +10910,27 @@ export class InkSurface {
     for (const run of runs) {
       const first = run[0];
       if (!first) continue;
-      ctx.moveTo(sx(first.x), sy(first.y));
-      for (let index = 1; index < run.length; index++) {
-        const point = run[index];
-        ctx.lineTo(sx(point.x), sy(point.y));
+      const x0 = sx(first.x);
+      const y0 = sy(first.y);
+      if (run.length === 1) {
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x0 + 0.01, y0);
+        continue;
       }
+      ctx.moveTo(x0, y0);
+      if (run.length === 2) {
+        ctx.lineTo(sx(run[1].x), sy(run[1].y));
+        continue;
+      }
+      for (let i = 1; i < run.length - 1; i++) {
+        const cx = sx(run[i].x);
+        const cy = sy(run[i].y);
+        const nx = sx(run[i + 1].x);
+        const ny = sy(run[i + 1].y);
+        ctx.quadraticCurveTo(cx, cy, (cx + nx) / 2, (cy + ny) / 2);
+      }
+      const last = run[run.length - 1];
+      ctx.lineTo(sx(last.x), sy(last.y));
     }
     ctx.stroke();
   }

@@ -23,6 +23,7 @@ import {
   FN_ICON_ERASER,
   FN_ICON_FILL,
   FN_ICON_IMPORT_PDF,
+  FN_ICON_LASER,
   FN_ICON_MORE_TOOLS,
   FN_ICON_TAPE,
   FN_ICON_WRITING_GUIDES,
@@ -54,6 +55,7 @@ export type CoreItemId =
   | "ruler"
   | "guides"
   | "tape"
+  | "laser"
   | "record"
   | "fill"
   | "calculator"
@@ -132,6 +134,7 @@ export const BAR_ITEMS: readonly CoreItemId[] = [
   "ruler",
   "guides",
   "tape",
+  "laser",
   "record",
   "fill",
   "calculator",
@@ -374,6 +377,9 @@ export const BAR_ITEM_LABELS: Record<CoreItemId, string> = {
   get tape() {
     return t("toolbar.tool.coverTape");
   },
+  get laser() {
+    return t("toolbar.tool.laserPointer");
+  },
   get record() {
     return t("toolbar.tool.recordAudio");
   },
@@ -438,6 +444,7 @@ export const BAR_ITEM_ICONS: Record<CoreItemId, string> = {
   ruler: "ruler",
   guides: FN_ICON_WRITING_GUIDES,
   tape: FN_ICON_TAPE,
+  laser: FN_ICON_LASER,
   record: "mic",
   fill: FN_ICON_FILL,
   calculator: "calculator",
@@ -678,7 +685,7 @@ export function sameLayout(a: ToolbarLayout, b: ToolbarLayout): boolean {
 
 // --- A button shown nowhere has nothing left on -------------------------------
 
-/** The bar item a tool belongs to: the highlighter and the laser are the pen's. */
+/** The bar item a tool belongs to: the highlighter is the pen's; laser is its own item. */
 export function barItemOfTool(tool: string): BarItemId | null {
   switch (tool) {
     case "select":
@@ -689,10 +696,10 @@ export function barItemOfTool(tool: string): BarItemId | null {
     case "zoom":
     case "tape":
     case "fill":
+    case "laser":
       return tool;
     case "pen":
     case "highlighter":
-    case "laser":
       return "pen";
     default:
       return null;
