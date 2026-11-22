@@ -998,6 +998,8 @@ export interface InkSurfaceOptions {
   palette?: readonly string[];
   /** The global laser settings, read live so an open note follows Settings changes. */
   laserColor?: () => string;
+  /** Path of the backing notebook file (when editing a full notebook), used for live Markdown clips. */
+  notebookPath?: () => string | null;
 }
 
 /** What the surface tells its host, and asks it. Only `onChange` is required. */
@@ -1589,6 +1591,11 @@ const LOCK_BADGE_INSET_PX = 18;
  * this Obsidian window, so ink copied in one note pastes into another.
  */
 const clipboard = new InkClipboard();
+
+/** Shared in-plugin clipboard instance (also used for live-clip paste into Markdown notes). */
+export function getInkClipboard(): InkClipboard {
+  return clipboard;
+}
 // Text FineNotes copies (Copy text, a page link) is newer than any ink held.
 onSystemTextWritten(() => clipboard.noteSystemCopy());
 
@@ -15705,6 +15712,7 @@ export class InkSurface {
     if (group) {
       const bounds = this.groupBounds(group);
       if (!bounds) return false;
+      const notebookPath = this.options.notebookPath?.() ?? null;
       clipboard.put(
         {
           strokes: group.strokes,
@@ -15715,6 +15723,7 @@ export class InkSurface {
           equations: group.equations,
         },
         bounds,
+        notebookPath ? { notebookPath, pageId: group.pageId } : undefined,
       );
       const copyVersion = clipboard.version;
       const png = this.selectionPicture(group, null).then(async (shot) => {

@@ -55,10 +55,17 @@ export interface Pt {
   y: number;
 }
 
-/** What the clipboard holds: deep copies, and their bounds on the page they came from. */
+/** Source location of a copied selection in a FineNotes notebook, for live-updating Markdown clips. */
+export interface ClipboardSource {
+  notebookPath: string;
+  pageId: string;
+}
+
+/** What the clipboard holds: deep copies, their bounds on the page they came from, and optional source. */
 export interface ClipboardEntry {
   elements: ElementLists;
   bounds: Bounds;
+  source?: ClipboardSource;
 }
 
 export class InkClipboard {
@@ -68,7 +75,7 @@ export class InkClipboard {
   private ownPng: { size: number; hash: string } | null = null;
 
   /** Hold deep copies of `elements`. An empty selection clears the clipboard. */
-  put(elements: PageElements, bounds: Bounds): void {
+  put(elements: PageElements, bounds: Bounds, source?: ClipboardSource): void {
     this.left = false;
     this.ownPng = null;
     this.stamp++;
@@ -86,6 +93,7 @@ export class InkClipboard {
         equations: (elements.equations ?? []).map((equation) => structuredClone(equation)),
       },
       bounds: { ...bounds },
+      ...(source ? { source: { ...source } } : {}),
     };
   }
 

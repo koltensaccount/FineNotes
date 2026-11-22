@@ -62,6 +62,7 @@ import {
   type Bounds,
   type InkDocument,
   type PageComment,
+  type NotebookClip,
   type Page,
   type Ruling,
   type TextBoxElement,
@@ -3893,6 +3894,7 @@ export class InkView extends TextFileView {
         palette,
         paper: this.shownPaper(),
         laserColor: () => this.settings.laserDefaultColor,
+        notebookPath: () => this.file?.path ?? null,
       },
       {
         onRecentColors: (colors) => this.plugin.saveRecentColors(colors),
@@ -6369,6 +6371,17 @@ export class InkView extends TextFileView {
     }
     this.sidebar?.flush();
     this.requestSave();
+  }
+
+  /** Attach a live-updating Markdown capture clip to a page in this open notebook. */
+  addLiveClip(pageId: string, clip: NotebookClip): boolean {
+    const page = this.doc?.pages.find((p) => p.id === pageId);
+    if (!page) return false;
+    if (!page.clips) page.clips = [];
+    page.clips.push(clip);
+    this.surface?.repaint();
+    this.requestSave();
+    return true;
   }
 
   /** Copy the PDF text under the highlights on the page in view. */

@@ -6,21 +6,24 @@
  * theme-aware previews and activates `InlineHandwriteSession` on tap/click.
  */
 
-import { type App, MarkdownRenderChild, Notice, TFile, setIcon } from "obsidian";
+import { type App, type Editor, MarkdownRenderChild, Notice, TFile, setIcon } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import type { Bounds, Page } from "../model/document";
+import type { Bounds, NotebookClip, Page } from "../model/document";
+import { VIEW_TYPE_INK } from "../constants";
 import { handwritingForBackground } from "../canvas/handwriting-contrast";
 import { paintWritingGuides } from "../canvas/writing-guides";
 import { embedWritingGuidesOf, writingGuidesOf } from "../model/writing-guides";
 import { parseInkFile } from "../model/serialize";
-import { findBlockInDocument, resolveBlockBounds } from "../model/handwrite-block";
+import { findBlockInDocument, isBlockPage, resolveBlockBounds } from "../model/handwrite-block";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
 import { renderPageThumbnail } from "../canvas/renderer";
 import { getGardenPublisher, publishStagedNote, type StagedHandwriting } from "./garden-publish";
 import { VaultBackdropRenderer } from "./backdrop-renderer";
 import { VaultImageCache } from "./image-cache";
 import { PdfBackdropCache } from "./pdf-backdrop";
+import { getInkClipboard } from "./ink-surface";
 import { getActiveInlineSession, startInlineHandwriteSession } from "./inline-handwrite";
+import { editClosedNotebook } from "./notebook-transaction";
 
 const LEGACY_EMBED_PNG = /-(block|clip|page)-([a-z0-9-]+)\.png$/i;
 const FINE_NOTES_FENCE =
@@ -65,7 +68,7 @@ export class HandwriteEmbedManager {
   private readonly images: VaultImageCache;
   private pendingActivation: { notebookPath: string; blockId: string } | null = null;
   private publishing = false;
-  private readonly activeCards = new Set<() => void>();
+  private readonly activeCards = new Map<() => void, string>();
 
   constructor(
     private readonly app: App,
@@ -171,9 +174,112 @@ export class HandwriteEmbedManager {
     // Re-render live previews when Obsidian theme changes (Dark <-> Light)
     this.plugin.registerEvent(
       this.app.workspace.on("css-change", () => {
-        for (const refresh of this.activeCards) refresh();
+        for (const refresh of this.activeCards.keys()) refresh();
       }),
     );
+
+    // Auto-update live clips & Handwrite Here embeds when their source notebook changes.
+    this.plugin.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (!(file instanceof TFile) || !this.plugin.isInkFile(file)) return;
+        this.refreshCardsForNotebook(file.path);
+      }),
+    );
+
+    // Intercept pasting copied FineNotes handwriting into Markdown notes to create
+    // a live-updating, theme-adaptive clip linked back to the original notebook page.
+    this.plugin.registerEvent(
+      this.app.workspace.on("editor-paste", (evt, editor) => {
+        this.handleMarkdownPaste(evt, editor);
+      }),
+    );
+  }
+
+  private refreshCardsForNotebook(notebookPath: string): void {
+    for (const [refresh, path] of this.activeCards.entries()) {
+      if (path === notebookPath) refresh();
+    }
+  }
+
+  private handleMarkdownPaste(evt: ClipboardEvent, editor: Editor): void {
+    if (evt.defaultPrevented) return;
+    const inkClip = getInkClipboard();
+    const entry = inkClip.content;
+    if (!entry?.source) return;
+
+    const plain = evt.clipboardData?.getData("text/plain") ?? "";
+    if (plain.trim().length > 0) return;
+
+    if (inkClip.leftSinceCopy) {
+      const files = Array.from(evt.clipboardData?.files ?? []);
+      const img = files.find((f) => f.type.startsWith("image/"));
+      if (!img || !inkClip.hasOwnPngSize(img.size)) return;
+    }
+
+    const sourceFile = this.app.vault.getFileByPath(entry.source.notebookPath);
+    if (!sourceFile || !this.plugin.isInkFile(sourceFile)) return;
+
+    evt.preventDefault();
+
+    const clipId = `clip-${crypto.randomUUID()}`;
+    const pad = 12;
+    const now = Date.now();
+    const clip: NotebookClip = {
+      id: clipId,
+      pageId: entry.source.pageId,
+      bounds: {
+        minX: Math.max(0, entry.bounds.minX - pad),
+        minY: Math.max(0, entry.bounds.minY - pad),
+        maxX: entry.bounds.maxX + pad,
+        maxY: entry.bounds.maxY + pad,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const payload = JSON.stringify({ notebook: sourceFile.path, clip: clipId });
+    editor.replaceSelection(`\n\`\`\`finenotes\n${payload}\n\`\`\`\n`);
+
+    const pageId = entry.source.pageId;
+    void this.attachLiveClip(sourceFile, pageId, clip);
+  }
+
+  private async attachLiveClip(
+    sourceFile: TFile,
+    pageId: string,
+    clip: NotebookClip,
+  ): Promise<void> {
+    // If the original notebook is already open in a tab, add the clip live so the
+    // dashed capture box appears immediately and saves cleanly through InkView.
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_INK)) {
+      const view = leaf.view as {
+        file?: TFile | null;
+        addLiveClip?: (pid: string, c: NotebookClip) => boolean;
+      };
+      if (view.file?.path === sourceFile.path && typeof view.addLiveClip === "function") {
+        if (view.addLiveClip(pageId, clip)) {
+          window.setTimeout(() => this.refreshCardsForNotebook(sourceFile.path), 120);
+          return;
+        }
+      }
+    }
+
+    try {
+      await editClosedNotebook(
+        this.app,
+        sourceFile,
+        this.plugin.settings.paperWidth,
+        (doc) => {
+          const page = doc.pages.find((p) => p.id === pageId);
+          if (!page) return;
+          if (!page.clips) page.clips = [];
+          page.clips.push(clip);
+        },
+      );
+      this.refreshCardsForNotebook(sourceFile.path);
+    } catch (err) {
+      console.warn("FineNotes: could not persist live clip on source notebook", err);
+    }
   }
 
   private async openLegacyPngInline(
@@ -442,8 +548,8 @@ export class HandwriteEmbedManager {
     return false;
   }
 
-  trackCard(refresh: () => void): () => void {
-    this.activeCards.add(refresh);
+  trackCard(notebookPath: string, refresh: () => void): () => void {
+    this.activeCards.set(refresh, notebookPath);
     return () => this.activeCards.delete(refresh);
   }
 
@@ -452,7 +558,7 @@ export class HandwriteEmbedManager {
     notebookFile: TFile,
     blockId: string,
     onEdit: (() => void) | null,
-    options?: { readOnly?: boolean },
+    options?: { readOnly?: boolean; sourcePath?: string },
   ): Promise<void> {
     if (getActiveInlineSession()?.hostContainer === containerEl) return;
 
@@ -478,16 +584,18 @@ export class HandwriteEmbedManager {
         return;
       }
 
-      const { page, clip } = found;
+      const { page, pageIndex, clip } = found;
       const bounds = blockBounds(page, clip, blockId);
-      const readOnly = options?.readOnly === true;
+      const isLiveClip = blockId.startsWith("clip-") || !isBlockPage(page);
+      const readOnly = options?.readOnly === true || isLiveClip;
       containerEl.empty();
-      if (!onEdit && !readOnly) {
+      if (!onEdit && !options?.readOnly) {
         await this.addPrintImage(containerEl, page, bounds);
         return;
       }
       containerEl.addClass("finenotes-embed-card");
       containerEl.toggleClass("is-readonly", readOnly);
+      containerEl.toggleClass("is-live-clip", isLiveClip);
       const transparent = this.plugin.settings.embedBackground !== true;
       containerEl.toggleClass("is-transparent", transparent);
 
@@ -511,6 +619,29 @@ export class HandwriteEmbedManager {
           this.paint(canvas, page, bounds, width, dpr, dark, transparent);
           this.paint(printCanvas, page, bounds, width, dpr, false, transparent);
         });
+
+      if (isLiveClip) {
+        const sourceBtn = containerEl.createEl("button", {
+          cls: "clickable-icon finenotes-live-clip-source-pill",
+          attr: { "aria-label": `Open ${notebookFile.basename} (page ${pageIndex + 1})` },
+        });
+        setIcon(sourceBtn, "external-link");
+        sourceBtn.createSpan({ text: "Open source" });
+        const stop = (e: Event): void => e.stopPropagation();
+        for (const evt of ["mousedown", "pointerdown", "touchstart"] as const) {
+          sourceBtn.addEventListener(evt, stop);
+        }
+        sourceBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void this.app.workspace.openLinkText(
+            `${notebookFile.path}#page=${pageIndex + 1}`,
+            options?.sourcePath ?? "",
+            false,
+          );
+        });
+        return;
+      }
 
       if (readOnly || !onEdit) return;
 
@@ -607,11 +738,11 @@ class HandwriteBlockChild extends MarkdownRenderChild {
         file,
         this.blockId,
         renderedReadOnly ? null : startEdit,
-        { readOnly: renderedReadOnly },
+        { readOnly: renderedReadOnly, sourcePath: this.sourcePath },
       );
     };
 
-    this.untrack = this.manager.trackCard(render);
+    this.untrack = this.manager.trackCard(file.path, render);
 
     // Nested Live Preview callouts can attach after the processor's first frame.
     // Render a usable preview immediately and reconcile read-only state / auto-activation on mount.

@@ -22779,6 +22779,41 @@ button.goodobsidian-color-swatch.clickable-icon,
 .markdown-reading-view .finenotes-embed-edit-pill {
   display: none !important;
 }
+.finenotes-live-clip-source-pill.clickable-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  height: auto;
+  border-radius: var(--gob-radius-m);
+  background: var(--gob-glass);
+  backdrop-filter: var(--gob-blur);
+  -webkit-backdrop-filter: var(--gob-blur);
+  border: var(--gob-hairline);
+  color: var(--text-normal);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: var(--gob-shadow-float);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.finenotes-embed-card.is-live-clip:hover .finenotes-live-clip-source-pill.clickable-icon,
+.finenotes-embed-card.is-live-clip:focus-within .finenotes-live-clip-source-pill.clickable-icon {
+  opacity: 0.96;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.finenotes-live-clip-source-pill.clickable-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--gob-active-fg);
+}
 .finenotes-embed-canvas {
   display: block;
   width: 100%;
@@ -22952,7 +22987,8 @@ button.goodobsidian-color-swatch.clickable-icon,
     display: block;
   }
   .finenotes-embed-card:has(.finenotes-print-copy) .finenotes-embed-canvas,
-  .finenotes-embed-edit-pill {
+  .finenotes-embed-edit-pill,
+  .finenotes-live-clip-source-pill {
     display: none !important;
   }
 }

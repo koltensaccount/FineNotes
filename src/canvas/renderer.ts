@@ -50,6 +50,7 @@ import {
   NIGHT_HIGHLIGHTER_BLEND,
   nightColor,
   nightHighlighter,
+  paperFlips,
 } from "./night";
 import { type InkRun, inkRuns, penOptions, traceRun } from "../ink/freehand";
 import {
@@ -2425,6 +2426,11 @@ export class Renderer {
         level,
       );
     }
+    if (page.clips && page.clips.length > 0) {
+      const screenScale =
+        level / (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+      paintLiveClipFrames(ctx, page, paperColorOf(page, this.paper), screenScale);
+    }
     if (this.doc) {
       const texts = furnitureText(this.doc, box.index, this.notebookTitle);
       paintFurniture(ctx, page.geometry, texts, pageLook(page.backdrop, this.paper).night);
@@ -4149,4 +4155,46 @@ function clampToPage(window: Bounds | null, box: PageBox): Bounds | null {
     maxY: Math.min(box.height, window.maxY),
   };
   return out.maxX > out.minX && out.maxY > out.minY ? out : null;
+}
+
+/**
+ * Draw subtle non-printing dashed capture frames on the live notebook canvas
+ * around regions that are live-embedded into Markdown notes (`clip-*`).
+ */
+function paintLiveClipFrames(
+  ctx: CanvasRenderingContext2D,
+  page: Page,
+  paperHex: string,
+  screenScale: number,
+): void {
+  const clips = page.clips;
+  if (!clips || clips.length === 0 || !(screenScale > 0)) return;
+  const dark = !paperFlips(paperHex);
+  const stroke = dark ? "rgba(148, 163, 184, 0.52)" : "rgba(100, 116, 139, 0.48)";
+  const fill = dark ? "rgba(148, 163, 184, 0.04)" : "rgba(100, 116, 139, 0.03)";
+  const dash = 6 / screenScale;
+  const gap = 4 / screenScale;
+  const lineW = 1.25 / screenScale;
+  const radius = 6 / screenScale;
+
+  ctx.save();
+  for (const clip of clips) {
+    if (clip.id.startsWith("block-") || clip.isExpandable) continue;
+    const { minX, minY, maxX, maxY } = clip.bounds;
+    const w = maxX - minX;
+    const h = maxY - minY;
+    if (!(w > 2) || !(h > 2)) continue;
+    const r = Math.min(radius, w / 4, h / 4);
+
+    ctx.beginPath();
+    ctx.roundRect(minX, minY, w, h, r);
+    ctx.fillStyle = fill;
+    ctx.fill();
+
+    ctx.setLineDash([dash, gap]);
+    ctx.lineWidth = lineW;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
