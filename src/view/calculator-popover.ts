@@ -54,6 +54,7 @@ import {
   usesVariable,
 } from "../model/calculator";
 import {
+  CARET,
   type CalcAction,
   type CalcKey,
   type Entry,
@@ -806,7 +807,16 @@ export class CalculatorPopover {
     const laid = layoutWithEnding(expression, graph ? 10 : this.data.prefs.base, { graph });
     if (live) this.displayEnding = laid?.ending ?? "";
     if (!laid) {
-      parent.createSpan({ cls: "goodobsidian-calc-raw", text: expression.replace(/[‸]/g, "") });
+      const caretIdx = expression.indexOf(CARET);
+      if (caretIdx >= 0) {
+        const before = expression.slice(0, caretIdx).replace(/[‸]/g, "");
+        const afterText = expression.slice(caretIdx + 1).replace(/[‸]/g, "");
+        if (before) parent.createSpan({ cls: "goodobsidian-calc-raw", text: before });
+        parent.createSpan({ cls: "goodobsidian-calc-caret" });
+        if (afterText) parent.createSpan({ cls: "goodobsidian-calc-raw", text: afterText });
+      } else {
+        parent.createSpan({ cls: "goodobsidian-calc-raw", text: expression.replace(/[‸]/g, "") });
+      }
       return false;
     }
     renderBox(parent, laid.box);
@@ -827,8 +837,8 @@ export class CalculatorPopover {
   }
 
   private format(value: CalcValue): string | null {
-    const { fractions, base } = this.data.prefs;
-    return formatValue(value, { fractions, base });
+    const { fractions, base, notation } = this.data.prefs;
+    return formatValue(value, { fractions, base, notation });
   }
 
   private press(key: CalcKey): void {
@@ -1224,7 +1234,9 @@ export class CalculatorPopover {
     const marked = typing ? withCursor(this.entry) : expr;
     let laid = true;
     if (marked) laid = this.drawMath(this.mathEl, marked, editing, true);
-    if (!laid && typing) this.mathEl.createSpan({ cls: "goodobsidian-calc-caret" });
+    if (!laid && typing && !marked.includes(CARET)) {
+      this.mathEl.createSpan({ cls: "goodobsidian-calc-caret" });
+    }
     if (!marked && typing) this.mathEl.createSpan({ cls: "goodobsidian-calc-caret" });
     this.mathEl.toggleClass("is-raw", !laid);
     this.exprEl.toggleClass("is-done", this.entry.fresh);

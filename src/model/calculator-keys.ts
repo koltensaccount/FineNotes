@@ -567,6 +567,19 @@ function after(inserted: string, at: number): number {
 }
 
 /** `insert` typed into `entry` at its cursor; a box there is filled, not pushed along. */
+/** Whether `expr` from `from` onward contains a `)` with no matching `(` before it. */
+function hasUnmatchedClose(expr: string, from: number): boolean {
+  let depth = 0;
+  for (let i = from; i < expr.length; i++) {
+    if (expr[i] === "(") depth++;
+    else if (expr[i] === ")") {
+      if (depth === 0) return true;
+      depth--;
+    }
+  }
+  return false;
+}
+
 export function typeInto(entry: Entry, insert: string, continues: boolean): Entry {
   if (entry.fresh) {
     const expr = (continues ? "Ans" : "") + insert;
@@ -576,11 +589,23 @@ export function typeInto(entry: Entry, insert: string, continues: boolean): Entr
   const filling = entry.expr[at] === BOX;
   // Typing ÷(▢) into an empty slot (or at the start of an expression) creates a
   // full fraction template ▢÷(▢) with the cursor in the numerator, Casio-style.
-  const effective =
+  let effective =
     insert === `÷(${BOX})` &&
     (filling || at === 0 || "(,=+−×÷^".includes(entry.expr[at - 1] ?? ""))
       ? `${BOX}÷(${BOX})`
       : insert;
+  // Wrapping an existing expression: if the user already typed a closing `)` later
+  // and moved left to insert `√(▢)` / `sin(▢)` / etc., pair with that `)` instead
+  // of inserting an extra empty `▢)`.
+  if (
+    !filling &&
+    effective.endsWith(`(${BOX})`) &&
+    !effective.startsWith("÷") &&
+    !effective.startsWith("^") &&
+    hasUnmatchedClose(entry.expr, at)
+  ) {
+    effective = effective.slice(0, -2);
+  }
   const expr = entry.expr.slice(0, at) + effective + entry.expr.slice(filling ? at + 1 : at);
   return { expr, cursor: after(effective, at), fresh: false };
 }
@@ -667,7 +692,7 @@ export function isStop(expr: string, at: number): boolean {
     if (at > start && (bracket ? at <= end : at < end)) return false;
   }
   const laid = layoutExpression(withCursor({ expr, cursor: at, fresh: false }));
-  if (!laid) return false;
+  if (!laid) return layoutExpression(expr) === null;
   const text = boxText(laid);
   return text.includes("|") || text.includes("■");
 }
@@ -879,9 +904,13 @@ export function moveCursor(entry: Entry, by: -1 | 1): Entry {
   }
   // One stop at a time: not into the middle of a function's name, and past
   // places the display draws alike (either side of a ", " or a hidden bracket).
+  // In raw 1-line fallback mode (e.g. unbalanced parentheses while wrapping an
+  // expression), still step cleanly across every valid character stop.
   const seen = stopText(entry.expr, at);
+  const rawMode = layoutExpression(entry.expr) === null;
   for (let p = at + by; p >= 0 && p <= entry.expr.length; p += by) {
-    if (isStop(entry.expr, p) && stopText(entry.expr, p) !== seen) return { ...entry, cursor: p };
+    if (!isStop(entry.expr, p)) continue;
+    if (rawMode || stopText(entry.expr, p) !== seen) return { ...entry, cursor: p };
   }
   return entry;
 }

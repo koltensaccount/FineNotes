@@ -574,4 +574,17 @@ describe("editing inside what the display draws as one thing", () => {
     e = typeKey(e, "3", false);
     expect(e.expr).toBe("√(1÷(2×3))");
   });
+
+  it("allows ◀/▶ navigation in 1-line raw mode (unbalanced ')') and wraps cleanly with √ or (", () => {
+    let e = entry("1+2)", 4);
+    // Arrow all the way back to index 0 even while ')' is unbalanced
+    for (let i = 0; i < 4; i++) e = moveCursor(e, -1);
+    expect(e.cursor).toBe(0);
+    // Typing √(▢) pairs with the trailing ')' instead of inserting an extra '▢)'
+    const rooted = typeKey(e, "√(▢)", false);
+    expect(rooted.expr).toBe("√(1+2)");
+    // Typing '(' pairs with the trailing ')' to produce '(1+2)'
+    const grouped = typeKey(e, "(", false);
+    expect(grouped.expr).toBe("(1+2)");
+  });
 });
