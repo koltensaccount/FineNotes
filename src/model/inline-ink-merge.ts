@@ -33,7 +33,7 @@ function sameStroke(a?: Stroke, b?: Stroke): boolean {
 
 /** Merge local inline handwriting, shapes, text boxes, and images with latest on-disk block page. */
 export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
-  if (latest.geometry.width !== base.geometry.width || latest.geometry.height < base.geometry.height) {
+  if (latest.geometry.width !== base.geometry.width) {
     throw new Error("The handwriting block was resized elsewhere.");
   }
 
@@ -70,11 +70,15 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
     latest.clips[0].writingGuides = local.clips?.[0]?.writingGuides;
     latest.clips[0].updatedAt = Date.now();
   }
-  if (local.geometry.height > base.geometry.height && local.geometry.height > latest.geometry.height) {
-    latest.geometry.height = local.geometry.height;
+  if (local.geometry.height !== base.geometry.height) {
+    if (latest.geometry.height === base.geometry.height) {
+      latest.geometry.height = local.geometry.height;
+    } else if (local.geometry.height > latest.geometry.height) {
+      latest.geometry.height = local.geometry.height;
+    }
     const clip = latest.clips?.[0];
     if (clip) {
-      clip.bounds.maxY = Math.max(clip.bounds.maxY, local.geometry.height - BLOCK_PADDING);
+      clip.bounds.maxY = Math.max(BLOCK_PADDING, latest.geometry.height - BLOCK_PADDING);
       clip.updatedAt = Date.now();
     }
   }

@@ -94,6 +94,47 @@ export function expandBlockPageIfNeeded(
   return false;
 }
 
+/**
+ * Fits a dedicated Handwrite Here block page height to its current content:
+ * - Grows when content approaches the bottom (`expandBlockPageIfNeeded`).
+ * - Shrinks back down to `INITIAL_BLOCK_HEIGHT` when completely blank, or to
+ *   a comfortable writing buffer below the lowest remaining content when
+ *   trailing strokes are erased/undone.
+ */
+export function fitBlockPageHeight(
+  page: Page,
+  contentBottomY: number | null,
+  buffer = 60,
+): boolean {
+  if (contentBottomY !== null && expandBlockPageIfNeeded(page, contentBottomY, buffer)) {
+    return true;
+  }
+  const targetHeight =
+    contentBottomY === null
+      ? INITIAL_BLOCK_HEIGHT
+      : Math.max(
+          INITIAL_BLOCK_HEIGHT,
+          Math.ceil((contentBottomY + buffer + 120) / 120) * 120,
+        );
+  // Require > 60px excess before shrinking when non-empty (prevents jitter),
+  // and always snap back to INITIAL_BLOCK_HEIGHT when completely blank.
+  const shouldShrink =
+    contentBottomY === null
+      ? page.geometry.height > INITIAL_BLOCK_HEIGHT
+      : page.geometry.height - targetHeight > 60;
+  if (!shouldShrink) return false;
+  page.geometry.height = targetHeight;
+  if (page.clips && page.clips.length > 0) {
+    for (const clip of page.clips) {
+      if (clip.isExpandable) {
+        clip.bounds.maxY = Math.max(BLOCK_PADDING, page.geometry.height - BLOCK_PADDING);
+        clip.updatedAt = Date.now();
+      }
+    }
+  }
+  return true;
+}
+
 export function resolveBlockBounds(page: Page, clip: NotebookClip): Bounds {
   if (!isBlockPage(page)) return clipCurrentBounds(page, clip);
   const content = contentBoundsOnPage(page);

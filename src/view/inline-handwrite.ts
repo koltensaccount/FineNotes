@@ -6,7 +6,11 @@ import { InsertImage } from "../model/commands";
 import { resolveAttachmentFolder } from "../model/attachment-folders";
 import { newImageElement, placeImageBox } from "../model/images";
 import type { InkDocument, Page } from "../model/document";
-import { contentBoundsOnPage, expandBlockPageIfNeeded } from "../model/handwrite-block";
+import {
+  contentBoundsOnPage,
+  expandBlockPageIfNeeded,
+  fitBlockPageHeight,
+} from "../model/handwrite-block";
 import { dedicatedInkPage, mergeInlineInk } from "../model/inline-ink-merge";
 import { buildInkFile, parseInkFile } from "../model/serialize";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
@@ -451,9 +455,12 @@ export class InlineHandwriteSession {
             this.revision++;
             this.syncUndoRedo();
             const activePage = this.doc?.pages[0];
-            if (activePage) {
+            if (activePage && dedicated) {
               const bounds = contentBoundsOnPage(activePage);
-              if (bounds && growPage(bounds.maxY)) this.surface?.layout();
+              if (fitBlockPageHeight(activePage, bounds ? bounds.maxY : null)) {
+                syncHeight();
+                this.surface?.layout();
+              }
             }
             this.scheduleSave();
           },

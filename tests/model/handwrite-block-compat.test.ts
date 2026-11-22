@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { emptyDocument } from "../../src/model/document";
 import {
+  INITIAL_BLOCK_HEIGHT,
   createBlockPage,
   expandBlockPageIfNeeded,
   findBlockInDocument,
+  fitBlockPageHeight,
   isBlockPage,
 } from "../../src/model/handwrite-block";
 import { dedicatedInkPage, mergeInlineInk } from "../../src/model/inline-ink-merge";
@@ -39,5 +41,22 @@ describe("Handwrite Here backward compatibility & serialization", () => {
 
     mergeInlineInk(base, local, latest);
     expect(latest.geometry.height).toBe(local.geometry.height);
+  });
+
+  it("shrinks an expanded block back to initial height when erased completely blank", () => {
+    const doc = emptyDocument();
+    const { page } = createBlockPage(doc, "block-shrink-1", 800, INITIAL_BLOCK_HEIGHT);
+    expect(expandBlockPageIfNeeded(page, 620)).toBe(true);
+    expect(page.geometry.height).toBeGreaterThan(INITIAL_BLOCK_HEIGHT);
+
+    const base = structuredClone(page);
+    const local = structuredClone(page);
+    const latest = structuredClone(page);
+
+    expect(fitBlockPageHeight(local, null)).toBe(true);
+    expect(local.geometry.height).toBe(INITIAL_BLOCK_HEIGHT);
+
+    mergeInlineInk(base, local, latest);
+    expect(latest.geometry.height).toBe(INITIAL_BLOCK_HEIGHT);
   });
 });
