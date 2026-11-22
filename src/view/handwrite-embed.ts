@@ -13,11 +13,7 @@ import { handwritingForBackground } from "../canvas/handwriting-contrast";
 import { paintWritingGuides } from "../canvas/writing-guides";
 import { embedWritingGuidesOf } from "../model/writing-guides";
 import { parseInkFile } from "../model/serialize";
-import {
-  findBlockInDocument,
-  INITIAL_BLOCK_HEIGHT,
-  resolveBlockBounds,
-} from "../model/handwrite-block";
+import { findBlockInDocument, resolveBlockBounds } from "../model/handwrite-block";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
 import { renderPageThumbnail } from "../canvas/renderer";
 import { getGardenPublisher, publishStagedNote, type StagedHandwriting } from "./garden-publish";
@@ -52,11 +48,11 @@ function pageBounds(page: Page): Bounds {
 function blockBounds(
   page: Page,
   clip: Parameters<typeof resolveBlockBounds>[1],
-  block: string,
+  _block: string,
 ): Bounds {
-  return page.id === block && clip.isExpandable && page.geometry.height > INITIAL_BLOCK_HEIGHT
-    ? pageBounds(page)
-    : resolveBlockBounds(page, clip);
+  // Always crop rendered previews tightly to actual content bounds so blank
+  // trailing space at the bottom of an expanded block never bloats the note.
+  return resolveBlockBounds(page, clip);
 }
 
 export class HandwriteEmbedManager {
@@ -343,6 +339,9 @@ export class HandwriteEmbedManager {
       if (ctx && cropW > 0) {
         const k = (width / cropW) * dpr;
         ctx.save();
+        // Paint subtle writing guides behind the ink so they sit cleanly over a
+        // transparent background without obscuring ink strokes.
+        if (transparent) ctx.globalCompositeOperation = "destination-over";
         ctx.setTransform(k, 0, 0, k, -bounds.minX * k, -bounds.minY * k);
         paintWritingGuides(ctx, page, bounds, guides.style, paper.paper, width / cropW, k);
         ctx.restore();
@@ -456,6 +455,8 @@ export class HandwriteEmbedManager {
         return;
       }
       containerEl.addClass("finenotes-embed-card");
+      const transparent = this.plugin.settings.embedBackground !== true;
+      containerEl.toggleClass("is-transparent", transparent);
 
       const canvas = containerEl.createEl("canvas", { cls: "finenotes-embed-canvas" });
       const dark = containerEl.ownerDocument.body?.classList.contains("theme-dark") ?? false;
@@ -465,17 +466,17 @@ export class HandwriteEmbedManager {
         (2048 * (bounds.maxX - bounds.minX)) / (bounds.maxY - bounds.minY),
       );
       const dpr = Math.min(2, containerEl.ownerDocument.defaultView?.devicePixelRatio || 1);
-      this.paint(canvas, page, bounds, width, dpr, dark);
+      this.paint(canvas, page, bounds, width, dpr, dark, transparent);
       const printCanvas = containerEl.createEl("canvas", {
         cls: "finenotes-print-ink finenotes-print-copy",
       });
-      this.paint(printCanvas, page, bounds, width, dpr, false);
+      this.paint(printCanvas, page, bounds, width, dpr, false, transparent);
       void this.images
         .prepare(page.images, (width * dpr) / (bounds.maxX - bounds.minX))
         .then(() => {
           if (canvas.parentElement !== containerEl) return;
-          this.paint(canvas, page, bounds, width, dpr, dark);
-          this.paint(printCanvas, page, bounds, width, dpr, false);
+          this.paint(canvas, page, bounds, width, dpr, dark, transparent);
+          this.paint(printCanvas, page, bounds, width, dpr, false, transparent);
         });
 
       const editBtn = containerEl.createEl("button", {

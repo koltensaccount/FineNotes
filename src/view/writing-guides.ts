@@ -20,6 +20,7 @@ export interface WritingGuideHost {
   state: () => {
     enabled: boolean;
     includeInPreview?: boolean;
+    transparentBackground?: boolean;
     style: WritingGuideStyle;
     eligible: boolean;
     paper: string;
@@ -27,6 +28,7 @@ export interface WritingGuideHost {
   };
   enable: (enabled: boolean) => void;
   includeInPreview?: (enabled: boolean) => void;
+  setTransparentBackground?: (enabled: boolean) => void;
   configure: (patch: Partial<WritingGuideStyle>) => void;
   subscribe: (changed: () => void) => () => void;
 }
@@ -51,6 +53,9 @@ export function renderWritingGuideControls(
   const enabled = makeToggle("Writing guides", (v) => host.enable(v));
   const includeInPreview = host.includeInPreview
     ? makeToggle("Show in saved preview", (v) => host.includeInPreview?.(v))
+    : null;
+  const transparentBg = host.setTransparentBackground
+    ? makeToggle("Transparent embed background", (v) => host.setTransparentBackground?.(v))
     : null;
 
   const buttons = new Map<string, HTMLButtonElement>();
@@ -173,6 +178,7 @@ export function renderWritingGuideControls(
     const style = writingGuidesOf(state.style);
     enabled.checked = state.enabled;
     if (includeInPreview) includeInPreview.checked = state.includeInPreview === true;
+    if (transparentBg) transparentBg.checked = state.transparentBackground !== false;
 
     for (const [key, ctrl] of sliders) {
       const n = style[key as "spacing" | "thickness" | "opacity"];

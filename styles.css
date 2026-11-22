@@ -22753,6 +22753,10 @@ button.goodobsidian-color-swatch.clickable-icon,
   overflow: hidden;
   transition: border-color 0.15s ease;
 }
+.finenotes-embed-card.is-transparent {
+  background: transparent;
+  border-color: transparent;
+}
 .finenotes-embed-card:hover {
   border-color: var(--gob-active-fg);
 }

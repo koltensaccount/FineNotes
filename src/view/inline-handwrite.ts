@@ -335,6 +335,7 @@ export class InlineHandwriteSession {
             return {
               enabled: g.enabled,
               includeInPreview: g.includeInPreview,
+              transparentBackground: plugin.settings.embedBackground !== true,
               style: g.style,
               ...(this.surface?.writingGuideContext() ?? {
                 eligible: true,
@@ -345,6 +346,11 @@ export class InlineHandwriteSession {
           },
           enable: (enabled) => applyGuides({ enabled }),
           includeInPreview: (includeInPreview) => applyGuides({ includeInPreview }),
+          setTransparentBackground: (transparent) => {
+            plugin.settings.embedBackground = !transparent;
+            void plugin.saveSettings();
+            for (const fn of guideListeners) fn();
+          },
           configure: (patch) =>
             applyGuides({
               enabled: true,
