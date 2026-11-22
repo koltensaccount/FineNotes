@@ -1599,6 +1599,16 @@ export function getInkClipboard(): InkClipboard {
 // Text FineNotes copies (Copy text, a page link) is newer than any ink held.
 onSystemTextWritten(() => clipboard.noteSystemCopy());
 
+function calcTriggerLabel(content: CalcCardContent): string {
+  if (content.noAnswer || content.graph) return "";
+  if (content.written) return content.written;
+  const raw =
+    content.form === "fraction" && content.forms.fraction
+      ? content.forms.fraction.text
+      : (content.forms.decimal.shown ?? content.forms.decimal.text);
+  return raw && raw !== "?" ? raw : "";
+}
+
 async function blobSha256(blob: Blob): Promise<string | null> {
   if (typeof crypto === "undefined" || !crypto.subtle) return null;
   try {
@@ -3856,13 +3866,21 @@ export class InkSurface {
           event.stopPropagation();
           event.preventDefault();
           this.calcCard.hide();
+          this.calcGlow?.setTriggerHidden(false);
         },
         { capture: true },
       );
     }
     this.calcCard.hide();
     this.calcNote = note;
-    this.calcGlow.show({ pageId: note.pageId, strokes: note.strokes, doubts: note.doubts });
+    this.calcGlow.setTriggerHidden(false);
+    this.calcGlow.show({
+      pageId: note.pageId,
+      strokes: note.strokes,
+      doubts: note.doubts,
+      triggerAt: note.cardAt,
+      label: calcTriggerLabel(note.content),
+    });
     this.syncCalcChip();
   }
 
@@ -3873,7 +3891,13 @@ export class InkSurface {
   updateCalcNote(note: CalcNoteSpec): void {
     if (!this.calcNote || this.calcNote.pageId !== note.pageId) return;
     this.calcNote = note;
-    this.calcGlow?.show({ pageId: note.pageId, strokes: note.strokes, doubts: note.doubts });
+    this.calcGlow?.show({
+      pageId: note.pageId,
+      strokes: note.strokes,
+      doubts: note.doubts,
+      triggerAt: note.cardAt,
+      label: calcTriggerLabel(note.content),
+    });
     if (this.calcCard?.shown) this.calcCard.update(note.content);
     this.syncCalcChip();
   }
@@ -3893,6 +3917,7 @@ export class InkSurface {
   private openCalcCard(doubt = -1): void {
     const note = this.calcNote;
     if (!note || !this.calcCard) return;
+    this.calcGlow?.setTriggerHidden(true);
     this.calcCard.show(note.content, note.actions, doubt);
     this.syncCalcChip();
   }

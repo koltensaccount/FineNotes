@@ -13438,7 +13438,7 @@ button.goodobsidian-region-name:hover {
    unsure of. A tap on the glow opens the maths card (calc-card.ts): the
    reading typeset, the answer as a fraction or a decimal, Write, and along
    the foot a typed equation, copy LaTeX and Not maths. Chrome, not ink. */
-button.goodobsidian-calc-glow.clickable-icon {
+.goodobsidian-calc-glow {
   position: absolute;
   display: block;
   padding: 0;
@@ -13447,17 +13447,55 @@ button.goodobsidian-calc-glow.clickable-icon {
   background: transparent;
   box-shadow: none;
   color: var(--interactive-accent);
-  pointer-events: auto;
-  touch-action: none;
-  cursor: pointer;
+  pointer-events: none !important;
   animation: goodobsidian-calc-glow-in 0.35s var(--gob-ease-out) 1;
 }
 
-button.goodobsidian-calc-glow.clickable-icon:hover {
-  background: transparent;
+.goodobsidian-calc-glow.is-hidden {
+  display: none;
 }
 
-button.goodobsidian-calc-glow.is-hidden.clickable-icon {
+button.goodobsidian-calc-trigger.clickable-icon {
+  position: absolute;
+  z-index: 25;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--gob-radius-m);
+  background: var(--gob-glass);
+  backdrop-filter: var(--gob-blur);
+  -webkit-backdrop-filter: var(--gob-blur);
+  border: var(--gob-hairline);
+  box-shadow: var(--gob-shadow-float);
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: pointer;
+  animation: goodobsidian-calc-glow-in 0.25s var(--gob-ease-out) 1;
+}
+
+button.goodobsidian-calc-trigger.clickable-icon.is-hidden {
+  display: none;
+}
+
+.goodobsidian-calc-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--gob-active-fg);
+}
+
+.goodobsidian-calc-trigger-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.goodobsidian-calc-trigger-label.is-empty {
   display: none;
 }
 

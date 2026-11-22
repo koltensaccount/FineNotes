@@ -9,6 +9,7 @@
  * Safari 18 has no canvas filters.
  */
 
+import { setIcon } from "obsidian";
 import { type Bounds, POINT_STRIDE, type Stroke, strokeBounds } from "../model/document";
 import { t } from "../i18n/translate";
 import { onTap } from "./selection-bar";
@@ -23,61 +24,50 @@ export interface CalcGlowSpec {
   strokes: readonly Stroke[];
   /** Groups of stroke ids Grape was unsure of: a dotted line under each. */
   doubts: readonly (readonly string[])[];
+  /** Page-space anchor right beside the "=" where the compact clickable trigger sits. */
+  triggerAt?: { x: number; y: number };
+  /** Short answer preview shown on the compact trigger pill (empty = icon only). */
+  label?: string;
 }
 
 export class CalcGlow {
-  private readonly el: HTMLButtonElement;
+  private readonly el: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
+  private readonly triggerBtn: HTMLButtonElement;
+  private readonly triggerIcon: HTMLSpanElement;
+  private readonly triggerLabel: HTMLSpanElement;
   private spec: CalcGlowSpec | null = null;
   private bounds: Bounds | null = null;
+  private triggerSuppressed = false;
   /** The scale it was last drawn at, so a move alone does not redraw. */
   private drawnScale = 0;
 
   /**
-   * `onOpen` runs on a tap: with the index of the doubt tapped (its dotted
-   * ink), or -1 for a tap anywhere else on the glow.
+   * `onOpen` runs ONLY when the user deliberately taps the small trigger pill
+   * beside the "=". The halo itself is purely visual (`pointer-events: none`)
+   * so writing anywhere around the glowing strokes is never interrupted.
    */
   constructor(parent: HTMLElement, onOpen: (doubt: number) => void) {
-    this.el = parent.createEl("button", { cls: "goodobsidian-calc-glow clickable-icon is-hidden" });
-    this.el.setAttribute("aria-label", t("calculator.mathsMark"));
+    this.el = parent.createDiv({ cls: "goodobsidian-calc-glow is-hidden" });
     this.canvas = this.el.createEl("canvas");
-    let at = { x: 0, y: 0 };
-    this.el.addEventListener("pointerdown", (event) => {
-      at = { x: event.clientX, y: event.clientY };
+    this.triggerBtn = parent.createEl("button", {
+      cls: "goodobsidian-calc-trigger clickable-icon is-hidden",
+      attr: { "aria-label": t("calculator.mathsMark") },
     });
-    onTap(this.el, () => onOpen(this.doubtAt(at.x, at.y)));
+    this.triggerIcon = this.triggerBtn.createSpan({ cls: "goodobsidian-calc-trigger-icon" });
+    setIcon(this.triggerIcon, "calculator");
+    this.triggerLabel = this.triggerBtn.createSpan({ cls: "goodobsidian-calc-trigger-label" });
+    onTap(this.triggerBtn, () => onOpen(-1));
   }
 
-  /** The doubt whose ink is under the client point, or -1. */
-  private doubtAt(clientX: number, clientY: number): number {
-    const spec = this.spec;
-    const b = this.bounds;
-    const scale = this.drawnScale;
-    if (!spec || !b || !(scale > 0)) return -1;
-    const rect = this.el.getBoundingClientRect();
-    const x = (clientX - rect.left) / scale + b.minX - PAD;
-    const y = (clientY - rect.top) / scale + b.minY - PAD;
-    // Within about a fingertip of the character's ink.
-    const reach = 14 / scale;
-    let best = -1;
-    let bestD = Infinity;
-    spec.doubts.forEach((ids, i) => {
-      const gb = unionBounds(spec.strokes.filter((s) => ids.includes(s.id)));
-      if (!gb) return;
-      const dx = Math.max(gb.minX - x, 0, x - gb.maxX);
-      const dy = Math.max(gb.minY - y, 0, y - (gb.maxY + 8));
-      const d = Math.hypot(dx, dy);
-      if (d <= reach && d < bestD) {
-        best = i;
-        bestD = d;
-      }
-    });
-    return best;
-  }
-
-  /** Whether `node` is the glow (or inside it). */
+  /** Whether `node` is the clickable trigger beside "=" (never the passive halo). */
   contains(node: Node | null): boolean {
-    return node !== null && this.el.contains(node);
+    return node !== null && this.triggerBtn.contains(node);
+  }
+
+  setTriggerHidden(hidden: boolean): void {
+    this.triggerSuppressed = hidden;
+    this.triggerBtn.toggleClass("is-hidden", hidden || this.bounds === null);
   }
 
   get pageId(): string | null {
@@ -102,15 +92,21 @@ export class CalcGlow {
     this.bounds = box;
     this.drawnScale = 0;
     this.el.toggleClass("is-hidden", box === null);
+    const label = spec.label?.trim() ?? "";
+    this.triggerLabel.textContent = label;
+    this.triggerLabel.toggleClass("is-empty", label.length === 0);
+    this.triggerBtn.toggleClass("is-hidden", this.triggerSuppressed || box === null);
   }
 
   hide(): void {
     this.spec = null;
     this.bounds = null;
+    this.triggerSuppressed = false;
     this.el.addClass("is-hidden");
+    this.triggerBtn.addClass("is-hidden");
   }
 
-  /** Place it over the sum: `left`, `top` are the page's corner in paper px, `scale` paper px per page px. */
+  /** Place halo over the sum and compact trigger pill beside "=". */
   place(left: number, top: number, scale: number): void {
     const b = this.bounds;
     if (!b || !this.spec) return;
@@ -124,6 +120,14 @@ export class CalcGlow {
       top: `${top + y}px`,
       width: `${w}px`,
       height: `${h}px`,
+    });
+    const anchor = this.spec.triggerAt ?? {
+      x: b.maxX + 10,
+      y: (b.minY + b.maxY) / 2,
+    };
+    this.triggerBtn.setCssStyles({
+      left: `${left + anchor.x * scale}px`,
+      top: `${top + anchor.y * scale}px`,
     });
     if (Math.abs(scale - this.drawnScale) > 1e-6) this.draw(scale, w, h);
   }
