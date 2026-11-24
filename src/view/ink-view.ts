@@ -6156,12 +6156,16 @@ export class InkView extends TextFileView {
       window.setTimeout(() => this.applyPendingPage(attempt + 1), 50);
       return;
     }
+    const pages = surface.document.pages;
+    if (targetPageId !== null && !pages.some((p) => p.id === targetPageId) && attempt < 20) {
+      window.setTimeout(() => this.applyPendingPage(attempt + 1), 50);
+      return;
+    }
     this.pendingSubpath = null;
     this.pendingPageIndex = null;
     this.pendingPageId = null;
     const highlight = this.pendingHighlightPage;
     this.pendingHighlightPage = false;
-    const pages = surface.document.pages;
     let index: number | null = null;
     if (targetPageId !== null) {
       const byId = pages.findIndex((p) => p.id === targetPageId);
