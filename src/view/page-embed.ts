@@ -844,14 +844,18 @@ class NotebookEmbed extends Component {
     );
   }
 
-  open(event: MouseEvent | KeyboardEvent, page: number): void {
+  open(event: MouseEvent | KeyboardEvent, page: number, pageId?: string): void {
     event.preventDefault();
     event.stopPropagation();
     const newTab = Keymap.isModEvent(event);
     const leaf = this.ctx.app.workspace.getLeaf(newTab);
     void leaf.setViewState(
       { type: VIEW_TYPE_INK, state: { file: this.file.path }, active: true },
-      { pageIndex: Math.max(0, page - 1), highlightPage: true },
+      {
+        pageIndex: Math.max(0, page - 1),
+        ...(pageId ? { pageId } : {}),
+        highlightPage: true,
+      },
     );
   }
 
@@ -1016,7 +1020,9 @@ class PageSlot {
       attr: { type: "button", "aria-label": "Open in notebook" },
     });
     setIcon(openBtn, "external-link");
-    openBtn.addEventListener("click", (event) => this.embed.open(event, this.number));
+    openBtn.addEventListener("click", (event) =>
+      this.embed.open(event, this.number, this.page?.id ?? this.embed.target.pageId),
+    );
   }
 
   /**

@@ -2554,6 +2554,7 @@ export class InkView extends TextFileView {
   /** De-duplicate unload and close Companion PDF updates. */
   private companionUnloadedFile: TFile | null = null;
   private pendingHighlightPage = false;
+  private pendingPageId: string | null = null;
   /** Canvas used only to measure text boxes that grow with their text. */
   private measureCtx: CanvasRenderingContext2D | null = null;
 
@@ -6095,15 +6096,17 @@ export class InkView extends TextFileView {
    */
   override setEphemeralState(state: unknown): void {
     super.setEphemeralState(state);
-    const { subpath, pageIndex, match, search, highlightPage } = (state ?? {}) as {
+    const { subpath, pageIndex, pageId, match, search, highlightPage } = (state ?? {}) as {
       subpath?: unknown;
       pageIndex?: unknown;
+      pageId?: unknown;
       match?: { content?: unknown; matches?: unknown };
       /** What Home's search found on `pageIndex`, to light up there. */
       search?: unknown;
       highlightPage?: unknown;
     };
     if (highlightPage === true) this.pendingHighlightPage = true;
+    if (typeof pageId === "string" && pageId) this.pendingPageId = pageId;
     // A result of Obsidian's own search: its page, with the words lit up (2.5).
     const found =
       typeof match?.content === "string" && Array.isArray(match.matches)
@@ -6144,7 +6147,8 @@ export class InkView extends TextFileView {
     const fresh = path !== this.restoredPath;
     const subpath = this.pendingSubpath;
     const back = this.pendingPageIndex;
-    if (!fresh && subpath === null && back === null) return;
+    const targetPageId = this.pendingPageId;
+    if (!fresh && subpath === null && back === null && targetPageId === null) return;
     // A board not laid out yet has no view to put a spot in either.
     const unready = surface.surfaceEl.clientHeight === 0 || (this.isBoard && !surface.boardSpot());
     if (unready && attempt < 20) {
@@ -6154,12 +6158,17 @@ export class InkView extends TextFileView {
     }
     this.pendingSubpath = null;
     this.pendingPageIndex = null;
+    this.pendingPageId = null;
     const highlight = this.pendingHighlightPage;
     this.pendingHighlightPage = false;
     const pages = surface.document.pages;
     let index: number | null = null;
-    if (subpath !== null) index = pageFromSubpath(subpath, pages.length);
-    else if (back !== null) index = back < pages.length ? back : null;
+    if (targetPageId !== null) {
+      const byId = pages.findIndex((p) => p.id === targetPageId);
+      if (byId >= 0) index = byId;
+    }
+    if (index === null && subpath !== null) index = pageFromSubpath(subpath, pages.length);
+    else if (index === null && back !== null) index = back < pages.length ? back : null;
     // `#Krebs cycle`: a named region, centred (discussion #167). A page comes first.
     const name = subpath !== null && index === null ? regionSubpathName(subpath) : null;
     const region = name !== null ? findRegion(pages, name) : null;

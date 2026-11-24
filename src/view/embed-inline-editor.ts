@@ -572,7 +572,11 @@ export class EmbedInlineEditor {
           const leaf = app.workspace.getLeaf(true);
           await leaf.setViewState(
             { type: VIEW_TYPE_INK, state: { file: notebookFile.path }, active: true },
-            { pageIndex: Math.max(0, this.req.pageNumber - 1), highlightPage: true },
+            {
+              pageIndex: Math.max(0, this.req.pageNumber - 1),
+              pageId: this.req.pageId,
+              highlightPage: true,
+            },
           );
         });
       });
