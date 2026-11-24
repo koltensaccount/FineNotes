@@ -9,7 +9,6 @@
  */
 
 import type { CompanionStore } from "./model/companion-pdf";
-import type { PdfQuality } from "./export/pdf-quality";
 import type { FolderStyles } from "./model/library-style";
 import type { SimplePart } from "./model/simple-mode";
 import { LLM_PROVIDER_ID } from "./recognition/llm-request";
@@ -598,10 +597,8 @@ export interface GoodObsidianSettings {
   /** Notebook-wide non-printing Writing Guides overlay state & style. */
   writingGuidesEnabled?: boolean;
   writingGuides?: Record<string, unknown>;
-  /** Optional versioned Companion PDF association registry (fork compatibility). */
+  /** Optional versioned Companion PDF runtime cache. */
   companionPdfs?: CompanionStore;
-  /** Default raster detail for Companion PDF exports. */
-  pdfExportQuality?: PdfQuality;
 }
 
 // The records are copies, so a host that edits its settings in place cannot

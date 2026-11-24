@@ -87,7 +87,6 @@ export default defineConfig({
         "src/export/pdf-canvas.ts",
         "src/export/pdf-page-canvas.ts",
         "src/export/companion-metadata.ts",
-        "src/export/pdf-quality.ts",
         "src/model/note-export.ts",
         "src/canvas/align-snap.ts",
         "src/canvas/paper-style.ts",

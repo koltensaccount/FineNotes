@@ -1,4 +1,4 @@
-/** Ownership travels inside the PDF as well as its human-readable filename. */
+/** Ownership travels invisibly inside the PDF's Subject metadata. */
 import { PDFDocument } from "pdf-lib";
 import { validCompanionId } from "../model/companion-pdf";
 
@@ -12,9 +12,21 @@ export function companionPdfSubject(id: string): string {
 export async function companionPdfIdentity(bytes: ArrayBuffer): Promise<string | null> {
   try {
     const pdf = await PDFDocument.load(bytes);
-    const id = pdf.getSubject()?.slice(PREFIX.length);
-    return pdf.getSubject()?.startsWith(PREFIX) && validCompanionId(id) ? id : null;
+    const subject = pdf.getSubject();
+    if (!subject?.startsWith(PREFIX)) return null;
+    const id = subject.slice(PREFIX.length);
+    return validCompanionId(id) ? id : null;
   } catch {
     return null;
   }
+}
+
+export async function stampCompanionPdfSubject(
+  bytes: ArrayBuffer,
+  id: string,
+): Promise<Uint8Array> {
+  const subject = companionPdfSubject(id);
+  const pdf = await PDFDocument.load(bytes);
+  pdf.setSubject(subject);
+  return pdf.save();
 }

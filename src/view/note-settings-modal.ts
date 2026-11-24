@@ -24,7 +24,6 @@
  */
 
 import { type App, type EventRef, Modal, Notice, Setting, setIcon } from "obsidian";
-import type { PdfQuality } from "../export/pdf-quality";
 import type { ScrollDirection } from "../model/document";
 import type { NotebookFurniture } from "../model/furniture";
 import { formatFileSize } from "../model/notebook-info";
@@ -87,14 +86,12 @@ export interface NoteSettingsHost {
    * Resolves `false` when there is no cover to paint.
    */
   paintCover?: (canvas: HTMLCanvasElement, cssWidth: number) => Promise<boolean>;
-  /** Optional Companion PDF controls for `.notebook.md` notebooks. */
+  /** Optional Companion PDF controls for FineNotes notebooks and pages. */
   companion?: {
     state: () => {
       enabled: boolean;
       followName: boolean;
       pdfPath: string;
-      pdfQuality: PdfQuality | null;
-      globalQuality: PdfQuality;
       status: string;
       dirty: boolean;
       error?: string;
@@ -105,7 +102,6 @@ export interface NoteSettingsHost {
       enabled?: boolean;
       followName?: boolean;
       pdfPath?: string;
-      pdfQuality?: PdfQuality | null;
     }) => Promise<void>;
     update: () => Promise<void>;
     openPdf: () => void;
@@ -185,30 +181,30 @@ export class NoteSettingsModal extends Modal {
         await action();
       } catch (error) {
         new Notice(
-          `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
+          t("notebooks.companion.noticePrefix", {
+            error: error instanceof Error ? error.message : String(error),
+          }),
         );
       }
       if (this.modalEl.isConnected) this.render();
     };
 
-    const head = new Setting(card).setDesc(
-      "Keeps a synced vector PDF copy of this notebook (updates on close or on demand).",
-    );
+    const head = new Setting(card).setDesc(t("notebooks.companion.desc"));
     const titleWrap = head.nameEl.createDiv({ cls: "goodobsidian-ns-companion-head" });
-    titleWrap.createSpan({ text: "Companion PDF" });
+    titleWrap.createSpan({ text: t("notebooks.companion.title") });
     const badge = titleWrap.createSpan({
       cls: "goodobsidian-ns-companion-badge",
       text: state.enabled
         ? state.error
-          ? "Error"
+          ? t("notebooks.companion.badgeError")
           : state.running
-            ? "Updating…"
+            ? t("notebooks.companion.statusUpdating")
             : !state.pdfExists
-              ? "Missing"
+              ? t("notebooks.companion.badgeMissing")
               : state.dirty
-                ? "Needs update"
-                : "Up to date"
-        : "Off",
+                ? t("notebooks.companion.statusNeedsUpdate")
+                : t("notebooks.companion.statusUpToDate")
+        : t("notebooks.companion.statusOff"),
     });
     if (!state.enabled) badge.addClass("is-off");
     else if (state.error || !state.pdfExists) badge.addClass("is-error");
@@ -229,11 +225,11 @@ export class NoteSettingsModal extends Modal {
     const currentFolder = slashIdx >= 0 ? state.pdfPath.slice(0, slashIdx) : "";
     const currentFile = slashIdx >= 0 ? state.pdfPath.slice(slashIdx + 1) : state.pdfPath;
 
-    const pathRow = new Setting(card).setName("Folder");
+    const pathRow = new Setting(card).setName(t("notebooks.companion.folder"));
     const pathWrap = pathRow.controlEl.createDiv({ cls: "goodobsidian-ns-companion-path" });
     const folderBtn = pathWrap.createEl("button", {
       cls: "goodobsidian-ns-companion-folder",
-      attr: { type: "button", "aria-label": "Choose companion PDF folder" },
+      attr: { type: "button", "aria-label": t("notebooks.companion.chooseFolderAria") },
     });
     const folderIcon = folderBtn.createSpan({ cls: "goodobsidian-ns-companion-folder-icon" });
     setIcon(folderIcon, "folder");
@@ -250,7 +246,7 @@ export class NoteSettingsModal extends Modal {
             void run(() => host.configure({ pdfPath: next }));
           }
         },
-        "Choose folder for companion PDF…",
+        t("notebooks.companion.chooseFolderPlaceholder"),
         currentFolder,
       ).open();
     });
@@ -258,7 +254,7 @@ export class NoteSettingsModal extends Modal {
     if (state.pdfExists) {
       const openBtn = pathWrap.createEl("button", {
         cls: "clickable-icon goodobsidian-ns-companion-open",
-        attr: { type: "button", "aria-label": "Open companion PDF" },
+        attr: { type: "button", "aria-label": t("notebooks.companion.openPdfAria") },
       });
       setIcon(openBtn, "external-link");
       openBtn.addEventListener("click", () => {
@@ -268,14 +264,14 @@ export class NoteSettingsModal extends Modal {
     }
 
     // Filename mode segmented control (Follow name | Custom)
-    const nameRow = new Setting(card).setName("Filename");
+    const nameRow = new Setting(card).setName(t("notebooks.companion.filename"));
     const seg = nameRow.controlEl.createDiv({
       cls: "goodobsidian-ns-segmented",
-      attr: { role: "radiogroup", "aria-label": "Companion PDF filename mode" },
+      attr: { role: "radiogroup", "aria-label": t("notebooks.companion.filenameModeAria") },
     });
     for (const [follow, label] of [
-      [true, "Follow name"],
-      [false, "Custom"],
+      [true, t("notebooks.companion.followName")],
+      [false, t("notebooks.companion.custom")],
     ] as const) {
       const btn = seg.createEl("button", {
         cls: "goodobsidian-ns-segment clickable-icon",
@@ -295,14 +291,14 @@ export class NoteSettingsModal extends Modal {
     }
 
     if (!state.followName) {
-      const customRow = new Setting(card).setName("Custom name");
+      const customRow = new Setting(card).setName(t("notebooks.companion.customName"));
       const nameInput = customRow.controlEl.createEl("input", {
         cls: "goodobsidian-ns-companion-input",
         attr: {
           type: "text",
           placeholder: "Notebook.pdf",
           spellcheck: "false",
-          "aria-label": "Custom companion PDF filename",
+          "aria-label": t("notebooks.companion.customNameAria"),
         },
       });
       nameInput.value = currentFile;
@@ -325,11 +321,15 @@ export class NoteSettingsModal extends Modal {
 
     // Update now action row
     const syncRow = new Setting(card)
-      .setName("Sync PDF")
-      .setDesc(state.error ? state.status : "Vector ink & embedded PDFs stay sharp.");
+      .setName(t("notebooks.companion.syncTitle"))
+      .setDesc(state.error ? state.status : t("notebooks.companion.syncDesc"));
     syncRow.addButton((button) => {
       button
-        .setButtonText(state.running ? "Updating…" : "Update PDF now")
+        .setButtonText(
+          state.running
+            ? t("notebooks.companion.statusUpdating")
+            : t("notebooks.companion.updateNow"),
+        )
         .setDisabled(state.running)
         .setCta()
         .onClick(() => void run(host.update));
