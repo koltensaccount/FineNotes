@@ -40,7 +40,10 @@ export function renderWritingGuideControls(
 ): () => void {
   const body = parent.createDiv({ cls: "goodobsidian-writing-guides" });
 
-  const makeToggle = (labelText: string, onChange: (checked: boolean) => void): HTMLInputElement => {
+  const makeToggle = (
+    labelText: string,
+    onChange: (checked: boolean) => void,
+  ): HTMLInputElement => {
     const row = body.createEl("label", { cls: "goodobsidian-guide-toggle" });
     row.createSpan({ text: labelText });
     const input = row.createEl("input", {
@@ -278,15 +281,17 @@ export class WritingGuidePopover {
       const rect = anchorEl.getBoundingClientRect();
       const popW = Math.min(300, win.innerWidth - 16);
       this.el.style.width = `${popW}px`;
-      const left = Math.max(8, Math.min(rect.left + rect.width / 2 - popW / 2, win.innerWidth - popW - 8));
+      const left = Math.max(
+        8,
+        Math.min(rect.left + rect.width / 2 - popW / 2, win.innerWidth - popW - 8),
+      );
       const popH = this.el.offsetHeight || 360;
       const below = rect.bottom + 8 + popH <= win.innerHeight - 8;
       const top = below ? rect.bottom + 8 : Math.max(8, rect.top - popH - 8);
-      this.el.style.position = "fixed";
-      this.el.style.transform = "none";
-      this.el.style.left = `${Math.round(left)}px`;
-      this.el.style.top = `${Math.round(top)}px`;
-      this.el.style.zIndex = "60";
+      this.el.setCssProps({
+        left: `${Math.round(left)}px`,
+        top: `${Math.round(top)}px`,
+      });
     };
     place();
     win.requestAnimationFrame(place);

@@ -102,7 +102,9 @@ function vibrate(): void {
   if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
     try {
       navigator.vibrate(25);
-    } catch {}
+    } catch {
+      /* Haptics unsupported on this platform. */
+    }
   }
 }
 
@@ -146,18 +148,20 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
       draggedButton.removeClass("is-drag-held", "is-dragging");
     }
     barEl.removeClass("is-bar-held", "is-reordering");
-    barEl.style.overflow = "";
-    barEl.style.touchAction = "";
     if (activePointerId !== null) {
       try {
         if (barEl.hasPointerCapture(activePointerId)) barEl.releasePointerCapture(activePointerId);
-      } catch {}
+      } catch {
+        /* Pointer capture already released. */
+      }
       if (draggedButton) {
         try {
           if (draggedButton.hasPointerCapture(activePointerId)) {
             draggedButton.releasePointerCapture(activePointerId);
           }
-        } catch {}
+        } catch {
+          /* Pointer capture already released. */
+        }
       }
     }
     doc.removeEventListener("pointermove", onDocMove);
@@ -357,14 +361,14 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
       holdTimer = null;
       holdTriggered = true;
       vibrate();
-      barEl.style.touchAction = "none";
       if (mode === "dock") {
         barEl.addClass("is-bar-held");
-        barEl.style.overflow = "hidden";
         if (activePointerId !== null) {
           try {
             barEl.setPointerCapture(activePointerId);
-          } catch {}
+          } catch {
+            /* Pointer capture unsupported for synthetic events. */
+          }
         }
         dockPreview = host.createDiv({ cls: "goodobsidian-dock-preview" });
         updateDockPreview(dockPreview, candidateDock);
@@ -374,7 +378,9 @@ export function bindDirectBarGestures(ctx: DirectBarGesturesHost): () => void {
         if (activePointerId !== null) {
           try {
             draggedButton.setPointerCapture(activePointerId);
-          } catch {}
+          } catch {
+            /* Pointer capture unsupported for synthetic events. */
+          }
         }
       }
     }, HOLD_MS);

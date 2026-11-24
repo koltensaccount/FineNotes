@@ -23,11 +23,7 @@ export function parseCssColor(value: string): Rgb | null {
   if (hexMatch) {
     const h = hexMatch[1];
     if (h.length === 3) {
-      return [
-        parseInt(h[0] + h[0], 16),
-        parseInt(h[1] + h[1], 16),
-        parseInt(h[2] + h[2], 16),
-      ];
+      return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
     }
     return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
   }
@@ -96,7 +92,11 @@ function hslToRgb(h: number, s: number, l: number): Rgb {
     if (x < 2 / 3) return p + (q - p) * (2 / 3 - x) * 6;
     return p;
   };
-  return [Math.round(hue(h + 1 / 3) * 255), Math.round(hue(h) * 255), Math.round(hue(h - 1 / 3) * 255)];
+  return [
+    Math.round(hue(h + 1 / 3) * 255),
+    Math.round(hue(h) * 255),
+    Math.round(hue(h - 1 / 3) * 255),
+  ];
 }
 
 function rgbToHex([r, g, b]: Rgb): string {
@@ -151,15 +151,18 @@ function defaultDoc(): Document | null {
 export function syncActiveAccentContrast(doc: Document | null = defaultDoc()): void {
   if (!doc?.body || typeof getComputedStyle !== "function") return;
   const darkTheme = doc.body.classList.contains("theme-dark");
-  const probe = doc.createElement("div");
-  probe.style.cssText =
-    "position:fixed;visibility:hidden;pointer-events:none;" +
-    "color:var(--interactive-accent);background:var(--background-secondary);";
-  doc.body.appendChild(probe);
+  const probe = doc.body.createDiv({
+    attr: {
+      style:
+        "position:fixed;visibility:hidden;pointer-events:none;" +
+        "color:var(--interactive-accent);background:var(--background-secondary);",
+    },
+  });
   try {
     const style = getComputedStyle(probe);
     const accent = parseCssColor(style.color);
-    const barBg = parseCssColor(style.backgroundColor) ?? (darkTheme ? [36, 36, 36] : [242, 242, 242]);
+    const barBg =
+      parseCssColor(style.backgroundColor) ?? (darkTheme ? [36, 36, 36] : [242, 242, 242]);
     if (!accent) {
       doc.body.style.removeProperty("--gob-active-fg");
       return;

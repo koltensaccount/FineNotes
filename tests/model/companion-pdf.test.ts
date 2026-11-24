@@ -361,25 +361,35 @@ it("fingerprints rendering metadata while excluding stroke identity and replay t
 
 describe("companion effective export quality", () => {
   it("inherited global quality changes regenerate unchanged content and record only successful replacement", async () => {
-    const s = setup(); let global: PdfQuality = "standard";
-    const snapshot = async () => ({...await s.snapshot(), quality: effectivePdfQuality(undefined, global)});
+    const s = setup();
+    let global: PdfQuality = "standard";
+    const snapshot = async () => ({
+      ...(await s.snapshot()),
+      quality: effectivePdfQuality(undefined, global),
+    });
     await s.controller.update(ID, snapshot);
     expect(s.entry.lastQuality).toBe("standard");
     global = "high";
     s.replace.mockRejectedValueOnce(new Error("write failed"));
     await expect(s.controller.update(ID, snapshot)).rejects.toThrow("write failed");
-    expect(s.entry.lastQuality).toBe("standard"); expect(s.entry.dirty).toBe(true);
+    expect(s.entry.lastQuality).toBe("standard");
+    expect(s.entry.dirty).toBe(true);
     await s.controller.update(ID, snapshot);
-    expect(s.entry.lastQuality).toBe("high"); expect(s.entry.dirty).toBe(false);
+    expect(s.entry.lastQuality).toBe("high");
+    expect(s.entry.dirty).toBe(false);
     expect(s.render).toHaveBeenCalledTimes(3);
   });
   it("a notebook override ignores the global default and canceled generation preserves the successful quality", async () => {
     const s = setup();
-    const standard = async () => ({...await s.snapshot(), quality: effectivePdfQuality("standard", "high")});
+    const standard = async () => ({
+      ...(await s.snapshot()),
+      quality: effectivePdfQuality("standard", "high"),
+    });
     await s.controller.update(ID, standard);
     s.render.mockRejectedValueOnce(new DOMException("cancelled", "AbortError"));
-    const veryHigh = async () => ({...await s.snapshot(), quality: "very-high" as const});
+    const veryHigh = async () => ({ ...(await s.snapshot()), quality: "very-high" as const });
     await expect(s.controller.update(ID, veryHigh)).rejects.toThrow("cancelled");
-    expect(s.entry.lastQuality).toBe("standard"); expect(s.entry.dirty).toBe(true);
+    expect(s.entry.lastQuality).toBe("standard");
+    expect(s.entry.dirty).toBe(true);
   });
 });

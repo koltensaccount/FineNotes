@@ -74,11 +74,7 @@ export function createBlockPage(
   return { page, pageIndex, clip };
 }
 
-export function expandBlockPageIfNeeded(
-  page: Page,
-  contentBottomY: number,
-  buffer = 60,
-): boolean {
+export function expandBlockPageIfNeeded(page: Page, contentBottomY: number, buffer = 60): boolean {
   if (contentBottomY + buffer > page.geometry.height) {
     const required = contentBottomY + buffer + BLOCK_EXPAND_STEP;
     page.geometry.height = Math.max(page.geometry.height + BLOCK_EXPAND_STEP, required);
@@ -113,10 +109,7 @@ export function fitBlockPageHeight(
   const targetHeight =
     contentBottomY === null
       ? INITIAL_BLOCK_HEIGHT
-      : Math.max(
-          INITIAL_BLOCK_HEIGHT,
-          Math.ceil((contentBottomY + buffer + 120) / 120) * 120,
-        );
+      : Math.max(INITIAL_BLOCK_HEIGHT, Math.ceil((contentBottomY + buffer + 120) / 120) * 120);
   // Require > 60px excess before shrinking when non-empty (prevents jitter),
   // and always snap back to INITIAL_BLOCK_HEIGHT when completely blank.
   const shouldShrink =

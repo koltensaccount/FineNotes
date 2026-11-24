@@ -117,9 +117,9 @@ describe("normalizeLayout", () => {
 
 describe("migrateLayout: the settings of 2.7 and before", () => {
   it("reads a default 2.7 vault as the default layout", () => {
-    expect(migrateLayout(["select", "pen", "eraser", "text", "shape", "guides", "image", "pdf"], [])).toEqual(
-      defaultLayout(),
-    );
+    expect(
+      migrateLayout(["select", "pen", "eraser", "text", "shape", "guides", "image", "pdf"], []),
+    ).toEqual(defaultLayout());
   });
 
   it("is the default layout for a vault that never customized anything", () => {

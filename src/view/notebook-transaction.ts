@@ -27,7 +27,10 @@ export async function editClosedNotebook<T>(
   const next = new Promise<void>((r) => {
     release = r;
   });
-  activeLocks.set(key, prev.then(() => next));
+  activeLocks.set(
+    key,
+    prev.then(() => next),
+  );
 
   await prev;
   try {

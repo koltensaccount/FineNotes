@@ -1330,7 +1330,6 @@ function widen(box: Bounds, low: "minX" | "minY", high: "maxX" | "maxY", value: 
   if (value > box[high]) box[high] = value;
 }
 
-
 /** A cropped region or dedicated Handwrite Here inline block stored on a page. */
 export interface NotebookClip {
   id: string;

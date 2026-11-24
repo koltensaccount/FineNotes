@@ -1322,18 +1322,15 @@ export class LibraryView extends ItemView {
     cover.style.setProperty("--gob-folder", style.color ?? DEFAULT_FOLDER_COLOR);
     const art = cover.createDiv({ cls: "goodobsidian-library-folder-art" });
     const back = art.createDiv({ cls: "goodobsidian-library-folder-back" });
-    const backSvg = activeDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
-    backSvg.setAttribute("viewBox", "0 0 108 88");
-    backSvg.setAttribute("preserveAspectRatio", "none");
-    backSvg.setAttribute("aria-hidden", "true");
-    backSvg.setAttribute("class", "goodobsidian-library-folder-back-svg");
-    const backPath = activeDocument.createElementNS("http://www.w3.org/2000/svg", "path");
-    backPath.setAttribute(
-      "d",
-      "M 0 12 Q 0 0 12 0 L 34 0 C 41 0 43 11 51 11 L 96 11 Q 108 11 108 23 L 108 76 Q 108 88 96 88 L 12 88 Q 0 88 0 76 Z",
-    );
-    backSvg.appendChild(backPath);
-    back.appendChild(backSvg);
+    const backSvg = back.createSvg("svg", {
+      cls: "goodobsidian-library-folder-back-svg",
+      attr: { viewBox: "0 0 108 88", preserveAspectRatio: "none", "aria-hidden": "true" },
+    });
+    backSvg.createSvg("path", {
+      attr: {
+        d: "M 0 12 Q 0 0 12 0 L 34 0 C 41 0 43 11 51 11 L 96 11 Q 108 11 108 23 L 108 76 Q 108 88 96 88 L 12 88 Q 0 88 0 76 Z",
+      },
+    });
     const front = art.createDiv({ cls: "goodobsidian-library-folder-front" });
     setIcon(front, style.icon ?? DEFAULT_FOLDER_ICON);
     this.starButton(art, folder.path, folder.name);

@@ -1101,7 +1101,7 @@ export class CalculatorPopover {
     this.save(
       withPrefs(this.data, {
         fractions: next,
-        ...(next ? { notation: "norm" as NumberNotation } : {}),
+        ...(next ? { notation: "norm" as const } : {}),
       }),
     );
     this.refresh();

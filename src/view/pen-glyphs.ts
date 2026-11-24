@@ -97,7 +97,10 @@ export function penIconParts(pen: string): GlyphPart[] {
     case "highlighter":
       return [
         path("M9.25 14.6V4.2A1.6 1.6 0 0 1 10.85 2.6H13.15A1.6 1.6 0 0 1 14.75 4.2V14.6z"),
-        { tag: "path", attrs: { d: "M9.25 14.6H14.75", transform: TILT, "stroke-linecap": "butt" } },
+        {
+          tag: "path",
+          attrs: { d: "M9.25 14.6H14.75", transform: TILT, "stroke-linecap": "butt" },
+        },
         path("M9.6 14.6h4.8l-.6 2.8h-3.6z"),
         inkFill("M10 17.4h4v2.6l-4 2.2z"),
       ];

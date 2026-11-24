@@ -38,7 +38,9 @@ export function publishStagedNote(
           return image ? Promise.resolve(image.png) : target.readBinary(asset);
         };
       const value: unknown = Reflect.get(target, key, target);
-      return typeof value === "function" ? value.bind(target) : value;
+      return typeof value === "function"
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value;
     },
   });
   const metadataCache = new Proxy(original.metadataCache, {
@@ -48,7 +50,9 @@ export function publishStagedNote(
           images.get(path)?.file ?? target.getFirstLinkpathDest(path, source);
       }
       const value: unknown = Reflect.get(target, key, target);
-      return typeof value === "function" ? value.bind(target) : value;
+      return typeof value === "function"
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value;
     },
   });
   const app = Object.create(original, {

@@ -205,10 +205,7 @@ import {
   parseNudges,
   recordUse,
 } from "./model/nudges";
-import {
-  clearActiveAccentContrast,
-  syncActiveAccentContrast,
-} from "./view/accent-contrast";
+import { clearActiveAccentContrast, syncActiveAccentContrast } from "./view/accent-contrast";
 import {
   FN_ICON_IMPORT_PDF,
   FN_ICON_SCAN_DOC,
@@ -897,10 +894,11 @@ export default class GoodObsidianPlugin extends Plugin {
         }
         void this.companionPdfs
           .renamed(file, oldPath)
-          .catch((error) =>
-            new Notice(
-              `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
-            ),
+          .catch(
+            (error) =>
+              new Notice(
+                `FineNotes companion PDF: ${error instanceof Error ? error.message : String(error)}`,
+              ),
           );
         this.keepFolderNotebookPaired(file, oldPath);
         void this.followPagesFolder(file, oldPath);

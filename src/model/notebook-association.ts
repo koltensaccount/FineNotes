@@ -38,7 +38,11 @@ export async function resolveNotebookAssociation(input: AssociationInput): Promi
     if (!target) continue;
     const direct = valid(target);
     if (direct) return direct;
-    if (/-clip-.*\.png$/i.test(target) || /-block-.*\.png$/i.test(target) || /-page-\d+\.png$/i.test(target)) {
+    if (
+      /-clip-.*\.png$/i.test(target) ||
+      /-block-.*\.png$/i.test(target) ||
+      /-page-\d+\.png$/i.test(target)
+    ) {
       const owner = await input.imageOwner(target);
       if (owner && input.notebooks.includes(owner)) return owner;
     }

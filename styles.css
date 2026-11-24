@@ -13845,7 +13845,7 @@ button.goodobsidian-region-name:hover {
   background: transparent;
   box-shadow: none;
   color: var(--interactive-accent);
-  pointer-events: none !important;
+  pointer-events: none;
   animation: goodobsidian-calc-glow-in 0.35s var(--gob-ease-out) 1;
 }
 
@@ -25671,7 +25671,7 @@ button.clickable-icon.goodobsidian-ask-window-button {
 button.goodobsidian-swatch.clickable-icon,
 button.goodobsidian-color-swatch.clickable-icon,
 .goodobsidian-color-grid button.clickable-icon {
-  border-radius: 50% !important;
+  border-radius: 50%;
   aspect-ratio: 1 / 1;
   box-sizing: border-box;
 }
@@ -25722,7 +25722,7 @@ button.goodobsidian-color-swatch.clickable-icon,
   .goodobsidian-search-panel,
   .goodobsidian-ask-frame,
   .goodobsidian-present-bar {
-    background: var(--gob-frost) !important;
+    background: var(--gob-frost);
     -webkit-backdrop-filter: var(--gob-blur);
     backdrop-filter: var(--gob-blur);
     border: var(--gob-hairline);
@@ -25731,8 +25731,8 @@ button.goodobsidian-color-swatch.clickable-icon,
   /* Keep Frosted Glass blur active during the entire pop-in/out animation
      (overrides upstream's opaque-paper `.is-moving { backdrop-filter: none }`). */
   .goodobsidian-popover.is-moving {
-    -webkit-backdrop-filter: var(--gob-blur) !important;
-    backdrop-filter: var(--gob-blur) !important;
+    -webkit-backdrop-filter: var(--gob-blur);
+    backdrop-filter: var(--gob-blur);
   }
 
   .modal.goodobsidian-modal,
@@ -25783,7 +25783,8 @@ button.goodobsidian-color-swatch.clickable-icon,
 .goodobsidian-pagesidebar-top {
   background: linear-gradient(
     to bottom,
-    color-mix(in srgb, var(--background-primary) 72%, transparent) calc(100% - var(--gob-island-fade)),
+    color-mix(in srgb, var(--background-primary) 72%, transparent)
+      calc(100% - var(--gob-island-fade)),
     transparent
   );
 }
@@ -25791,8 +25792,8 @@ button.goodobsidian-color-swatch.clickable-icon,
 /* Fix Select Pages bottom action bar (Move, Duplicate, Bookmark, Export, Delete):
    upstream's --gob-sel-bg was scoped only to selection-bar, leaving this bar transparent. */
 .goodobsidian-pagesidebar-selectbar {
-  background: color-mix(in srgb, var(--background-primary) 90%, transparent) !important;
-  border: 1px solid var(--gob-line) !important;
+  background: color-mix(in srgb, var(--background-primary) 90%, transparent);
+  border: 1px solid var(--gob-line);
   border-radius: var(--gob-radius-l);
   box-shadow: var(--gob-shadow-sheet);
   color: var(--text-normal);
@@ -25859,8 +25860,8 @@ button.goodobsidian-color-swatch.clickable-icon,
   background: transparent;
 }
 .goodobsidian-library-folder-back::before {
-  display: none !important;
-  content: none !important;
+  display: none;
+  content: none;
 }
 .goodobsidian-library-folder-back-svg {
   display: block;
@@ -25891,8 +25892,7 @@ button.goodobsidian-color-swatch.clickable-icon,
    Reserve the chevron width consistently on the Lasso button when floating
    popovers are active so selecting or leaving Lasso never jumps width,
    shoves sibling icons, or overlaps the adjacent Pen tool. */
-.goodobsidian-toolbar:not(.has-docked-row):not(.is-upright)
-  button[data-item="select"].has-caret {
+.goodobsidian-toolbar:not(.has-docked-row):not(.is-upright) button[data-item="select"].has-caret {
   min-width: 54px;
   padding-right: 16px;
   box-sizing: border-box;
@@ -25922,6 +25922,11 @@ button.goodobsidian-color-swatch.clickable-icon,
 .goodobsidian-toolbar.is-bar-held {
   outline: 1.5px solid var(--gob-active-fg);
   outline-offset: -1.5px;
+  overflow: hidden;
+  touch-action: none;
+}
+.goodobsidian-toolbar.is-reordering {
+  touch-action: none;
 }
 .goodobsidian-toolbar.is-reordering button.is-drag-held {
   transform: scale(1.1);
@@ -26001,9 +26006,9 @@ button.goodobsidian-color-swatch.clickable-icon,
 .markdown-reading-view .finenotes-embed-canvas {
   cursor: default;
 }
-.finenotes-embed-card.is-readonly .finenotes-embed-edit-pill,
-.markdown-reading-view .finenotes-embed-edit-pill {
-  display: none !important;
+.finenotes-embed-card.is-readonly .finenotes-embed-edit-pill.clickable-icon,
+.markdown-reading-view .finenotes-embed-edit-pill.clickable-icon {
+  display: none;
 }
 .finenotes-live-clip-source-pill.clickable-icon {
   position: absolute;
@@ -26027,7 +26032,9 @@ button.goodobsidian-color-swatch.clickable-icon,
   opacity: 0;
   pointer-events: none;
   transform: translateY(-2px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
 }
 .finenotes-embed-card.is-live-clip:hover .finenotes-live-clip-source-pill.clickable-icon,
 .finenotes-embed-card.is-live-clip:focus-within .finenotes-live-clip-source-pill.clickable-icon {
@@ -26092,7 +26099,7 @@ button.goodobsidian-color-swatch.clickable-icon,
 .internal-embed.finenotes-legacy-wired.finenotes-inline-active {
   overflow: visible;
 }
-.cm-embed-block:has(.finenotes-inline-active) .edit-block-button {
+.finenotes-inline-active-embed .edit-block-button {
   visibility: hidden;
 }
 .finenotes-inline-toolbar-host {
@@ -26107,7 +26114,7 @@ button.goodobsidian-color-swatch.clickable-icon,
   -webkit-backdrop-filter: var(--gob-blur);
   backdrop-filter: var(--gob-blur);
 }
-:is(.cm-scroller, .markdown-preview-view):has(.finenotes-inline-active) {
+.finenotes-inline-active-scroller {
   overflow-anchor: none;
 }
 .finenotes-inline-width.clickable-icon {
@@ -26200,8 +26207,8 @@ button.goodobsidian-color-swatch.clickable-icon,
   width: 100%;
   max-width: 100%;
   height: auto;
-  filter: none !important;
-  -webkit-filter: none !important;
+  filter: none;
+  -webkit-filter: none;
 }
 
 .finenotes-print-copy {
@@ -26212,10 +26219,10 @@ button.goodobsidian-color-swatch.clickable-icon,
   .finenotes-print-copy {
     display: block;
   }
-  .finenotes-embed-card:has(.finenotes-print-copy) .finenotes-embed-canvas,
-  .finenotes-embed-edit-pill,
-  .finenotes-live-clip-source-pill {
-    display: none !important;
+  .finenotes-embed-card.has-print-copy .finenotes-embed-canvas,
+  .finenotes-embed-edit-pill.clickable-icon,
+  .finenotes-live-clip-source-pill.clickable-icon {
+    display: none;
   }
 }
 
@@ -26302,7 +26309,6 @@ button.goodobsidian-color-swatch.clickable-icon,
   border-radius: var(--gob-radius-s);
 }
 
-
 /* --- Writing Guides Frosted Glass Popover (Unified with Locked Visual Identity) --- */
 .finenotes-inline-guides.clickable-icon {
   min-width: var(--gob-touch-compact);
@@ -26335,6 +26341,11 @@ button.goodobsidian-color-swatch.clickable-icon,
   height: 28px;
   border-radius: var(--gob-tool-radius);
   color: var(--text-muted);
+}
+.goodobsidian-guide-popover {
+  position: fixed;
+  transform: none;
+  z-index: 60;
 }
 .goodobsidian-writing-guides {
   display: flex;

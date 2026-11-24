@@ -1274,7 +1274,9 @@ function normalizePage(
     ...sectionsOf(page.sections, seenSections),
     ...regionsOf(page.regions, seenRegions),
     ...(Array.isArray(page.clips) && page.clips.length > 0 ? { clips: page.clips } : {}),
-    ...(typeof page.pageEmbedPath === "string" && page.pageEmbedPath ? { pageEmbedPath: page.pageEmbedPath } : {}),
+    ...(typeof page.pageEmbedPath === "string" && page.pageEmbedPath
+      ? { pageEmbedPath: page.pageEmbedPath }
+      : {}),
     ...chaptersOf(page.chapters, seenSections),
     ...linksOf(page.links, strokes, seenLinks),
     ...tasksOf(page.tasks, strokes, seenTasks),

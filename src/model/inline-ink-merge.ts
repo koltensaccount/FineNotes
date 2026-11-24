@@ -45,7 +45,8 @@ export function mergeInlineInk(base: Page, local: Page, latest: Page): void {
     const edited = after.get(id);
     const current = disk.get(id);
     if (sameStroke(original, edited) || sameStroke(current, edited)) continue;
-    if (!sameStroke(original, current)) throw new Error("The same handwriting was changed elsewhere.");
+    if (!sameStroke(original, current))
+      throw new Error("The same handwriting was changed elsewhere.");
     if (edited) disk.set(id, edited);
     else disk.delete(id);
   }

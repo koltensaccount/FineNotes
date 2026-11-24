@@ -27,10 +27,12 @@ export const DEFAULT_WRITING_GUIDES: Readonly<WritingGuideStyle> = {
 
 export function writingGuidesOf(raw: unknown): WritingGuideStyle {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const bounded = (key: "spacing" | "thickness" | "opacity", min: number, max: number): number =>
-    typeof o[key] === "number" && Number.isFinite(o[key])
-      ? Math.max(min, Math.min(max, o[key] as number))
+  const bounded = (key: "spacing" | "thickness" | "opacity", min: number, max: number): number => {
+    const val = o[key];
+    return typeof val === "number" && Number.isFinite(val)
+      ? Math.max(min, Math.min(max, val))
       : DEFAULT_WRITING_GUIDES[key];
+  };
   return {
     style: o.style === "grid" || o.style === "dots" ? o.style : "lines",
     spacing: Math.round(bounded("spacing", 8, 128)),

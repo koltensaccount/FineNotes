@@ -56,7 +56,11 @@ const INLINE_BAR_ITEMS = new Set<BarItemId>([
   ...INLINE_TOOLBAR_LAYOUT.start,
   ...INLINE_TOOLBAR_LAYOUT.middle,
   ...INLINE_TOOLBAR_LAYOUT.end,
-  "ruler", "fill", "tape", "laser", "image",
+  "ruler",
+  "fill",
+  "tape",
+  "laser",
+  "image",
 ]);
 
 const ISOLATED_EVENTS = [
@@ -70,6 +74,10 @@ const ISOLATED_EVENTS = [
 ] as const;
 
 let activeInlineSession: InlineHandwriteSession | null = null;
+
+function setActiveInlineSession(session: InlineHandwriteSession | null): void {
+  activeInlineSession = session;
+}
 
 export function getActiveInlineSession(): InlineHandwriteSession | null {
   return activeInlineSession;
@@ -117,12 +125,15 @@ export class InlineHandwriteSession {
   async start(): Promise<void> {
     const { app, containerEl, notebookFile, blockId, plugin } = this.options;
     while (activeInlineSession && activeInlineSession !== this) {
-      if (activeInlineSession.hostContainer === containerEl || !(await activeInlineSession.close())) {
+      if (
+        activeInlineSession.hostContainer === containerEl ||
+        !(await activeInlineSession.close())
+      ) {
         return;
       }
     }
     if (this.closed || !containerEl.isConnected) return;
-    activeInlineSession = this;
+    setActiveInlineSession(this);
     const contentEditable = containerEl.getAttribute("contenteditable");
     containerEl.setAttribute("contenteditable", "false");
     this.cleanups.push(() => {
@@ -167,9 +178,16 @@ export class InlineHandwriteSession {
         page = fallback;
       }
 
-      this.imageFolder = resolveAttachmentFolder(parsed.doc, "images", attachmentDefaults(plugin.settings));
-      const dedicated = page.id === blockId && page.clips?.length === 1 &&
-        page.clips[0].id === blockId && page.clips[0].isExpandable === true;
+      this.imageFolder = resolveAttachmentFolder(
+        parsed.doc,
+        "images",
+        attachmentDefaults(plugin.settings),
+      );
+      const dedicated =
+        page.id === blockId &&
+        page.clips?.length === 1 &&
+        page.clips[0].id === blockId &&
+        page.clips[0].isExpandable === true;
       this.base = structuredClone(page);
       if (dedicated && normalizeBlockWhiteInkToBlack(page) > 0) {
         this.revision++;
@@ -185,6 +203,14 @@ export class InlineHandwriteSession {
       containerEl.removeClass("finenotes-embed-card");
       containerEl.addClass("finenotes-inline-active");
       containerEl.tabIndex = -1;
+      const embedBlock = containerEl.closest(".cm-embed-block");
+      embedBlock?.addClass("finenotes-inline-active-embed");
+      const scroller = containerEl.closest(".cm-scroller, .markdown-preview-view");
+      scroller?.addClass("finenotes-inline-active-scroller");
+      this.cleanups.push(() => {
+        embedBlock?.removeClass("finenotes-inline-active-embed");
+        scroller?.removeClass("finenotes-inline-active-scroller");
+      });
 
       const barHost = containerEl.createDiv({ cls: "finenotes-inline-toolbar-host" });
       const canvasHost = containerEl.createDiv({ cls: "finenotes-inline-canvas-host" });
@@ -252,10 +278,7 @@ export class InlineHandwriteSession {
               recent: plugin.settings.recentColors,
               palette: plugin.settings.customColors,
               onCustomColor: (color) => {
-                plugin.settings.recentColors = pushRecentColor(
-                  plugin.settings.recentColors,
-                  color,
-                );
+                plugin.settings.recentColors = pushRecentColor(plugin.settings.recentColors, color);
                 void plugin.saveSettings();
               },
               onSave: (pen) => {
@@ -337,21 +360,25 @@ export class InlineHandwriteSession {
             this.surface?.redo();
             this.syncUndoRedo();
           },
-          onClear: async () => {
+          onClear: () => {
             if (!this.surface) return;
             if (!dedicated) {
-              new Notice("Open the full notebook to clear a page shared by multiple handwriting clips.");
+              new Notice(
+                "Open the full notebook to clear a page shared by multiple handwriting clips.",
+              );
               return;
             }
-            const confirmed = await ConfirmModal.confirm(app, {
+            void ConfirmModal.confirm(app, {
               title: "Clear block ink?",
-              message: "Remove handwriting and drawn shapes in this block? You can undo this action.",
+              message:
+                "Remove handwriting and drawn shapes in this block? You can undo this action.",
               cta: "Clear",
+            }).then((confirmed) => {
+              if (confirmed) {
+                this.surface?.clearStrokes();
+                this.syncUndoRedo();
+              }
             });
-            if (confirmed) {
-              this.surface?.clearStrokes();
-              this.syncUndoRedo();
-            }
           },
           onOnlyStylusMode: (on) => {
             this.onlyStylus = on;
@@ -615,17 +642,27 @@ export class InlineHandwriteSession {
       const prepared = await prepareImageBytes(await file.arrayBuffer(), file.type);
       if (this.surface !== surface || this.closing) return;
       const attachment = await saveImageAttachment(
-        app, prepared, file.name || "Pasted image", notebookFile.path, this.imageFolder,
+        app,
+        prepared,
+        file.name || "Pasted image",
+        notebookFile.path,
+        this.imageFolder,
       );
       if (this.surface !== surface || this.closing) return;
       const region = at
         ? { minX: at.x - 1, minY: at.y - 1, maxX: at.x + 1, maxY: at.y + 1 }
         : surface.visibleRegion(0);
-      const image = newImageElement(doc, attachment.path, placeImageBox(prepared, page.geometry, region));
+      const image = newImageElement(
+        doc,
+        attachment.path,
+        placeImageBox(prepared, page.geometry, region),
+      );
       surface.applyCommand(new InsertImage(page.id, image));
       surface.selectImage(page.id, image.id);
     } catch (err) {
-      new Notice(`FineNotes: could not add image (${err instanceof Error ? err.message : String(err)}).`);
+      new Notice(
+        `FineNotes: could not add image (${err instanceof Error ? err.message : String(err)}).`,
+      );
     }
   }
 
@@ -694,8 +731,8 @@ export class InlineHandwriteSession {
       this.savedRevision = revision;
       return true;
     } catch (err) {
-      const recovered = !this.options.containerEl.isConnected &&
-        await this.writeRecoveryCheckpoint(localPage);
+      const recovered =
+        !this.options.containerEl.isConnected && (await this.writeRecoveryCheckpoint(localPage));
       const reason = err instanceof Error ? err.message : String(err);
       new Notice(
         `FineNotes: could not save inline handwriting (${reason}). ${recovered ? "Recovery copy saved." : "Keep editor open and retry Done."}`,

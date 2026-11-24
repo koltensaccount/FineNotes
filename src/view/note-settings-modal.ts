@@ -198,7 +198,17 @@ export class NoteSettingsModal extends Modal {
     titleWrap.createSpan({ text: "Companion PDF" });
     const badge = titleWrap.createSpan({
       cls: "goodobsidian-ns-companion-badge",
-      text: state.enabled ? (state.error ? "Error" : state.running ? "Updating…" : !state.pdfExists ? "Missing" : state.dirty ? "Needs update" : "Up to date") : "Off",
+      text: state.enabled
+        ? state.error
+          ? "Error"
+          : state.running
+            ? "Updating…"
+            : !state.pdfExists
+              ? "Missing"
+              : state.dirty
+                ? "Needs update"
+                : "Up to date"
+        : "Off",
     });
     if (!state.enabled) badge.addClass("is-off");
     else if (state.error || !state.pdfExists) badge.addClass("is-error");
@@ -270,7 +280,11 @@ export class NoteSettingsModal extends Modal {
       const btn = seg.createEl("button", {
         cls: "goodobsidian-ns-segment clickable-icon",
         text: label,
-        attr: { type: "button", role: "radio", "aria-checked": String(state.followName === follow) },
+        attr: {
+          type: "button",
+          role: "radio",
+          "aria-checked": String(state.followName === follow),
+        },
       });
       btn.toggleClass("is-active", state.followName === follow);
       btn.addEventListener("click", () => {

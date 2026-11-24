@@ -1725,8 +1725,11 @@ export class Toolbar {
     // Goodnotes' accessories: what the bar does not show, and the way to
     // choose what it shows. Pinned to the bar, and it never folds, as ⋯
     // never does.
-    const accessories = this.barButton(tools, FN_ICON_MORE_TOOLS, t("toolbar.moreTools"), (button) =>
-      this.toggleAccessories(button),
+    const accessories = this.barButton(
+      tools,
+      FN_ICON_MORE_TOOLS,
+      t("toolbar.moreTools"),
+      (button) => this.toggleAccessories(button),
     );
     accessories.addClass("has-caret", "goodobsidian-accessories-button");
     iconOrText(accessories.createSpan({ cls: "goodobsidian-tool-caret" }), "chevron-down", "");

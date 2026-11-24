@@ -702,11 +702,7 @@ import {
   pressOverride,
   stylusButtonDown,
 } from "../input/pen-modifiers";
-import {
-  LASER_COLOR,
-  type LaserPoint,
-  LaserTrail,
-} from "../canvas/laser-trail";
+import { LASER_COLOR, type LaserPoint, LaserTrail } from "../canvas/laser-trail";
 import { REJOIN_MS, REJOIN_PX, rejoinsStroke } from "../input/pen-rejoin";
 import { cancelsStylusTouch, hasStylusTouch } from "../input/stylus-touch";
 import { type StylusClickAction, stylusClickActionOf } from "../input/stylus-click";
@@ -4664,7 +4660,9 @@ export class InkSurface {
     return {
       eligible: Boolean(page && page.geometry.width > 0 && page.geometry.height > 0),
       paper: page ? paperColorOf(page, this.paper) : this.paper.paper,
-      scale: this.renderer?.deviceScale ? this.renderer.deviceScale / (window.devicePixelRatio || 1) : 1,
+      scale: this.renderer?.deviceScale
+        ? this.renderer.deviceScale / (window.devicePixelRatio || 1)
+        : 1,
     };
   }
 
@@ -11449,12 +11447,13 @@ export class InkSurface {
     // Build one silky smooth quadratic-Bezier path for all active strokes, then
     // paint 4 concentric neon passes (outer bloom -> mid aura -> saturated body
     // -> incandescent white-hot core). Zero canvas blur so it stays 120fps on iPad.
-    const passes: ReadonlyArray<readonly [widthPx: number, strength: number, strokeColor: string]> = [
-      [24, 0.10, color],
-      [14, 0.26, color],
-      [6.5, 0.84, color],
-      [2.4, 0.96, "#ffffff"],
-    ];
+    const passes: ReadonlyArray<readonly [widthPx: number, strength: number, strokeColor: string]> =
+      [
+        [24, 0.1, color],
+        [14, 0.26, color],
+        [6.5, 0.84, color],
+        [2.4, 0.96, "#ffffff"],
+      ];
 
     for (const [lineWidth, strength, passColor] of passes) {
       ctx.strokeStyle = passColor;
@@ -11467,12 +11466,13 @@ export class InkSurface {
     if (tip) {
       const tx = sx(tip.x);
       const ty = sy(tip.y);
-      const tipLayers: ReadonlyArray<readonly [radiusPx: number, strength: number, fill: string]> = [
-        [14, 0.14, color],
-        [8, 0.34, color],
-        [4.2, 0.88, color],
-        [2, 0.98, "#ffffff"],
-      ];
+      const tipLayers: ReadonlyArray<readonly [radiusPx: number, strength: number, fill: string]> =
+        [
+          [14, 0.14, color],
+          [8, 0.34, color],
+          [4.2, 0.88, color],
+          [2, 0.98, "#ffffff"],
+        ];
       for (const [radiusPx, strength, fill] of tipLayers) {
         ctx.fillStyle = fill;
         ctx.globalAlpha = alpha * strength;
@@ -11605,8 +11605,8 @@ export class InkSurface {
     if (!this.inlineWidthLocked || !this.callbacks.growInlinePage) return box;
     const at = this.toPage(box, sample);
     const buffer = 64 / this.unitScale;
-    if (at.x < 0 || at.x >= box.width || at.y < box.height - buffer ||
-        at.y > box.height + buffer) return box;
+    if (at.x < 0 || at.x >= box.width || at.y < box.height - buffer || at.y > box.height + buffer)
+      return box;
     if (!this.callbacks.growInlinePage(at.y, buffer)) return box;
     this.renderer?.invalidatePage(box.id);
     this.layout();

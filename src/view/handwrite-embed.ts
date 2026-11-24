@@ -190,7 +190,8 @@ export class HandwriteEmbedManager {
     // a live-updating, theme-adaptive clip linked back to the original notebook page.
     this.plugin.registerEvent(
       this.app.workspace.on("editor-paste", (evt, editor) => {
-        this.handleMarkdownPaste(evt, editor);
+        if (evt.defaultPrevented) return;
+        if (this.handleMarkdownPaste(evt, editor)) evt.preventDefault();
       }),
     );
   }
@@ -201,25 +202,22 @@ export class HandwriteEmbedManager {
     }
   }
 
-  private handleMarkdownPaste(evt: ClipboardEvent, editor: Editor): void {
-    if (evt.defaultPrevented) return;
+  private handleMarkdownPaste(evt: ClipboardEvent, editor: Editor): boolean {
     const inkClip = getInkClipboard();
     const entry = inkClip.content;
-    if (!entry?.source) return;
+    if (!entry?.source) return false;
 
     const plain = evt.clipboardData?.getData("text/plain") ?? "";
-    if (plain.trim().length > 0) return;
+    if (plain.trim().length > 0) return false;
 
     if (inkClip.leftSinceCopy) {
       const files = Array.from(evt.clipboardData?.files ?? []);
       const img = files.find((f) => f.type.startsWith("image/"));
-      if (!img || !inkClip.hasOwnPngSize(img.size)) return;
+      if (!img || !inkClip.hasOwnPngSize(img.size)) return false;
     }
 
     const sourceFile = this.app.vault.getFileByPath(entry.source.notebookPath);
-    if (!sourceFile || !this.plugin.isInkFile(sourceFile)) return;
-
-    evt.preventDefault();
+    if (!sourceFile || !this.plugin.isInkFile(sourceFile)) return false;
 
     const clipId = `clip-${crypto.randomUUID()}`;
     const pad = 12;
@@ -242,6 +240,7 @@ export class HandwriteEmbedManager {
 
     const pageId = entry.source.pageId;
     void this.attachLiveClip(sourceFile, pageId, clip);
+    return true;
   }
 
   private async attachLiveClip(
@@ -265,17 +264,12 @@ export class HandwriteEmbedManager {
     }
 
     try {
-      await editClosedNotebook(
-        this.app,
-        sourceFile,
-        this.plugin.settings.paperWidth,
-        (doc) => {
-          const page = doc.pages.find((p) => p.id === pageId);
-          if (!page) return;
-          if (!page.clips) page.clips = [];
-          page.clips.push(clip);
-        },
-      );
+      await editClosedNotebook(this.app, sourceFile, this.plugin.settings.paperWidth, (doc) => {
+        const page = doc.pages.find((p) => p.id === pageId);
+        if (!page) return;
+        if (!page.clips) page.clips = [];
+        page.clips.push(clip);
+      });
       this.refreshCardsForNotebook(sourceFile.path);
     } catch (err) {
       console.warn("FineNotes: could not persist live clip on source notebook", err);
@@ -379,15 +373,16 @@ export class HandwriteEmbedManager {
           byte.toString(16).padStart(2, "0"),
         ).join("");
         const path = `FineNotes/Published-ink/${folder}/${name}`;
-        const asset = Object.assign(Object.create(TFile.prototype) as TFile, {
+        const rawAsset: unknown = Object.assign(Object.create(TFile.prototype), {
           path,
           name,
           basename: name.slice(0, -4),
           extension: "png",
         });
-        await stage(asset, found.page, blockBounds(found.page, found.clip, ref.block));
+        if (!(rawAsset instanceof TFile)) continue;
+        await stage(rawAsset, found.page, blockBounds(found.page, found.clip, ref.block));
         replacements.push({
-          index: match.index!,
+          index: match.index,
           length: match[0].length,
           text: `${prefix}![[${path}]]`,
         });
@@ -466,8 +461,7 @@ export class HandwriteEmbedManager {
             colorMode: "auto",
           })
         : null;
-    const guideStyle =
-      guides?.enabled && guides.includeInPreview ? guides.style : backdropGuide;
+    const guideStyle = guides?.enabled && guides.includeInPreview ? guides.style : backdropGuide;
     if (guideStyle) {
       const ctx = canvas.getContext("2d");
       const cropW = bounds.maxX - bounds.minX;
@@ -494,7 +488,8 @@ export class HandwriteEmbedManager {
     const w = bounds.maxX - bounds.minX;
     const h = bounds.maxY - bounds.minY;
     const width = Math.min(2400, (4096 * w) / h);
-    const canvas = doc.createElement("canvas");
+    void doc;
+    const canvas = createEl("canvas");
     await this.images.prepare(page.images, width / w);
     try {
       this.paint(canvas, page, bounds, width, 1, dark, transparent);
@@ -519,8 +514,11 @@ export class HandwriteEmbedManager {
     const png = await this.exportPng(page, bounds, transparent, false, host.ownerDocument);
     const src = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        if (typeof reader.result === "string") resolve(reader.result);
+        else reject(new Error("Could not read PNG data URL."));
+      };
+      reader.onerror = () => reject(reader.error ?? new Error("FileReader failed."));
       reader.readAsDataURL(png);
     });
     const img = host.createEl("img", {
@@ -608,6 +606,7 @@ export class HandwriteEmbedManager {
       );
       const dpr = Math.min(2, containerEl.ownerDocument.defaultView?.devicePixelRatio || 1);
       this.paint(canvas, page, bounds, width, dpr, dark, transparent);
+      containerEl.addClass("has-print-copy");
       const printCanvas = containerEl.createEl("canvas", {
         cls: "finenotes-print-ink finenotes-print-copy",
       });

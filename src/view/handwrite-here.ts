@@ -134,21 +134,23 @@ class NotebookSuggestModal extends SuggestModal<NotebookChoiceItem> {
     }
   }
 
-  async onChooseSuggestion(item: NotebookChoiceItem): Promise<void> {
+  onChooseSuggestion(item: NotebookChoiceItem): void {
     this.chosen = true;
     if (item.type === "existing") {
       this.resolve(item.file);
       return;
     }
-    try {
-      const file = await createNotebookForNote(this.plugin, this.source, item.title, item.folder);
-      this.resolve(file);
-    } catch (err) {
-      new Notice(
-        `FineNotes: could not create notebook — ${err instanceof Error ? err.message : String(err)}`,
-      );
-      this.resolve(null);
-    }
+    void (async () => {
+      try {
+        const file = await createNotebookForNote(this.plugin, this.source, item.title, item.folder);
+        this.resolve(file);
+      } catch (err) {
+        new Notice(
+          `FineNotes: could not create notebook — ${err instanceof Error ? err.message : String(err)}`,
+        );
+        this.resolve(null);
+      }
+    })();
   }
 
   override onClose(): void {
@@ -189,7 +191,9 @@ async function createNotebookForNote(
   const content = buildInkFile(newNoteBody(heading, new Date().toISOString()), doc);
   const filePath = normalizePath(joinVaultPath(paths.folder, paths.fileName));
   const created = await plugin.app.vault.create(filePath, content);
-  return (created instanceof TFile ? created : plugin.app.vault.getFileByPath(filePath)) as TFile;
+  const file = created instanceof TFile ? created : plugin.app.vault.getFileByPath(filePath);
+  if (!(file instanceof TFile)) throw new Error("Created notebook file could not be resolved.");
+  return file;
 }
 
 export function embedInsertionOffset(
@@ -344,8 +348,7 @@ async function runHandwriteHere(
               if (
                 doc?.pages.some(
                   (p) =>
-                    p.pageEmbedPath === img.path ||
-                    p.clips?.some((c) => c.imagePath === img.path),
+                    p.pageEmbedPath === img.path || p.clips?.some((c) => c.imagePath === img.path),
                 )
               ) {
                 return nb.path;
@@ -382,7 +385,9 @@ async function runHandwriteHere(
   const css = column?.ownerDocument.defaultView?.getComputedStyle(column);
   const colW =
     column && css
-      ? column.clientWidth - (parseFloat(css.paddingLeft) || 0) - (parseFloat(css.paddingRight) || 0)
+      ? column.clientWidth -
+        (parseFloat(css.paddingLeft) || 0) -
+        (parseFloat(css.paddingRight) || 0)
       : 0;
   const width = colW > 2 * BLOCK_PADDING ? Math.round(colW) : plugin.settings.paperWidth;
   const { page } = createBlockPage(emptyDocument(), blockId, width);
@@ -406,7 +411,6 @@ async function runHandwriteHere(
     `\`\`\`finenotes\n${JSON.stringify({ notebook: notebook.path, block: blockId })}\n\`\`\``,
   );
 }
-
 
 async function normalizeAllHandwriteBlocks(plugin: GoodObsidianPlugin): Promise<void> {
   const app = plugin.app;
