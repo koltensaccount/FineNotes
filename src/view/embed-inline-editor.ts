@@ -3,23 +3,20 @@
  * embed (`page-embed.ts`) inside a Markdown note in Live Preview.
  *
  * Reuses FineNotes' real `Toolbar` (preserving the user's exact saved pens,
- * colors, widths, and toolbar layout order) and `InkSurface`. Supports:
- * - Direct Apple Pencil writing (`touch-action: pan-y` keeps finger scroll smooth)
- * - Auto-growing bottom height on pen-up + auto-trim on Done for `hw-*` sketches
- * - Manual bottom drag handle (clamped so content is never clipped)
- * - Surface popover: Transparent (with optional Writing Guides) vs. Note Paper
+ * colors, widths, and toolbar layout order), `InkSurface`, `WritingGuidePopover`,
+ * and `TemplatePickerModal` so the UI matches normal notebooks 1-to-1.
  */
 
 import { type App, type TFile, Notice, setIcon } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import { attachmentDefaults, penPreferencesOf } from "../settings-data";
+import { attachmentDefaults, penPreferencesOf, shownPaperTheme } from "../settings-data";
 import { PALETTE, SIZES } from "../constants";
 import { pushRecentColor } from "../model/colors";
 import { InsertImage } from "../model/commands";
 import { resolveAttachmentFolder } from "../model/attachment-folders";
 import { newImageElement, placeImageBox } from "../model/images";
 import { addSavedPen, isPenId, samePen, savedPensOf } from "../model/saved-pens";
-import type { InkDocument, Page, Ruling, SyntheticBackdrop } from "../model/document";
+import type { InkDocument, Page } from "../model/document";
 import {
   inlineClampedResizeHeight,
   inlineGrowHeight,
@@ -27,13 +24,15 @@ import {
   inlineTrimHeight,
   isInlineSketchPage,
 } from "../model/inline-sketch";
-import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
+import { DARK_PAPER, LIGHT_PAPER, type PaperTheme } from "../canvas/backdrop";
 import {
   DEFAULT_WRITING_GUIDES,
   writingGuidesOf,
   type WritingGuideStyle,
 } from "../model/writing-guides";
-import { renderWritingGuideControls, type WritingGuideHost } from "./writing-guides";
+import { FN_ICON_WRITING_GUIDES } from "./finenotes-icons";
+import { WritingGuidePopover, type WritingGuideHost } from "./writing-guides";
+import { TemplatePickerModal } from "./template-picker";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { pickImageFiles, prepareImageBytes, saveImageAttachment } from "./image-import";
 import { copyPictureToSystemClipboard } from "./picture-clipboard";
@@ -93,20 +92,6 @@ const ISOLATED_EVENTS = [
   "contextmenu",
 ] as const;
 
-const PAPER_SWATCHES: ReadonlyArray<{ label: string; color: string }> = [
-  { label: "White", color: "#ffffff" },
-  { label: "Ivory", color: "#fbf8f1" },
-  { label: "Cream", color: "#f6f0de" },
-  { label: "Charcoal", color: "#26282c" },
-];
-
-const PAPER_TEMPLATES: ReadonlyArray<{ kind: Ruling; label: string }> = [
-  { kind: "blank", label: "Blank" },
-  { kind: "lined", label: "Lined" },
-  { kind: "grid", label: "Grid" },
-  { kind: "dotted", label: "Dotted" },
-];
-
 function inlineLayoutFrom(raw: unknown, savedPenIds: ReadonlySet<string>): ToolbarLayout {
   const full = normalizeLayout(raw, savedPenIds);
   const keep = (ids: BarItemId[]): BarItemId[] =>
@@ -134,8 +119,7 @@ export class EmbedInlineEditor {
   private surface: InkSurface | null = null;
   private toolbar: Toolbar | null = null;
   private images: VaultImageCache | null = null;
-  private surfacePopover: HTMLElement | null = null;
-  private surfaceBtn: HTMLButtonElement | null = null;
+  private guidePopover: WritingGuidePopover | null = null;
   private toolState: ToolbarState;
   private doc: InkDocument | null = null;
   private stageEl: HTMLElement | null = null;
@@ -246,6 +230,14 @@ export class EmbedInlineEditor {
     this.toolbar.setHistoryState(this.surface.canUndo, this.surface.canRedo);
   }
 
+  private effectivePaperTheme(): PaperTheme {
+    if (this.isTransparent()) {
+      const base = this.paperIsDark ? DARK_PAPER : LIGHT_PAPER;
+      return { ...base, desk: "transparent" };
+    }
+    return shownPaperTheme(this.req.plugin.settings, this.paperIsDark);
+  }
+
   private mount(): void {
     const { app, slotEl, plugin, notebookFile } = this.req;
     const doc = this.doc;
@@ -269,50 +261,8 @@ export class EmbedInlineEditor {
     const overlay = slotEl.createDiv({ cls: "goodobsidian-inline-overlay" });
     this.cleanups.push(() => overlay.remove());
 
-    // Floating top bar: real FineNotes Toolbar + Surface popover + Open + Done
-    const barWrap = overlay.createDiv({ cls: "goodobsidian-inline-bar" });
-    const toolbarHost = barWrap.createDiv({ cls: "goodobsidian-inline-toolbar-host" });
-    const trailing = barWrap.createDiv({ cls: "goodobsidian-inline-trailing" });
-
-    const surfaceBtn = trailing.createEl("button", {
-      cls: "clickable-icon goodobsidian-inline-surface-btn",
-      attr: { type: "button", "aria-label": "Background & guides" },
-    });
-    setIcon(surfaceBtn, "layers");
-    surfaceBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.toggleSurfacePopover();
-    });
-    this.surfaceBtn = surfaceBtn;
-
-    const openBtn = trailing.createEl("button", {
-      cls: "clickable-icon goodobsidian-inline-open-btn",
-      attr: { type: "button", "aria-label": "Open in notebook" },
-    });
-    setIcon(openBtn, "external-link");
-    openBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      void this.close().then(() => {
-        void app.workspace.openLinkText(
-          `${notebookFile.path}#page=${this.req.pageNumber}`,
-          this.req.sourcePath,
-          true,
-        );
-      });
-    });
-
-    const doneBtn = trailing.createEl("button", {
-      cls: "clickable-icon goodobsidian-inline-done-btn",
-      text: "Done",
-      attr: { type: "button" },
-    });
-    doneBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      void this.close();
-    });
+    // Native FineNotes Toolbar directly at the top of the active block (same style as normal notebooks)
+    const toolbarHost = overlay.createDiv({ cls: "goodobsidian-inline-toolbar-host" });
 
     // Stage hosting FineNotes' real InkSurface
     const stage = overlay.createDiv({ cls: "goodobsidian-inline-stage" });
@@ -505,6 +455,143 @@ export class EmbedInlineEditor {
       },
     );
 
+    // Mount native inline actions directly inside the Toolbar's own `.goodobsidian-bar-doc` group
+    const barEl = toolbarHost.querySelector<HTMLElement>(".goodobsidian-toolbar");
+    const endGroup = barEl?.querySelector<HTMLElement>(".goodobsidian-bar-doc") ?? barEl;
+    if (endGroup) {
+      // 1. Native Writing Guides popover (includes Transparent Background toggle)
+      const guidesBtn = endGroup.createEl("button", {
+        cls: "clickable-icon",
+        attr: { type: "button", "aria-label": "Writing guides & background" },
+      });
+      setIcon(guidesBtn, FN_ICON_WRITING_GUIDES);
+      guidesBtn.toggleClass("is-active", this.guidesEnabled && this.isTransparent());
+      guidesBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.guidePopover) {
+          this.guidePopover.close();
+          this.guidePopover = null;
+          return;
+        }
+        const host: WritingGuideHost = {
+          state: () => ({
+            enabled: this.guidesEnabled,
+            transparentBackground: this.isTransparent(),
+            style: this.guideStyle,
+            eligible: true,
+            paper: this.paperIsDark ? "#1e1f22" : "#ffffff",
+            scale: 1,
+          }),
+          enable: (on) => {
+            this.guidesEnabled = on;
+            plugin.settings.writingGuidesEnabled = on;
+            void plugin.saveSettings();
+            guidesBtn.toggleClass("is-active", on && this.isTransparent());
+            this.surface?.setWritingGuides(on && this.isTransparent(), this.guideStyle);
+            for (const fn of this.guideListeners) fn();
+          },
+          setTransparentBackground: (transparent) => {
+            const p = this.doc?.pages[0];
+            if (!p) return;
+            p.backdrop = transparent
+              ? { kind: "blank", paperColor: "transparent" }
+              : { kind: "blank", paperColor: "#ffffff" };
+            this.revision++;
+            this.surface?.setPaperTheme(this.effectivePaperTheme());
+            this.surface?.setWritingGuides(this.guidesEnabled && transparent, this.guideStyle);
+            this.syncStageAspect();
+            this.surface?.refreshInlinePage(p.id);
+            this.scheduleSave();
+            guidesBtn.toggleClass("is-active", this.guidesEnabled && transparent);
+            for (const fn of this.guideListeners) fn();
+          },
+          configure: (patch) => {
+            this.guideStyle = writingGuidesOf({ ...this.guideStyle, ...patch });
+            plugin.settings.writingGuides = { ...this.guideStyle };
+            void plugin.saveSettings();
+            this.surface?.setWritingGuides(
+              this.guidesEnabled && this.isTransparent(),
+              this.guideStyle,
+            );
+            for (const fn of this.guideListeners) fn();
+          },
+          subscribe: (fn) => {
+            this.guideListeners.add(fn);
+            return () => this.guideListeners.delete(fn);
+          },
+        };
+        this.guidePopover = new WritingGuidePopover(guidesBtn, host, () => {
+          this.guidePopover = null;
+        });
+      });
+
+      // 2. Native FineNotes Paper & Templates picker (`TemplatePickerModal`)
+      const paperBtn = endGroup.createEl("button", {
+        cls: "clickable-icon",
+        attr: { type: "button", "aria-label": "Paper template" },
+      });
+      setIcon(paperBtn, "file-spreadsheet");
+      paperBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const p = this.doc?.pages[0];
+        if (!p) return;
+        const initial =
+          p.backdrop.kind === "pdf"
+            ? { kind: "blank" as const }
+            : p.backdrop.paperColor === "transparent"
+              ? { kind: "blank" as const }
+              : p.backdrop;
+        new TemplatePickerModal(app, {
+          mode: "change",
+          initial,
+          geometry: p.geometry,
+          onApply: ({ backdrop }) => {
+            p.backdrop = backdrop;
+            this.revision++;
+            this.surface?.setPaperTheme(this.effectivePaperTheme());
+            this.surface?.setWritingGuides(false, this.guideStyle);
+            this.syncStageAspect();
+            this.surface?.refreshInlinePage(p.id);
+            this.scheduleSave();
+          },
+        }).open();
+      });
+
+      // 3. Open in full notebook — jumps directly to this exact page via `pageIndex`
+      const openBtn = endGroup.createEl("button", {
+        cls: "clickable-icon",
+        attr: { type: "button", "aria-label": "Open in notebook" },
+      });
+      setIcon(openBtn, "external-link");
+      openBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void this.close().then(async () => {
+          const leaf = app.workspace.getLeaf(true);
+          await leaf.openFile(notebookFile, {
+            eState: {
+              pageIndex: Math.max(0, this.req.pageNumber - 1),
+              subpath: `#page=${this.req.pageNumber}`,
+            },
+          });
+        });
+      });
+
+      // 4. Done (matching native toolbar icon button)
+      const doneBtn = endGroup.createEl("button", {
+        cls: "clickable-icon goodobsidian-inline-done-icon",
+        attr: { type: "button", "aria-label": "Done writing (Esc)" },
+      });
+      setIcon(doneBtn, "check");
+      doneBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void this.close();
+      });
+    }
+
     this.images = new VaultImageCache(app);
     this.surface = new InkSurface(
       stage,
@@ -513,7 +600,7 @@ export class EmbedInlineEditor {
       {
         desynchronizedCanvas: false,
         highlighterAlpha: plugin.settings.highlighterAlpha,
-        paper: this.paperIsDark ? DARK_PAPER : LIGHT_PAPER,
+        paper: this.effectivePaperTheme(),
         debug: false,
         palette,
         laserColor: () => plugin.settings.laserDefaultColor,
@@ -547,12 +634,11 @@ export class EmbedInlineEditor {
     this.toolbar.setNight(this.paperIsDark);
     this.syncUndoRedo();
 
-    // Tap outside the active embed (and outside popovers) finishes & trims cleanly.
+    // Tap outside the active embed (and outside popovers/modals) finishes & trims cleanly.
     const onOutside = (e: PointerEvent): void => {
       const target = e.target as Node | null;
       if (!target) return;
       if (slotEl.contains(target)) return;
-      if (this.surfacePopover?.contains(target)) return;
       if ((target as Element).closest?.(".goodobsidian-popover, .modal-container")) return;
       void this.close();
     };
@@ -597,9 +683,9 @@ export class EmbedInlineEditor {
     if (nextH > page.geometry.height) {
       page.geometry = { ...page.geometry, height: nextH };
       this.syncStageAspect();
-      this.surface?.layout();
+      this.surface?.refreshInlinePage(page.id);
       const win = this.req.slotEl.ownerDocument.defaultView ?? window;
-      win.requestAnimationFrame(() => this.surface?.layout());
+      win.requestAnimationFrame(() => this.surface?.refreshInlinePage(page.id));
       return true;
     }
     return false;
@@ -634,168 +720,21 @@ export class EmbedInlineEditor {
         this.manualHeight = clamped;
         this.revision++;
         this.syncStageAspect();
-        this.surface?.layout();
+        this.surface?.refreshInlinePage(page.id);
       }
     };
     const onUp = (e: PointerEvent): void => {
       if (pointerId === null || e.pointerId !== pointerId) return;
       if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
       pointerId = null;
+      const page = this.doc?.pages[0];
+      if (page) this.surface?.refreshInlinePage(page.id);
       this.scheduleSave();
     };
     handle.addEventListener("pointerdown", onDown);
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onUp);
     handle.addEventListener("pointercancel", onUp);
-  }
-
-  private toggleSurfacePopover(): void {
-    if (this.surfacePopover) {
-      this.closeSurfacePopover();
-      return;
-    }
-    const anchor = this.surfaceBtn;
-    const page = this.doc?.pages[0];
-    if (!anchor || !page) return;
-    const docObj = anchor.ownerDocument;
-    const win = docObj.defaultView ?? window;
-    const pop = docObj.body.createDiv({
-      cls: "goodobsidian-popover goodobsidian-inline-surface-popover",
-    });
-    this.surfacePopover = pop;
-    this.surfaceBtn?.addClass("is-active");
-
-    const stop = (e: Event): void => e.stopPropagation();
-    for (const evt of ["mousedown", "pointerdown", "touchstart", "click"] as const) {
-      pop.addEventListener(evt, stop);
-    }
-
-    const renderBody = (): void => {
-      pop.empty();
-      const transparent = this.isTransparent();
-      const seg = pop.createDiv({
-        cls: "goodobsidian-guide-segmented",
-        attr: { role: "radiogroup", "aria-label": "Background" },
-      });
-      for (const [isTrans, label] of [
-        [true, "Transparent"],
-        [false, "Paper"],
-      ] as const) {
-        const btn = seg.createEl("button", {
-          cls: "clickable-icon goodobsidian-guide-seg-btn",
-          text: label,
-          attr: { type: "button", role: "radio", "aria-checked": String(transparent === isTrans) },
-        });
-        btn.toggleClass("is-active", transparent === isTrans);
-        btn.addEventListener("click", () => {
-          if (transparent === isTrans) return;
-          page.backdrop = isTrans
-            ? { kind: "blank", paperColor: "transparent" }
-            : { kind: "blank", paperColor: "#ffffff" };
-          this.revision++;
-          this.syncStageAspect();
-          this.surface?.setWritingGuides(
-            this.guidesEnabled && this.isTransparent(),
-            this.guideStyle,
-          );
-          this.surface?.layout();
-          this.scheduleSave();
-          for (const fn of this.guideListeners) fn();
-          renderBody();
-        });
-      }
-
-      if (transparent) {
-        const guideHost: WritingGuideHost = {
-          state: () => ({
-            enabled: this.guidesEnabled,
-            style: this.guideStyle,
-            eligible: true,
-            paper: this.paperIsDark ? "#1e1f22" : "#ffffff",
-            scale: 1,
-          }),
-          enable: (on) => {
-            this.guidesEnabled = on;
-            this.req.plugin.settings.writingGuidesEnabled = on;
-            void this.req.plugin.saveSettings();
-            this.surface?.setWritingGuides(on, this.guideStyle);
-            for (const fn of this.guideListeners) fn();
-          },
-          configure: (patch) => {
-            this.guideStyle = writingGuidesOf({ ...this.guideStyle, ...patch });
-            this.req.plugin.settings.writingGuides = { ...this.guideStyle };
-            void this.req.plugin.saveSettings();
-            this.surface?.setWritingGuides(this.guidesEnabled, this.guideStyle);
-            for (const fn of this.guideListeners) fn();
-          },
-          subscribe: (fn) => {
-            this.guideListeners.add(fn);
-            return () => this.guideListeners.delete(fn);
-          },
-        };
-        renderWritingGuideControls(pop, guideHost);
-      } else {
-        const currentBg: SyntheticBackdrop =
-          page.backdrop.kind === "pdf" ? { kind: "blank" } : page.backdrop;
-        const colorRow = pop.createDiv({ cls: "goodobsidian-inline-surface-swatches" });
-        for (const swatch of PAPER_SWATCHES) {
-          const btn = colorRow.createEl("button", {
-            cls: "clickable-icon goodobsidian-inline-paper-swatch",
-            attr: {
-              type: "button",
-              "aria-label": swatch.label,
-              title: swatch.label,
-            },
-          });
-          btn.setCssProps({ "--swatch-bg": swatch.color });
-          btn.toggleClass("is-active", (currentBg.paperColor ?? "#ffffff") === swatch.color);
-          btn.addEventListener("click", () => {
-            page.backdrop = { ...currentBg, paperColor: swatch.color };
-            this.revision++;
-            this.surface?.layout();
-            this.scheduleSave();
-            renderBody();
-          });
-        }
-        const tplSeg = pop.createDiv({
-          cls: "goodobsidian-guide-segmented",
-          attr: { role: "radiogroup", "aria-label": "Paper template" },
-        });
-        for (const tpl of PAPER_TEMPLATES) {
-          const btn = tplSeg.createEl("button", {
-            cls: "clickable-icon goodobsidian-guide-seg-btn",
-            text: tpl.label,
-            attr: {
-              type: "button",
-              role: "radio",
-              "aria-checked": String(currentBg.kind === tpl.kind),
-            },
-          });
-          btn.toggleClass("is-active", currentBg.kind === tpl.kind);
-          btn.addEventListener("click", () => {
-            page.backdrop = { ...currentBg, kind: tpl.kind };
-            this.revision++;
-            this.surface?.layout();
-            this.scheduleSave();
-            renderBody();
-          });
-        }
-      }
-    };
-    renderBody();
-
-    const rect = anchor.getBoundingClientRect();
-    const popW = Math.min(280, win.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.right - popW, win.innerWidth - popW - 8));
-    const top = Math.min(rect.bottom + 8, win.innerHeight - 240);
-    pop.setCssProps({ left: `${Math.round(left)}px`, top: `${Math.round(top)}px` });
-  }
-
-  private closeSurfacePopover(): void {
-    this.surfacePopover?.remove();
-    this.surfacePopover = null;
-    this.surfaceBtn?.removeClass("is-active");
-    this.guideListeners.clear();
   }
 
   private async pastePicture(file: File, at?: { x: number; y: number }): Promise<void> {
@@ -880,7 +819,9 @@ export class EmbedInlineEditor {
         window.clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
-      this.closeSurfacePopover();
+      this.guidePopover?.close();
+      this.guidePopover = null;
+      this.guideListeners.clear();
       const page = this.doc?.pages[0];
       if (page && isInlineSketchPage(page)) {
         const trimmed = inlineTrimHeight(page, this.manualHeight);

@@ -68,7 +68,6 @@ import {
   type EmbedTarget,
   embedLabel,
   embedPageLabel,
-  embedPageLink,
   embedPageNumbers,
   embedTarget,
   embedsToRelease,
@@ -847,11 +846,11 @@ class NotebookEmbed extends Component {
   open(event: MouseEvent | KeyboardEvent, page: number): void {
     event.preventDefault();
     event.stopPropagation();
-    void this.ctx.app.workspace.openLinkText(
-      embedPageLink(this.ctx.linktext, this.target, page),
-      this.ctx.sourcePath,
-      Keymap.isModEvent(event),
-    );
+    const newTab = Keymap.isModEvent(event);
+    const leaf = this.ctx.app.workspace.getLeaf(newTab);
+    void leaf.openFile(this.file, {
+      eState: { pageIndex: Math.max(0, page - 1), subpath: `#page=${page}` },
+    });
   }
 
   /**
@@ -945,10 +944,13 @@ class PageSlot {
     this.el.setAttribute("role", "link");
     this.el.tabIndex = 0;
     // Until the notebook is read: its name for one embedded whole, else "Physics, page 3".
-    this.el.setAttribute(
-      "aria-label",
-      embedPageLabel(embed.file.basename, embed.target, number, 1),
-    );
+    // Omit tooltip aria-label for inline sketch embeds (`#id=...`) to avoid hover popups.
+    if (embed.target.pageId === undefined) {
+      this.el.setAttribute(
+        "aria-label",
+        embedPageLabel(embed.file.basename, embed.target, number, 1),
+      );
+    }
     // A region's shape is not known yet: a short box, not a page, until it is read.
     this.el.setCssStyles({
       aspectRatio:
@@ -1024,10 +1026,14 @@ class PageSlot {
     this.page = page;
     this.crop = crop;
     const { embed } = this;
-    this.el.setAttribute(
-      "aria-label",
-      embedPageLabel(embed.file.basename, embed.target, number, count),
-    );
+    if (embed.target.pageId === undefined) {
+      this.el.setAttribute(
+        "aria-label",
+        embedPageLabel(embed.file.basename, embed.target, number, count),
+      );
+    } else {
+      this.el.removeAttribute("aria-label");
+    }
     if (page) this.el.setCssStyles({ aspectRatio: aspectOf(crop ?? page.geometry) });
     this.el.toggleClass(
       "is-transparent",

@@ -6445,6 +6445,13 @@ export class InkSurface {
     this.layout();
   }
 
+  /** Re-render a resized or re-styled inline page without stretching its cached tile. */
+  refreshInlinePage(pageId: string): void {
+    this.renderer?.invalidatePage(pageId);
+    this.layout();
+    this.requestFrame();
+  }
+
   /** The setting "Lock fit to width", read at each layout (`ScrollExtent.holdX`). */
   holdFitWidth: () => boolean = () => false;
 

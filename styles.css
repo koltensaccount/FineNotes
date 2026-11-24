@@ -1335,6 +1335,8 @@ select.goodobsidian-choice-select {
 .goodobsidian-page-embed-page.is-inline-editing {
   overflow: visible;
   cursor: default;
+  background: transparent;
+  box-shadow: none;
   border: 1.5px solid var(--interactive-accent);
   border-radius: var(--gob-radius-l, 12px);
 }
@@ -1351,43 +1353,17 @@ select.goodobsidian-choice-select {
   flex-direction: column;
   width: 100%;
 }
-.goodobsidian-inline-bar {
+.goodobsidian-inline-toolbar-host {
   position: sticky;
   top: 0;
   z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
   border-radius: var(--gob-radius-l, 12px) var(--gob-radius-l, 12px) 0 0;
-  background: var(--gob-frost, var(--background-primary));
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-.goodobsidian-inline-toolbar-host {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 .goodobsidian-inline-toolbar-host .goodobsidian-toolbar {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  border-radius: var(--gob-radius-l, 12px) var(--gob-radius-l, 12px) 0 0;
 }
-.goodobsidian-inline-trailing {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-.goodobsidian-inline-done-btn.clickable-icon {
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 8px;
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-  font-size: var(--font-ui-smaller);
-  font-weight: 600;
+.goodobsidian-inline-done-icon.clickable-icon {
+  color: var(--interactive-accent);
 }
 .goodobsidian-inline-stage {
   position: relative;
@@ -1420,31 +1396,6 @@ select.goodobsidian-choice-select {
   border-radius: 999px;
   background: var(--interactive-accent);
   opacity: 0.7;
-}
-.goodobsidian-inline-surface-popover {
-  position: fixed;
-  z-index: 60;
-  width: 280px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.goodobsidian-inline-surface-swatches {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.goodobsidian-inline-paper-swatch.clickable-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: var(--swatch-bg, #ffffff);
-  border: 1.5px solid var(--background-modifier-border);
-}
-.goodobsidian-inline-paper-swatch.clickable-icon.is-active {
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
 /* `![[Physics.notebook]]`: every page, one under the other, as the
