@@ -1377,6 +1377,9 @@ select.goodobsidian-choice-select {
   width: 100%;
   height: 100%;
 }
+.goodobsidian-page-embed-page.is-transparent .goodobsidian-inline-stage .goodobsidian-surface {
+  background: transparent;
+}
 .goodobsidian-inline-resize-handle {
   position: absolute;
   left: 0;

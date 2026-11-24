@@ -6452,15 +6452,23 @@ export class InkSurface {
     this.requestFrame();
   }
 
-  /** Briefly pulses an accent outline around `pageIndex` after jumping from an embed. */
+  /** Briefly pulses an accent outline around `pageIndex` (or its drawn ink) after jumping from an embed. */
   flashPage(pageIndex: number): void {
+    this.syncViewport();
     const box = this.pageLayout.boxes[pageIndex];
-    if (!box) return;
-    const scale = this.unitScale;
-    const left = Math.round(this.offsetX + box.x * scale);
-    const top = Math.round((box.y - this.viewport.scrollY) * scale);
-    const width = Math.round(box.width * scale);
-    const height = Math.round(box.height * scale);
+    const page = this.doc.pages[pageIndex];
+    if (!box || !page || !(this.scale > 0)) return;
+    const scale = this.scale;
+    const bounds = drawnBounds(page);
+    const pad = 20;
+    const rx = bounds ? Math.max(0, bounds.minX - pad) : 0;
+    const ry = bounds ? Math.max(0, bounds.minY - pad) : 0;
+    const rw = bounds ? Math.min(box.width - rx, bounds.maxX - bounds.minX + pad * 2) : box.width;
+    const rh = bounds ? Math.min(box.height - ry, bounds.maxY - bounds.minY + pad * 2) : box.height;
+    const left = Math.round(this.offsetX + (box.x + rx) * scale);
+    const top = Math.round((box.y + ry - this.viewport.scrollY) * scale);
+    const width = Math.max(40, Math.round(rw * scale));
+    const height = Math.max(40, Math.round(rh * scale));
     const ring = this.surfaceEl.createDiv({ cls: "goodobsidian-page-flash" });
     ring.setCssProps({
       left: `${left}px`,

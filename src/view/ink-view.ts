@@ -6187,7 +6187,7 @@ export class InkView extends TextFileView {
       surface.goToPage(index);
       if (highlight) {
         const targetIndex = index;
-        window.requestAnimationFrame(() => surface.flashPage(targetIndex));
+        window.setTimeout(() => surface.flashPage(targetIndex), 120);
       }
     }
     // Opened anew, with no page asked for: the PDF's tab it was left on.
