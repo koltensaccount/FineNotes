@@ -139,6 +139,14 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **Where:** Home › Sort (up-down arrows icon)
 - **Words:** sort, order, by name, by date, last edited, date created, page count, list view, grid view, hide files, notebooks only
 
+### Hide notebooks and files from Home
+
+- **Id:** `homeHide`
+- **What:** A cover's or folder's ⌄ menu has "Hide from Home": the item (and all a folder holds) leaves Home, Continue, the folder rail and search; the file stays in the vault. Sort › "Show hidden items" (there only while something is hidden) shows them dimmed, and their ⌄ menu has "Show on Home".
+- **Where:** Home › an item's ⌄ › Hide from Home; Home › Sort › Show hidden items
+- **Words:** hide, hide notebook, hide file, unhide, show hidden, declutter, archive, take off home, hidden items
+- **Settings:** `libraryHidden`
+
 ### Favorites (star notebooks and folders)
 
 - **Id:** `homeFavorites`
@@ -718,6 +726,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **What:** Hides Obsidian's title bar, status bar, left ribbon and sidebars (tabs stay) so FineNotes looks like its own app; Home then shows its folder rail.
 - **Where:** Settings › General › Simple look; gear (Notebook settings) › Simple look; Home's card "Only here for FineNotes?"; welcome; command palette "Simple look: hide or show Obsidian's tabs, sidebars and menus"
 - **Words:** simple look, hide sidebars, hide ribbon, app-like, distraction free, clean interface, hide Obsidian
+- **Seen as:** left panel disappears, side panels gone, sidebars missing, ribbon gone, menus disappeared
 - **Settings:** `simpleLook`
 - **Commands:** `toggle-simple-look`
 

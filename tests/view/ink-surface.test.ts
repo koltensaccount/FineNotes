@@ -27,6 +27,7 @@ import {
 } from "../../src/model/document";
 import { IdSequence, highestIdNumber, strokeIdsOf } from "../../src/view/id-sequence";
 import { PointerHud } from "../../src/view/pointer-hud";
+import { InkLatency } from "../../src/view/ink-latency";
 import { StrokeIndex } from "../../src/view/stroke-index";
 import { SizeWait } from "../../src/view/surface-size";
 import { type SelectionAction, barItems, menuLayout } from "../../src/view/selection-bar-model";
@@ -1110,6 +1111,7 @@ function hud(debug = true): Hud {
   const surface = surfaceWith({
     debug,
     hud: pointerHud,
+    inkLatency: new InkLatency(),
     hudFrame: 0,
     hudLastVerdict: "-",
     hudEl: {
@@ -1656,6 +1658,111 @@ describe("insert space from the margin", () => {
   it("a drag that ends where it began does nothing", async () => {
     const { applied } = await marginDrag(5);
     expect(applied).toHaveLength(0);
+  });
+});
+
+describe("insert space on a board (discussion #276)", () => {
+  /** A drag from (400, 1000) by (dx, dy) on a dotted board, with ink above and below. */
+  function boardDrag(
+    dx: number,
+    dy: number,
+    moved = Math.hypot(dx, dy),
+    on: { board: boolean; height: number } = { board: true, height: 5600 },
+  ) {
+    const p = page("p1", [line("above", 100, 300, 900), line("below", 100, 300, 1200)]);
+    p.backdrop = { kind: "dotted" };
+    p.geometry = { width: 5600, height: on.height };
+    const doc = documentOf(p);
+    const applied: unknown[] = [];
+    const flashes: string[] = [];
+    const taps: string[] = [];
+    const surface = surfaceWith({
+      doc,
+      board: on.board,
+      pressTimer: 0,
+      renderer: null,
+      activePage: null,
+      pageAt: () => p,
+      textBoxFrameOf: () => ({ x: 0, y: 0, w: 0, h: 0 }),
+      flashReadout: (t: string) => flashes.push(t),
+      requestZoomPaint: () => {},
+      offerStrokeTap: () => false,
+      tapSelect: () => taps.push("tap"),
+      applyCommand: (c: { apply(d: InkDocument): void }) => {
+        applied.push(c);
+        c.apply(doc);
+      },
+    });
+    surface.lasso = {
+      box: { index: 0 },
+      mode: "lines",
+      origin: { x: 400, y: 1000 },
+      to: { x: 400 + dx, y: 1000 + dy },
+      held: false,
+      lines: [],
+      space: null,
+      boardSpace: { axis: null, amount: 0, plan: null, text: "" },
+    };
+    run(surface, "dragBoardSpace", surface.lasso, (surface.lasso as State).boardSpace, moved);
+    const axis = ((surface.lasso as State).boardSpace as State).axis;
+    run(surface, "selectEnd");
+    return { p, applied, flashes, axis, taps };
+  }
+
+  it("a drag down pushes what is below the pen down by whole dots, and says so", () => {
+    const { p, applied, flashes, axis } = boardDrag(0, 130);
+    expect(axis).toBe("y");
+    expect(applied).toHaveLength(1);
+    expect(p.strokes.map((s) => s.pts[1])).toEqual([900, 1320]);
+    expect(flashes.at(-1)).toBe("Insert space");
+  });
+
+  it("a drag right pushes what starts right of the pen to the right", () => {
+    const p0 = boardDrag(90, 10);
+    expect(p0.axis).toBe("x");
+    // Both lines start at x = 100, left of the pen: nothing moves.
+    expect(p0.applied).toHaveLength(0);
+  });
+
+  it("a drag up closes the empty space above, never over ink", () => {
+    const { p, flashes } = boardDrag(0, -400);
+    // "above" reaches 901: 99 px empty, two dots of 40.
+    expect(p.strokes.map((s) => s.pts[1])).toEqual([900, 1120]);
+    expect(flashes.at(-1)).toBe("Remove space");
+  });
+
+  it("on notebook paper with no lines it inserts space too, but never past the page's edge", () => {
+    const notebook = { board: false, height: 1300 };
+    const fits = boardDrag(0, 80, undefined, notebook);
+    expect(fits.p.strokes.map((s) => s.pts[1])).toEqual([900, 1280]);
+    // A push that would run past the edge goes as far as fits (99 px: two dots) …
+    expect(boardDrag(0, 130, undefined, notebook).p.strokes[1].pts[1]).toBe(1280);
+    // … and none at all where the ink already reaches the edge.
+    const full = boardDrag(0, 130, undefined, { board: false, height: 1210 });
+    expect(full.applied).toHaveLength(0);
+    expect(full.flashes.at(-1)).toBe("No room left on this page");
+  });
+
+  it("is free space on a board and on unlined paper, not on lines, a PDF or a cover", () => {
+    const at = (kind: string, board = false) =>
+      run<boolean>(surfaceWith({ board }), "insertsFreeSpace", {
+        ...blankPage("p"),
+        backdrop: { kind },
+      });
+    expect(at("ruled-wide", true)).toBe(true);
+    expect(at("dotted")).toBe(true);
+    expect(at("squared")).toBe(true);
+    expect(at("blank")).toBe(true);
+    expect(at("ruled-wide")).toBe(false);
+    expect(at("pdf")).toBe(false);
+    expect(at("cover-plain")).toBe(false);
+  });
+
+  it("a press that never moved past a tap inserts nothing: it is the lasso's tap", () => {
+    const { applied, axis, taps } = boardDrag(0, 4);
+    expect(axis).toBeNull();
+    expect(applied).toHaveLength(0);
+    expect(taps).toEqual(["tap"]);
   });
 });
 
@@ -2328,6 +2435,27 @@ describe("smoothing a pen whose positions arrive rounded (FineNotes#1)", () => {
   it("leaves a pen with exact positions alone", () => {
     expect(opts(false, false)).toMatchObject({ smoothing: "off", densify: true });
     expect(opts(false, true)).toMatchObject({ smoothing: "off", densify: false });
+  });
+
+  it("gives the builder the rounding grid in page px where the pen writes (FineNotes#275)", () => {
+    const at = (strokeGrid: number | null, baseScale: number, userZoom: number) =>
+      run<Record<string, unknown>>(
+        surfaceWith({
+          penPressure: null,
+          toolState: { pressureEnabled: false },
+          atFitZoom: (v: number) => v,
+          pointerInput: { strokeRounded: strokeGrid !== null, strokeGrid },
+          coalescedInput: false,
+          baseScale,
+          userZoom,
+        }),
+        "builderOpts",
+      );
+    // A practice sheet with the whole page on an iPad: 0.45 CSS px per page px.
+    expect(at(1, 0.9, 0.5).grid).toBeCloseTo(1 / 0.45, 12);
+    // Device px at a ratio of 2, zoomed in to 2 CSS px per page px.
+    expect(at(0.5, 1, 2).grid).toBeCloseTo(0.25, 12);
+    expect(at(null, 1, 1)).not.toHaveProperty("grid");
   });
 });
 
@@ -3426,5 +3554,52 @@ describe("the Zoom box's first-drag catcher", () => {
     const { s, hidden } = catcherSurface(true);
     run(s, "syncZoomCatcher");
     expect(hidden()).toBe(false);
+  });
+});
+
+describe("the lasso on a PDF's tab", () => {
+  /** A lasso of `mode` lifted over a slide; `onTab` makes it a PDF's tab. */
+  function lift(mode: "rect" | "free", onTab: boolean, inkInside: boolean) {
+    const calls: string[] = [];
+    const loop = [10, 10, 200, 10, 200, 120, 10, 120];
+    const surface = surfaceWith({
+      lasso: {
+        box: { index: 0 },
+        mode,
+        origin: { x: 10, y: 10 },
+        to: { x: 200, y: 120 },
+        held: false,
+        path: { points: loop },
+      },
+      activePage: null,
+      renderer: null,
+      callbacks: onTab ? { onSnippetStart: () => null } : {},
+      stopPress: () => undefined,
+      endTextSweep: () => undefined,
+      lassoLoop: () => loop,
+      keepOutline: () => calls.push("outline"),
+      selectInside: () => calls.push("select"),
+      liveSelection: () => (inkInside && calls.includes("select") ? { pageId: "p1" } : null),
+      groupBounds: () => ({ minX: 20, minY: 20, maxX: 60, maxY: 40 }),
+      dropSelection: () => calls.push("drop"),
+      showEmptyLasso: () => calls.push("area"),
+    });
+    Object.defineProperty(surface, "fixedPages", { value: onTab });
+    Object.defineProperty(surface, "gestureScale", { value: 1 });
+    run(surface, "selectEnd");
+    return calls;
+  }
+
+  for (const mode of ["rect", "free"] as const) {
+    it(`keeps the lassoed area (${mode}), with ink in it or not`, () => {
+      expect(lift(mode, true, true)).toEqual(["drop", "area"]);
+      expect(lift(mode, true, false)).toEqual(["drop", "area"]);
+    });
+  }
+
+  it("selects the ink inside on the notes, as before", () => {
+    expect(lift("rect", false, true)).toEqual(["select"]);
+    expect(lift("free", false, true)).toEqual(["select", "outline"]);
+    expect(lift("rect", false, false)).toEqual(["select", "area"]);
   });
 });

@@ -43,8 +43,17 @@ import { type PageGeometry, type PdfBackdrop, pdfFrameOf } from "../model/docume
 import { classifyPage } from "../recognition/ocr/figures";
 import { wordsOfLayout } from "../recognition/ocr/ocr-text";
 import { parseWordList } from "../recognition/hwr/corrections";
-import { isSparse, mergedItems, nativeBoxes } from "../recognition/ocr/ocr-words";
-import { type OperatorPageLike, readFigures } from "./pdf-figures";
+import {
+  OCR_TUNING,
+  isSparse,
+  mergedItems,
+  nativeBoxes,
+  textSpread,
+} from "../recognition/ocr/ocr-words";
+import { type OperatorPageLike, opCodes, readFigures } from "./pdf-figures";
+import { repairLigatures } from "../canvas/pdf-ligatures";
+import { commonWords } from "../translate/languages";
+import { type TextWorker, workerTextDocument } from "./pdf-worker-text";
 import type { OcrOwner, OcrService } from "./ocr-service";
 
 // The slice of pdf.js used here (`loadPdfJs()` is typed `Promise<any>`).
@@ -111,6 +120,7 @@ const EMPTY: PageText = {
 /** pdf.js's text items as {@link PdfTextItem}s, with their fonts' metrics. */
 export function readTextItems(content: TextContentLike): PdfTextItem[] {
   const items: PdfTextItem[] = [];
+  const fonts: (string | undefined)[] = [];
   for (const raw of content.items) {
     const { str, transform, width, height } = raw;
     if (typeof str !== "string" || !Array.isArray(transform)) continue;
@@ -131,7 +141,17 @@ export function readTextItems(content: TextContentLike): PdfTextItem[] {
     }
     if (style?.vertical === true) item.vertical = true;
     items.push(item);
+    fonts.push(typeof raw.fontName === "string" ? raw.fontName : undefined);
   }
+  // Ligatures some fonts map to private-use codes (U+E000...), read as letters.
+  const repaired = repairLigatures(
+    items.map((item) => item.str),
+    fonts,
+    commonWords(),
+  );
+  repaired.forEach((str, i) => {
+    items[i].str = str;
+  });
   return items;
 }
 
@@ -170,6 +190,10 @@ export class PdfTextCache implements OcrOwner {
   private readonly waiters = new Map<string, Array<() => void>>();
   private readonly deferred = new Map<string, PdfBackdrop>();
   private readonly documents = new Map<string, Promise<PdfDocumentLike | null>>();
+  /** The PDF worker (`setWorker`), whose own document of a PDF is read when it is alive. */
+  private worker: TextWorker | null = null;
+  /** The paths read through the worker, and which one. */
+  private readonly via = new Map<string, TextWorker>();
   /** Per page key, or per path for a PDF that would not open: when it failed. */
   private readonly failed = new Map<string, number>();
   /** One page is read at a time, behind this. */
@@ -325,6 +349,26 @@ export class PdfTextCache implements OcrOwner {
     if (text && !this.destroyed) this.store(pageKey(path, page), text);
   }
 
+  /**
+   * Read through this PDF worker from now on (`null`: open PDFs on this
+   * thread). A PDF this thread opened already is closed once the page being
+   * read is done, and read through the worker after: a textbook was held
+   * twice otherwise.
+   */
+  setWorker(worker: TextWorker | null): void {
+    if (this.worker === worker) return;
+    this.worker = worker;
+    if (!worker?.alive) return;
+    const here = [...this.documents].filter(([path]) => !this.via.has(path));
+    this.queue = this.queue.then(() => {
+      for (const [path, opening] of here) {
+        if (this.documents.get(path) !== opening) continue;
+        this.documents.delete(path);
+        void opening.then((d) => d?.destroy()).catch(() => undefined);
+      }
+    });
+  }
+
   /** While the pen writes nothing is read; letting go reads what was asked for meanwhile. */
   setHeld(held: boolean): void {
     this.ocr?.hold(this, held);
@@ -452,11 +496,8 @@ export class PdfTextCache implements OcrOwner {
     const ocr = this.ocr;
     if (!ocr?.enabled) return native;
     const figures = ocr.figures === true;
-    const sparse = isSparse(
-      layoutText(native, pdfToPage(viewport, source, source)),
-      source.width,
-      source.height,
-    );
+    const layout = layoutText(native, pdfToPage(viewport, source, source));
+    const sparse = isSparse(layout, source.width, source.height);
     // Pictures are not looked at (the setting is off): only sparse pages are read, as before.
     if (!sparse && !figures) {
       ocr.settled(backdrop.path, backdrop.page);
@@ -504,7 +545,7 @@ export class PdfTextCache implements OcrOwner {
     const scan = operators
       ? await readFigures({ getOperatorList: operators }, await this.operators(), viewport, source)
       : null;
-    const plan = classifyPage(sparse, scan, source);
+    const plan = classifyPage(sparse, scan, source, OCR_TUNING, textSpread(layout, source.height));
     if (plan.condition === "TEXT_ONLY") {
       ocr.settled(backdrop.path, backdrop.page);
       // Only a page whose pictures were looked at is known to need nothing.
@@ -620,6 +661,11 @@ export class PdfTextCache implements OcrOwner {
   }
 
   private document(path: string): Promise<PdfDocumentLike | null> {
+    // Read through a worker that has died since: open it afresh (here, then).
+    if (this.via.get(path)?.alive === false) {
+      this.documents.delete(path);
+      this.via.delete(path);
+    }
     let doc = this.documents.get(path);
     if (!doc) {
       const opening = this.open(path).catch(() => null);
@@ -638,6 +684,14 @@ export class PdfTextCache implements OcrOwner {
   private async open(path: string): Promise<PdfDocumentLike | null> {
     const file: TFile | null = this.app.vault.getFileByPath(path);
     if (!file) return null;
+    const worker = this.worker;
+    if (worker?.alive) {
+      try {
+        return await this.openInWorker(worker, path, file);
+      } catch {
+        // Read here instead, as without a worker.
+      }
+    }
     // Read-only, as everywhere: the source PDF is never written.
     const bytes = await this.app.vault.readBinary(file);
     this.lib ??= loadPdfJs().then((value: unknown) => value as PdfJsLike);
@@ -646,5 +700,24 @@ export class PdfTextCache implements OcrOwner {
     // bytes again, so they are handed over without a copy, which a large
     // PDF on an iPad has no memory to spare for (#107).
     return await lib.getDocument({ data: new Uint8Array(bytes), ...pdfAssets() }).promise;
+  }
+
+  /**
+   * `path` read through the worker: its document there if its pages are
+   * drawn there already, else opened there from the file.
+   */
+  private async openInWorker(
+    worker: TextWorker,
+    path: string,
+    file: TFile,
+  ): Promise<PdfDocumentLike> {
+    // Which operators figure finding reads, by pdf.js's numbers for them.
+    this.lib ??= loadPdfJs().then((value: unknown) => value as PdfJsLike);
+    const keep = Object.values(opCodes((await this.lib).OPS));
+    const pages =
+      (await worker.share(path)) ??
+      (await worker.open(path, await this.app.vault.readBinary(file)));
+    this.via.set(path, worker);
+    return workerTextDocument(worker, path, pages, keep);
   }
 }

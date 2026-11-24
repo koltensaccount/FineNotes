@@ -1453,6 +1453,9 @@ select.goodobsidian-choice-select {
   font-weight: var(--font-semibold, 600);
   grid-column: 2;
   text-align: center;
+  /* Text only. "Select all" is wider than its 44 px column and runs under
+     the title, which would otherwise take the taps on its right half. */
+  pointer-events: none;
 }
 
 .goodobsidian-pagesidebar .goodobsidian-pagesidebar-close.clickable-icon {
@@ -1770,11 +1773,14 @@ select.goodobsidian-choice-select {
    ribbons, a few boards rather than a hundred pages; the grid starts where
    the chip stood. */
 .goodobsidian-pagesidebar.is-board .goodobsidian-pagesidebar-filter.clickable-icon,
-.goodobsidian-pagesidebar.is-board .goodobsidian-thumb-ribbon {
+.goodobsidian-pagesidebar.is-board .goodobsidian-thumb-ribbon,
+.goodobsidian-pagesidebar.is-pdf-tab .goodobsidian-pagesidebar-filter.clickable-icon,
+.goodobsidian-pagesidebar.is-pdf-tab .goodobsidian-thumb-ribbon {
   display: none;
 }
 
-.goodobsidian-pagesidebar.is-board .goodobsidian-pagesidebar-grid {
+.goodobsidian-pagesidebar.is-board .goodobsidian-pagesidebar-grid,
+.goodobsidian-pagesidebar.is-pdf-tab .goodobsidian-pagesidebar-grid {
   padding-top: 12px;
 }
 
@@ -3002,6 +3008,34 @@ body.is-mobile.goodobsidian-dialog-typing .app-container {
 .goodobsidian-surface.is-ink-cursor.is-drawing
   .goodobsidian-scroll:not(.is-hand, .is-hand-dragging) {
   cursor: var(--goodobsidian-pen-cursor-drawing, crosshair);
+}
+
+/* A tablet pen hovering on Linux, whose system arrow ignores the cursors
+   above (FineNotes#266): the page draws the same image under the pen
+   (`pen-hover-cursor.ts`) and asks for no cursor of its own. Shown only
+   where the mouse would wear it; Space's hand wins. */
+.goodobsidian-pen-hover-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Over the page (the scroll area is 3), under the zoom catcher, the HUD
+     and the page's own controls. */
+  z-index: 4;
+  display: none;
+  background: no-repeat center / 100% 100%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.goodobsidian-surface.is-pen-hovering:is(.is-ink-cursor, .is-pen-cursor)
+  .goodobsidian-scroll:not(.is-hand, .is-hand-dragging)
+  ~ .goodobsidian-pen-hover-cursor {
+  display: block;
+}
+
+.goodobsidian-surface.is-pen-hovering:is(.is-ink-cursor, .is-pen-cursor)
+  .goodobsidian-scroll:not(.is-hand, .is-hand-dragging) {
+  cursor: none;
 }
 
 /* "None": no pointer over the page while a pen is in hand, for a pen
@@ -4557,6 +4591,7 @@ body,
 .goodobsidian-zoombox-settings input[type="range"].goodobsidian-width-range,
 .goodobsidian-colour-panel input[type="range"].goodobsidian-width-range,
 .goodobsidian-mm-stepper input[type="range"].goodobsidian-width-range,
+.finenotes-note-palette input[type="range"].goodobsidian-width-range,
 .goodobsidian-margin input[type="range"].goodobsidian-width-range {
   position: absolute;
   inset: 0;
@@ -4576,6 +4611,7 @@ body,
 .goodobsidian-zoombox-settings input[type="range"].goodobsidian-width-range,
 .goodobsidian-colour-panel input[type="range"].goodobsidian-width-range,
 .goodobsidian-mm-stepper input[type="range"].goodobsidian-width-range,
+.finenotes-note-palette input[type="range"].goodobsidian-width-range,
 .goodobsidian-margin input[type="range"].goodobsidian-width-range {
   --gob-slider-height: var(--gob-touch);
 }
@@ -4599,6 +4635,7 @@ input[type="range"].goodobsidian-player-scrubber {
   input[type="range"].goodobsidian-width-range::-webkit-slider-runnable-track,
 .goodobsidian-mm-stepper
   input[type="range"].goodobsidian-width-range::-webkit-slider-runnable-track,
+.finenotes-note-palette input[type="range"].goodobsidian-width-range::-webkit-slider-runnable-track,
 .goodobsidian-margin input[type="range"].goodobsidian-width-range::-webkit-slider-runnable-track,
 input[type="range"].goodobsidian-player-scrubber::-webkit-slider-runnable-track {
   height: var(--gob-slider-height);
@@ -4627,6 +4664,7 @@ input[type="range"].goodobsidian-player-scrubber::-webkit-slider-runnable-track 
 .goodobsidian-zoombox-settings input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
 .goodobsidian-colour-panel input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
 .goodobsidian-mm-stepper input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
+.finenotes-note-palette input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
 .goodobsidian-margin input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
 input[type="range"].goodobsidian-player-scrubber::-webkit-slider-thumb {
   top: 0;
@@ -4649,6 +4687,7 @@ input[type="range"].goodobsidian-player-scrubber::-webkit-slider-thumb {
 .goodobsidian-colour-panel
   input[type="range"].goodobsidian-width-range:active::-webkit-slider-thumb,
 .goodobsidian-mm-stepper input[type="range"].goodobsidian-width-range:active::-webkit-slider-thumb,
+.finenotes-note-palette input[type="range"].goodobsidian-width-range:active::-webkit-slider-thumb,
 .goodobsidian-margin input[type="range"].goodobsidian-width-range:active::-webkit-slider-thumb,
 input[type="range"].goodobsidian-player-scrubber:active::-webkit-slider-thumb {
   /* Obsidian's held knob changes size and `top` too: keep ours as it was. */
@@ -4665,6 +4704,7 @@ input[type="range"].goodobsidian-player-scrubber:active::-webkit-slider-thumb {
   .goodobsidian-zoombox-settings input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
   .goodobsidian-colour-panel input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
   .goodobsidian-mm-stepper input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
+  .finenotes-note-palette input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
   .goodobsidian-margin input[type="range"].goodobsidian-width-range::-webkit-slider-thumb,
   input[type="range"].goodobsidian-player-scrubber::-webkit-slider-thumb {
     transition: none;
@@ -5964,8 +6004,9 @@ button.goodobsidian-import-help-toggle.clickable-icon {
   opacity: 0.4;
 }
 
-/* A 44 px target around a 30 px dot; the selected one is ringed in the
-   accent colour, which reads on light and dark themes alike. */
+/* A 44 px target around a 30 px dot; the selected dot is ringed in the
+   accent colour past a gap, as every colour picker marks its choice
+   (FineNotes#240: the button's own border made it a double ring). */
 .goodobsidian-cover-swatch {
   display: inline-flex;
   align-items: center;
@@ -5973,20 +6014,17 @@ button.goodobsidian-import-help-toggle.clickable-icon {
   width: var(--gob-touch);
   height: var(--gob-touch);
   padding: 0;
-  border: 2px solid transparent;
+  border: none;
   border-radius: 50%;
   background: transparent;
   box-shadow: none;
   cursor: pointer;
 }
 
-/* Outranks a theme's .clickable-icon padding (FineNotes#240). */
+/* Outranks a theme's .clickable-icon padding and border (FineNotes#240). */
 button.goodobsidian-cover-swatch.clickable-icon {
   padding: 0;
-}
-
-.goodobsidian-cover-swatch.is-selected {
-  border-color: var(--interactive-accent);
+  border: none;
 }
 
 .goodobsidian-cover-swatch.is-selected .goodobsidian-cover-swatch-dot {
@@ -6654,6 +6692,241 @@ button.goodobsidian-cover-swatch.clickable-icon {
 
   .goodobsidian-download-card-bar {
     transition: none;
+  }
+}
+
+/* ------------------------------------------- the Translate window (Translate) */
+/* A floating window like the calculator's (the shared frame rules are with
+   the graph window's): the two languages, the text, the translation in a
+   well, and its actions under it. */
+.goodobsidian-tr {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 4px 4px;
+}
+
+.goodobsidian-tr-langs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.goodobsidian-tr-window select.dropdown.goodobsidian-tr-lang {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--font-ui-small);
+}
+
+/* From while it detects: the language found, in the accent colour. */
+.goodobsidian-tr-window select.dropdown.goodobsidian-tr-lang.is-auto {
+  color: var(--text-accent);
+}
+
+.goodobsidian-tr-window button.clickable-icon.goodobsidian-tr-button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--gob-radius-m);
+  color: var(--gob-icon);
+}
+
+.goodobsidian-tr-window button.clickable-icon.goodobsidian-tr-button.is-hidden {
+  display: none;
+}
+
+/* The AI switch: on is the accent fill, as a selected tool is. */
+.goodobsidian-tr-window button.clickable-icon.goodobsidian-tr-button.is-ai.is-on {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* The text: editable, with Clear in its corner while it holds any. */
+.goodobsidian-tr-source {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 64px;
+}
+
+.goodobsidian-tr-window textarea.goodobsidian-tr-text {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  padding: 8px 36px 8px 10px;
+  border-radius: var(--gob-radius-m);
+  font-size: 16px;
+  line-height: 1.45;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.goodobsidian-tr-window button.clickable-icon.goodobsidian-tr-button.is-clear {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+}
+
+/* The translation: a well in the secondary background, selectable. */
+.goodobsidian-tr-result {
+  flex: 1 1 0;
+  min-height: 64px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  border-radius: var(--gob-radius-m);
+  background: var(--background-secondary);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.goodobsidian-tr-output {
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.goodobsidian-tr-placeholder {
+  color: var(--text-faint);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+/* An AI translation of a word: its dictionary notes under it. */
+.goodobsidian-tr-notes {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+}
+
+.goodobsidian-tr-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  white-space: normal;
+}
+
+/* The download card in the translation's place, drawn as the model
+   download card is (its icon, title, detail, track and button classes). */
+.goodobsidian-tr-download {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--font-ui-small);
+  line-height: 1.35;
+}
+
+.goodobsidian-tr-download.is-busy .goodobsidian-download-card-track {
+  display: block;
+}
+
+.goodobsidian-tr-download.is-failed .goodobsidian-download-card-icon {
+  color: var(--color-orange);
+}
+
+.goodobsidian-tr-download button.goodobsidian-download-card-button.clickable-icon {
+  flex: 0 0 auto;
+  align-self: center;
+  justify-content: center;
+  height: var(--gob-touch);
+  padding: 0 14px;
+  border-radius: var(--gob-radius-pill);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-weight: var(--font-semibold, 600);
+  white-space: nowrap;
+  opacity: 1;
+}
+
+.goodobsidian-tr-download button.goodobsidian-download-card-button.clickable-icon:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.goodobsidian-tr-download button.goodobsidian-download-card-button.clickable-icon:disabled {
+  opacity: 0.5;
+}
+
+.goodobsidian-tr-fine {
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* Under the translation: Read aloud at the start, the rest at the end. */
+.goodobsidian-tr-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding-right: 22px;
+}
+
+.goodobsidian-tr-actions.is-hidden {
+  display: none;
+}
+
+.goodobsidian-tr-spacer {
+  flex: 1 1 auto;
+}
+
+/* Busy: three dots that pulse in turn, where the translation will be. */
+.goodobsidian-tr-busy {
+  display: flex;
+  gap: 5px;
+  padding: 8px 0;
+}
+
+.goodobsidian-tr-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: goodobsidian-tr-pulse 1s ease-in-out infinite;
+}
+
+.goodobsidian-tr-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.goodobsidian-tr-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes goodobsidian-tr-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Minimised: the bar as a pill, as the graph window's. */
+.goodobsidian-tr-window.is-minimised {
+  border-radius: var(--gob-radius-pill);
+}
+
+.goodobsidian-tr-window.is-minimised .goodobsidian-tr-window-body,
+.goodobsidian-tr-window.is-minimised .goodobsidian-tr-window-grip,
+.goodobsidian-tr-window.is-minimised
+  button.clickable-icon.goodobsidian-tr-window-button:not(.is-close) {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goodobsidian-tr-dot {
+    animation: none;
   }
 }
 
@@ -9955,19 +10228,37 @@ input[type="range"].goodobsidian-player-scrubber {
 
 .goodobsidian-space-handle {
   position: absolute;
-  width: 14px;
+  width: 16px;
   transform: translateX(-50%);
+  --gob-space-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 18'%3E%3Cpath d='M3.5 7.25 6 4.75l2.5 2.5M3.5 10.75 6 13.25l2.5-2.5' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* A soft rail the column runs in, so it reads as one control beside the paper. */
+.goodobsidian-space-handle::before,
+.goodobsidian-space-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.goodobsidian-space-handle::before {
+  border-radius: 8px;
   background-color: var(--interactive-accent);
-  opacity: 0.6;
-  --gob-space-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 18'%3E%3Cpath d='M2.5 6.5 6 3l3.5 3.5M2.5 11.5 6 15l3.5-3.5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  opacity: 0.09;
+}
+
+/* One small up-and-down mark per line, centred on it. */
+.goodobsidian-space-handle::after {
+  background-color: var(--interactive-accent);
+  opacity: 0.8;
   -webkit-mask-image: var(--gob-space-mark);
   mask-image: var(--gob-space-mark);
   -webkit-mask-repeat: repeat-y;
   mask-repeat: repeat-y;
   -webkit-mask-position: center top;
   mask-position: center top;
-  -webkit-mask-size: 14px var(--gob-space-pitch, 40px);
-  mask-size: 14px var(--gob-space-pitch, 40px);
+  -webkit-mask-size: 12px var(--gob-space-pitch, 40px);
+  mask-size: 12px var(--gob-space-pitch, 40px);
 }
 
 /* An underline under linked ink, in the accent colour: the ink keeps its own. */
@@ -11191,6 +11482,21 @@ body:not(.is-phone) .modal.goodobsidian-contents-modal {
   padding: 0;
   border-radius: var(--gob-radius-m);
   color: var(--gob-icon);
+  margin-inline-end: var(--size-4-2);
+}
+
+/* Obsidian places the prompt's clear ✕ (which closes it while the field is
+   empty) absolutely, 16 px from the row's end: on the sidebar button. Move
+   it to just before the button (36 px plus the button's margin). */
+.goodobsidian-search-modal.has-search-switch .prompt-input-container .search-input-clear-button {
+  inset-inline-end: calc(36px + var(--size-4-2) + var(--size-4-1));
+}
+
+/* On mobile Obsidian keeps an empty "create file" slot at the row's end,
+   40 px in; search never fills it, and it would take the taps on the
+   button's left edge and the ✕ (measured on the iPad, Obsidian 1.15.1). */
+.goodobsidian-search-modal .prompt-input-cta {
+  display: none;
 }
 
 /* The field and every match as a row (search-panel.ts, discussion #112):
@@ -11831,8 +12137,9 @@ button.goodobsidian-color-delete.clickable-icon {
     position: absolute;
     z-index: 2;
     min-width: 0;
-    width: 22px;
-    height: 22px;
+    /* WCAG's 24 px target floor; only a mouse shows them (the row swipes on a tablet). */
+    width: 24px;
+    height: 24px;
     padding: 0;
     border: 1px solid var(--gob-line);
     border-radius: 50%;
@@ -12970,6 +13277,68 @@ button.goodobsidian-learn-button.is-learning {
   font-size: var(--font-ui-small);
 }
 
+/* A page's transcription under Transcripts (FineNotes#265): a row that opens
+   in place to its text, or to two versions to choose between. */
+.goodobsidian-files-transcript + .goodobsidian-files-transcript,
+.goodobsidian-files-transcript + .goodobsidian-files-row {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.goodobsidian-files-row-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+
+.goodobsidian-files-transcript-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px 42px;
+}
+
+.goodobsidian-files-transcript-text {
+  max-height: 240px;
+  overflow-y: auto;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.goodobsidian-files-transcript-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.goodobsidian-files-transcript-version {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--gob-radius-m);
+  background: var(--background-secondary);
+}
+
+.goodobsidian-files-transcript-version > button {
+  align-self: flex-start;
+}
+
+.goodobsidian-files-transcript-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+
+.goodobsidian-transcript-input {
+  min-height: 240px;
+}
+
 /* While the iPad keyboard is up, the line under the chat's tools gives its
    room to the field (AskChat, ask-ai-modal.ts). */
 .goodobsidian-chat.is-typing .goodobsidian-chat-note {
@@ -13232,6 +13601,35 @@ button.goodobsidian-learn-button.is-learning {
   width: 13px;
   height: 13px;
   color: var(--interactive-accent);
+}
+
+/* Ask AI's change, taken back from the chat: struck through, its check gone grey. */
+.goodobsidian-chat-done-item.is-undone .goodobsidian-chat-done-text {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.goodobsidian-chat-done-item.is-undone .goodobsidian-chat-done-mark svg,
+.goodobsidian-chat-done-item.is-changed .goodobsidian-chat-done-mark svg {
+  color: var(--text-faint);
+}
+
+/* Undo (or redo) one change: a symbol at the row's end, big enough for a finger. */
+.goodobsidian-chat-done-undo.clickable-icon {
+  margin-left: auto;
+  padding: 4px 6px;
+  min-height: 26px;
+  flex: none;
+}
+
+.goodobsidian-chat-done-undo.clickable-icon svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.goodobsidian-chat-done-undo.is-hidden {
+  display: none;
 }
 
 .goodobsidian-chat-figure {
@@ -13812,7 +14210,7 @@ button.goodobsidian-gallery-chip.clickable-icon.is-active {
   margin: 8px 0 4px;
   padding: 10px 12px;
   border: 1px solid var(--background-modifier-border);
-  border-radius: var(--gob-radius-m, 8px);
+  border-radius: var(--gob-radius-m);
   background: var(--background-secondary);
 }
 
@@ -15256,7 +15654,8 @@ button.clickable-icon.goodobsidian-calc-apply.is-error {
 .goodobsidian-graph-window,
 .goodobsidian-eq-window,
 .goodobsidian-calc-window,
-.goodobsidian-zoombox-window {
+.goodobsidian-zoombox-window,
+.goodobsidian-tr-window {
   position: absolute;
   z-index: 20;
   display: flex;
@@ -15275,14 +15674,16 @@ button.clickable-icon.goodobsidian-calc-apply.is-error {
 
 .goodobsidian-graph-window.is-raised,
 .goodobsidian-calc-window.is-raised,
-.goodobsidian-zoombox-window.is-raised {
+.goodobsidian-zoombox-window.is-raised,
+.goodobsidian-tr-window.is-raised {
   transform: scale(1.02);
 }
 
 .goodobsidian-graph-window-bar,
 .goodobsidian-eq-window-bar,
 .goodobsidian-calc-window-bar,
-.goodobsidian-zoombox-window-bar {
+.goodobsidian-zoombox-window-bar,
+.goodobsidian-tr-window-bar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -15296,7 +15697,8 @@ button.clickable-icon.goodobsidian-calc-apply.is-error {
 .goodobsidian-graph-window-title,
 .goodobsidian-eq-window-title,
 .goodobsidian-calc-window-title,
-.goodobsidian-zoombox-window-title {
+.goodobsidian-zoombox-window-title,
+.goodobsidian-tr-window-title {
   flex: 1 1 auto;
   color: var(--text-muted);
   font-size: var(--font-ui-small);
@@ -15314,7 +15716,8 @@ button.clickable-icon.goodobsidian-calc-apply.is-error {
 button.clickable-icon.goodobsidian-graph-window-button,
 button.clickable-icon.goodobsidian-eq-window-button,
 button.clickable-icon.goodobsidian-calc-window-button,
-button.clickable-icon.goodobsidian-zoombox-window-button {
+button.clickable-icon.goodobsidian-zoombox-window-button,
+button.clickable-icon.goodobsidian-tr-window-button {
   flex: 0 0 auto;
   width: 36px;
   height: 36px;
@@ -15326,7 +15729,8 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
 .goodobsidian-graph-window-body,
 .goodobsidian-eq-window-body,
 .goodobsidian-calc-window-body,
-.goodobsidian-zoombox-window-body {
+.goodobsidian-zoombox-window-body,
+.goodobsidian-tr-window-body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -15374,7 +15778,8 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
 .goodobsidian-graph-window-grip,
 .goodobsidian-eq-window-grip,
 .goodobsidian-calc-window-grip,
-.goodobsidian-zoombox-window-grip {
+.goodobsidian-zoombox-window-grip,
+.goodobsidian-tr-window-grip {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -15391,7 +15796,8 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
 .goodobsidian-graph-window-grip svg,
 .goodobsidian-eq-window-grip svg,
 .goodobsidian-calc-window-grip svg,
-.goodobsidian-zoombox-window-grip svg {
+.goodobsidian-zoombox-window-grip svg,
+.goodobsidian-tr-window-grip svg {
   width: 14px;
   height: 14px;
 }
@@ -15488,7 +15894,8 @@ button.clickable-icon.goodobsidian-zoombox-window-button {
 .goodobsidian-graph-window.is-front,
 .goodobsidian-eq-window.is-front,
 .goodobsidian-calc-window.is-front,
-.goodobsidian-zoombox-window.is-front {
+.goodobsidian-zoombox-window.is-front,
+.goodobsidian-tr-window.is-front {
   z-index: 21;
 }
 
@@ -15886,7 +16293,7 @@ button.goodobsidian-ns-update-mute.clickable-icon {
    status bar's inset above them stays (Obsidian pads the split for it). */
 .workspace-tabs.goodobsidian-full-screen > .workspace-tab-header-container,
 .workspace-tabs.goodobsidian-full-screen
-  .workspace-leaf-content[data-type="goodobsidian-view"]
+  .workspace-leaf-content:is([data-type="goodobsidian-view"], [data-type="finenotes-note"])
   > .view-header {
   display: none;
 }
@@ -17483,19 +17890,70 @@ button.goodobsidian-edit-menu-row {
 
 /* --- The simple look (model/simple-mode.ts) ----------------------------- */
 
-/* Obsidian's own chrome tucked away; the tabs stay. Nothing is removed. */
-body.goodobsidian-simple .status-bar,
-body.goodobsidian-simple .workspace-ribbon,
-body.goodobsidian-simple .workspace-split.mod-left-split,
-body.goodobsidian-simple .workspace-split.mod-right-split,
-body.goodobsidian-simple .workspace-drawer,
-body.goodobsidian-simple .sidebar-toggle-button {
+/* Obsidian's own chrome tucked away; the tabs stay. Nothing is removed. Each
+   part can be shown again (settings, or Home's rail ⌄); all are hidden by
+   default. A sidebar shown again starts closed, behind its own button. */
+body.goodobsidian-simple:not(.goodobsidian-simple-show-statusBar) .status-bar,
+body.goodobsidian-simple:not(.goodobsidian-simple-show-ribbon) .workspace-ribbon,
+body.goodobsidian-simple:not(.goodobsidian-simple-show-leftSidebar)
+  :is(.workspace-split.mod-left-split, .workspace-drawer.mod-left, .sidebar-toggle-button.mod-left),
+body.goodobsidian-simple:not(.goodobsidian-simple-show-rightSidebar)
+  :is(
+    .workspace-split.mod-right-split,
+    .workspace-drawer.mod-right,
+    .sidebar-toggle-button.mod-right
+  ) {
   display: none;
 }
 body.goodobsidian-simple
-  .workspace-leaf-content:is([data-type="goodobsidian-view"], [data-type="finenotes-library"])
+  .workspace-leaf-content:is(
+    [data-type="goodobsidian-view"],
+    [data-type="finenotes-library"],
+    [data-type="finenotes-note"]
+  )
   > .view-header {
   display: none;
+}
+
+/* Settings › General, under the simple look's switch: the parts it can show again. */
+.goodobsidian-simple-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  /* Lined up with the row's name, past its 72 px drawing, and tucked under
+     that row: its name and switch above, these under them. */
+  margin-top: calc(-1 * var(--setting-items-padding-y, 12px));
+  padding: 0 var(--setting-items-padding-x, 16px) var(--setting-items-padding-y, 12px)
+    calc(var(--setting-items-padding-x, 16px) + 72px + var(--size-4-3, 12px));
+}
+/* One row with the switch above: no divider between them. */
+.setting-group .setting-item.goodobsidian-simple-parts-row::before {
+  display: none;
+}
+button.goodobsidian-simple-part.clickable-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--gob-touch-compact, 36px);
+  padding: 0 12px;
+  border: 1px solid var(--gob-line);
+  border-radius: 999px;
+  background: var(--gob-well);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+}
+button.goodobsidian-simple-part.clickable-icon.is-on {
+  border-color: hsla(var(--interactive-accent-hsl), 0.45);
+  background: hsla(var(--interactive-accent-hsl), 0.14);
+  color: var(--text-normal);
+}
+.goodobsidian-simple-part-icon {
+  display: inline-flex;
+}
+.goodobsidian-simple-part-icon .svg-icon {
+  width: 14px;
+  height: 14px;
 }
 
 /* --- Notebook library (src/view/library-view.ts) ------------------------- */
@@ -17749,6 +18207,14 @@ button.goodobsidian-library-new:active {
 }
 .goodobsidian-library-card.is-dragging {
   opacity: 0.45;
+}
+/* Hidden from Home, shown while "Show hidden items" is on. */
+.goodobsidian-library-card.is-off-home .goodobsidian-library-cover {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+}
+.goodobsidian-library-card.is-off-home .goodobsidian-library-caption {
+  opacity: 0.6;
 }
 .goodobsidian-library-card.is-drop .goodobsidian-library-cover {
   transform: scale(1.06);
@@ -18206,6 +18672,25 @@ button.goodobsidian-library-star:active {
 }
 .goodobsidian-library-cover.is-note.is-ready .goodobsidian-library-note {
   opacity: 1;
+}
+/* A text note: its first page as Home lays it out, on white paper like a notebook's page;
+   the cover shows the top of it. */
+.goodobsidian-library-cover.is-note.is-textnote {
+  padding: 0;
+  background: #fff;
+  color: #666;
+}
+.goodobsidian-library-textnote-page {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.goodobsidian-library-cover.is-textnote.is-ready .goodobsidian-library-textnote-page {
+  opacity: 1;
+}
+.goodobsidian-library-cover.is-textnote .goodobsidian-library-cover-title {
+  padding: 10px;
 }
 .goodobsidian-library-cover.is-file.is-ready .goodobsidian-library-cover-title {
   display: none;
@@ -19719,6 +20204,7 @@ body[class*="finenotes-palette-"]
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19728,6 +20214,7 @@ body[class*="finenotes-palette-"]
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19769,6 +20256,7 @@ body[class*="finenotes-palette-"]
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19782,6 +20270,7 @@ body.finenotes-palette-nord.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19825,6 +20314,7 @@ body.finenotes-palette-nord.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19834,6 +20324,7 @@ body.finenotes-palette-nord
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19878,6 +20369,7 @@ body.finenotes-palette-catppuccin.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19921,6 +20413,7 @@ body.finenotes-palette-catppuccin.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19930,6 +20423,7 @@ body.finenotes-palette-catppuccin
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -19974,6 +20468,7 @@ body.finenotes-palette-dracula.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20017,6 +20512,7 @@ body.finenotes-palette-dracula.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20026,6 +20522,7 @@ body.finenotes-palette-dracula
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20070,6 +20567,7 @@ body.finenotes-palette-rose-pine.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20113,6 +20611,7 @@ body.finenotes-palette-rose-pine.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20122,6 +20621,7 @@ body.finenotes-palette-rose-pine
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20166,6 +20666,7 @@ body.finenotes-palette-gruvbox.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20209,6 +20710,7 @@ body.finenotes-palette-gruvbox.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20218,6 +20720,7 @@ body.finenotes-palette-gruvbox
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20262,6 +20765,7 @@ body.finenotes-palette-solarized.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20305,6 +20809,7 @@ body.finenotes-palette-solarized.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20314,6 +20819,7 @@ body.finenotes-palette-solarized
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20358,6 +20864,7 @@ body.finenotes-palette-tokyo-night.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20401,6 +20908,7 @@ body.finenotes-palette-tokyo-night.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20410,6 +20918,7 @@ body.finenotes-palette-tokyo-night
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20454,6 +20963,7 @@ body.finenotes-palette-everforest.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20497,6 +21007,7 @@ body.finenotes-palette-everforest.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20506,6 +21017,7 @@ body.finenotes-palette-everforest
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20550,6 +21062,7 @@ body.finenotes-palette-high-contrast.theme-light
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20593,6 +21106,7 @@ body.finenotes-palette-high-contrast.theme-dark
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20602,6 +21116,7 @@ body.finenotes-palette-high-contrast
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20650,6 +21165,7 @@ body.finenotes-style-glass
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20681,6 +21197,7 @@ body.finenotes-style-material
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20716,6 +21233,7 @@ body.finenotes-style-fluent
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20747,6 +21265,7 @@ body.finenotes-style-paper
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20782,6 +21301,7 @@ body.finenotes-style-brutalist
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20822,6 +21342,7 @@ body.finenotes-style-soft
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20852,6 +21373,7 @@ body.finenotes-style-retro
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -20891,6 +21413,7 @@ body.finenotes-style-compact
   :is(
     .workspace-leaf-content[data-type="goodobsidian-view"],
     .workspace-leaf-content[data-type="finenotes-library"],
+    .workspace-leaf-content[data-type="finenotes-note"],
     .modal[class*="goodobsidian-"],
     .modal[class*="finenotes-"],
     body > [class*="goodobsidian-"],
@@ -22305,6 +22828,16 @@ button.goodobsidian-edit-switch.is-nudged {
 .goodobsidian-share-what {
   font-weight: var(--font-semibold);
 }
+/* What changed since the terms someone agreed to: the box the dialog opens on. */
+.goodobsidian-share-changes {
+  margin: 0;
+  padding: 10px 14px 10px 30px;
+  border-radius: var(--radius-m);
+  background: hsla(var(--interactive-accent-hsl), 0.1);
+}
+.goodobsidian-share-changes li + li {
+  margin-top: 6px;
+}
 .goodobsidian-share-invite {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -22461,6 +22994,2659 @@ button:not(.clickable-icon).goodobsidian-share-all,
   text-align: center;
 }
 
+/* --- PDF tabs beside the notes ------------------------------------------------
+   pdf-tab-strip.ts and ink-view.ts (showTab). A strip under the tool bar,
+   shown once a PDF is attached, drawn like Obsidian's own tab headers (not
+   like the binder tabs on the page's edge). At the end of the file: the
+   bar's rules above also style the buttons hidden here. */
+
+.goodobsidian-pdf-tabs {
+  position: relative;
+  z-index: 19;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 4px 8px 0;
+  background: var(--tab-container-background, var(--gob-bar-bg));
+  border-bottom: 1px solid var(--tab-outline-color, var(--gob-line));
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.goodobsidian-pdf-tabs.is-hidden {
+  display: none;
+}
+
+/* Many tabs: the strip scrolls sideways, never wraps. */
+.goodobsidian-pdf-tabs-list {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.goodobsidian-pdf-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+
+.goodobsidian-pdf-tab {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  max-width: 200px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--tab-radius, 6px) var(--tab-radius, 6px) 0 0;
+  color: var(--tab-text-color, var(--text-muted));
+}
+
+.goodobsidian-pdf-tab.is-active {
+  background: var(--tab-background-active, var(--background-primary));
+  border-color: var(--tab-outline-color, var(--gob-line));
+  color: var(--tab-text-color-active, var(--text-normal));
+}
+
+/* A file that is gone: grey and italic, its slides and marks kept. */
+.goodobsidian-pdf-tab.is-missing {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.goodobsidian-pdf-tabs button.goodobsidian-pdf-tab-main.clickable-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font-size: var(--tab-font-size, var(--font-ui-small));
+  font-weight: var(--tab-font-weight, inherit);
+  white-space: nowrap;
+}
+
+.goodobsidian-pdf-tab.is-active button.goodobsidian-pdf-tab-main.clickable-icon {
+  padding-right: 4px;
+  font-weight: var(--font-semibold, 600);
+}
+
+.goodobsidian-pdf-tab:not(.is-active) button.goodobsidian-pdf-tab-main.clickable-icon:hover {
+  background: var(--tab-background-hover, var(--background-modifier-hover));
+}
+
+.goodobsidian-pdf-tab-icon {
+  display: flex;
+  flex: none;
+}
+
+.goodobsidian-pdf-tab-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.goodobsidian-pdf-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.goodobsidian-pdf-tabs button.goodobsidian-pdf-tab-close.clickable-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.goodobsidian-pdf-tab-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.goodobsidian-pdf-tabs button.goodobsidian-pdf-tab-find.clickable-icon {
+  flex: none;
+  height: 26px;
+  margin-left: 2px;
+  padding: 0 10px;
+  border-radius: var(--gob-radius-pill);
+  background: hsla(var(--interactive-accent-hsl), 0.14);
+  color: var(--text-accent);
+  font-size: var(--font-ui-smaller);
+  font-style: normal;
+  white-space: normal;
+}
+
+.goodobsidian-pdf-tabs button.goodobsidian-pdf-tab-plus.clickable-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+/* Its chevron folds it away (pdf-tab-strip.ts, setCollapsed), at the right end. */
+.goodobsidian-pdf-tabs button.goodobsidian-pdf-tabs-fold.clickable-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+/* Folded away: no height, so the page and the pill take the room back;
+   only the caret stays, floating over the page's top-left edge. */
+.goodobsidian-pdf-tabs.is-collapsed {
+  height: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+.goodobsidian-pdf-tabs.is-collapsed > .goodobsidian-pdf-tabs-list,
+.goodobsidian-pdf-tabs.is-collapsed > button.goodobsidian-pdf-tab-plus,
+.goodobsidian-pdf-tabs.is-collapsed > button.goodobsidian-pdf-tabs-fold {
+  display: none;
+}
+
+.goodobsidian-pdf-tabs button.goodobsidian-pdf-tabs-caret.clickable-icon {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 32px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--tab-outline-color, var(--gob-line));
+  border-top: none;
+  border-radius: 0 0 var(--tab-radius, 6px) var(--tab-radius, 6px);
+  background: var(--tab-container-background, var(--gob-bar-bg));
+  box-shadow: var(--gob-shadow-mark);
+  color: var(--text-muted);
+}
+
+.goodobsidian-pdf-tabs.is-collapsed > button.goodobsidian-pdf-tabs-caret.clickable-icon {
+  display: flex;
+}
+
+.goodobsidian-pdf-tabs-caret-mark {
+  display: none;
+  color: var(--text-accent);
+}
+
+.goodobsidian-pdf-tabs-caret.is-pdf > .goodobsidian-pdf-tabs-caret-mark {
+  display: flex;
+}
+
+.goodobsidian-pdf-tabs-caret-mark svg,
+.goodobsidian-pdf-tabs-caret-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.goodobsidian-pdf-tabs-caret-icon {
+  display: flex;
+}
+
+/* With the bar at a side the view is a grid (bar-dock): the strip takes the
+   first row of the page's column, and the page the row under it. */
+.goodobsidian-view.goodobsidian-has-pdf-tabs.goodobsidian-bar-at-left,
+.goodobsidian-view.goodobsidian-has-pdf-tabs.goodobsidian-bar-at-right {
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+}
+
+.goodobsidian-view.goodobsidian-bar-at-left > .goodobsidian-pdf-tabs {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.goodobsidian-view.goodobsidian-bar-at-right > .goodobsidian-pdf-tabs {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.goodobsidian-view.goodobsidian-bar-at-left.goodobsidian-has-pill-row > .goodobsidian-pdf-tabs {
+  grid-column: 3;
+}
+
+.goodobsidian-view.goodobsidian-has-pdf-tabs.goodobsidian-bar-at-left > .goodobsidian-body,
+.goodobsidian-view.goodobsidian-has-pdf-tabs.goodobsidian-bar-at-right > .goodobsidian-body {
+  grid-row: 2;
+}
+
+/* On a PDF's tab the bar keeps its few tools (toolbar.ts, setPdfTab). */
+.goodobsidian-toolbar .goodobsidian-bar-group > button.goodobsidian-tool.is-pdf-tab-off,
+.goodobsidian-toolbar .goodobsidian-bar-group > button.is-pdf-tab-off {
+  display: none;
+}
+
+/* The + list (PdfTabsPopover). */
+.goodobsidian-pdf-tabs-popover {
+  position: fixed;
+  z-index: var(--layer-popover, 30);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 16px);
+  padding: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--gob-line);
+  border-radius: var(--gob-pop-radius);
+  background: var(--gob-pop-bg);
+  box-shadow: var(--gob-shadow-sheet);
+  color: var(--text-normal);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.goodobsidian-pdf-tabs-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 0 10px;
+  border-radius: var(--gob-radius-m);
+  background: var(--background-modifier-form-field, var(--background-secondary));
+  color: var(--text-muted);
+}
+
+.goodobsidian-pdf-tabs-search-icon {
+  display: flex;
+}
+
+.goodobsidian-pdf-tabs-search-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 16 px: iPadOS zooms the page into a smaller field on focus. */
+.goodobsidian-pdf-tabs-search input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  font-size: 16px;
+}
+
+.goodobsidian-pdf-tabs-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.goodobsidian-pdf-tabs-heading {
+  padding: 8px 8px 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold, 600);
+}
+
+.goodobsidian-pdf-tabs-popover button.goodobsidian-pdf-tabs-row.clickable-icon {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  height: auto;
+  padding: 6px 8px;
+  border-radius: var(--gob-radius-m);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  text-align: start;
+  white-space: normal;
+}
+
+.goodobsidian-pdf-tabs-popover button.goodobsidian-pdf-tabs-row.clickable-icon.is-missing {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.goodobsidian-pdf-tabs-row-icon {
+  display: flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.goodobsidian-pdf-tabs-row-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.goodobsidian-pdf-tabs-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.goodobsidian-pdf-tabs-open {
+  display: flex;
+  flex: none;
+  color: var(--text-accent);
+}
+
+.goodobsidian-pdf-tabs-open svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Beside the notebook, not attached yet: a dot. */
+.goodobsidian-pdf-tabs-new {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+
+.goodobsidian-pdf-tabs-more {
+  padding: 2px 8px 4px 36px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* Import PDF: keep it beside the notes, or write on it (pdf-import-modal.ts). */
+.goodobsidian-pdf-import-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.goodobsidian-pdf-import-choices button.goodobsidian-pdf-import-choice.clickable-icon {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  width: 100%;
+  height: auto;
+  min-height: 60px;
+  padding: 10px 16px;
+  border: 1px solid var(--gob-line);
+  border-radius: var(--gob-radius-l);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  text-align: start;
+  white-space: normal;
+}
+
+.goodobsidian-pdf-import-choices button.goodobsidian-pdf-import-choice.clickable-icon.mod-cta {
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.goodobsidian-pdf-import-choice-icon {
+  display: flex;
+  flex: none;
+}
+
+.goodobsidian-pdf-import-choice-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.goodobsidian-pdf-import-choice-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.goodobsidian-pdf-import-choice-title {
+  font-weight: var(--font-semibold, 600);
+}
+
+.goodobsidian-pdf-import-choice-info {
+  font-size: var(--font-ui-smaller);
+  opacity: 0.8;
+}
+
+/* Snippets (model/snippet.ts): an area lassoed on a PDF's tab is pressed
+   and dragged onto the notes. The area takes the press, faintly filled; while
+   it is carried its loop hides and a ghost of the picture follows the
+   pointer; the Notes tab lights while the ghost rests on it. */
+.goodobsidian-snippet-grip {
+  position: absolute;
+  border-radius: 4px;
+  background: hsla(var(--interactive-accent-hsl), 0.08);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Under the area, where it goes: grip, arrow, Notes (ink-surface.ts,
+   addSnippetGrip). A mark, and a handle: pressing it drags the area too,
+   with a finger as well. The press target is 44 px tall; the chip shows 28. */
+.goodobsidian-snippet-chip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 4px;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, 0);
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.goodobsidian-snippet-chip::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 0;
+  left: 0;
+  height: 28px;
+  border-radius: var(--gob-radius-pill, 999px);
+  background: var(--interactive-accent);
+  box-shadow: var(--gob-shadow-float);
+}
+
+.goodobsidian-snippet-chip-icon {
+  position: relative;
+  display: flex;
+  padding: 0 3px;
+  color: var(--text-on-accent);
+}
+
+.goodobsidian-snippet-chip-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.goodobsidian-snippet-chip-icon.is-arrow svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+
+/* The first time on this device, in words, under the chip; any press ends it. */
+.goodobsidian-snippet-hint {
+  position: absolute;
+  max-width: 240px;
+  margin-top: 48px;
+  padding: 6px 10px;
+  border-radius: var(--gob-radius-m, 8px);
+  background: var(--background-primary);
+  box-shadow: var(--gob-shadow-float);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+}
+
+.goodobsidian-empty-lasso.is-carried {
+  visibility: hidden;
+}
+
+.goodobsidian-snippet-ghost {
+  position: fixed;
+  z-index: var(--layer-dragged-item, 1000);
+  overflow: hidden;
+  border: 2px solid var(--interactive-accent);
+  border-radius: 6px;
+  background: hsla(var(--interactive-accent-hsl), 0.12);
+  box-shadow: var(--gob-shadow-float);
+  opacity: 0.92;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* Over a tab, it hangs below the pointer so the tab shows lit. */
+.goodobsidian-snippet-ghost.is-hanging {
+  transform: translate(-50%, 18px);
+}
+
+.goodobsidian-snippet-ghost.has-picture {
+  background: #fff;
+}
+
+/* Over the notes it takes the size it will land at (snippet-drag.ts,
+   landingSize), easing there. */
+.goodobsidian-snippet-ghost.is-landing {
+  transition:
+    width 0.15s ease-out,
+    height 0.15s ease-out;
+}
+
+.goodobsidian-snippet-ghost img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.goodobsidian-pdf-tab.is-drop-target {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+  color: var(--text-accent);
+}
+
+/* The slide chip on a snippet (slide-dots.ts): a small accent chip at the
+   picture's top-right corner, the slides icon and the slide's number, on a
+   target of 32 px or more; a tap opens the slide. The button never sets its
+   own display, so .is-hidden still hides it. */
+.goodobsidian-slide-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.goodobsidian-slide-dots.is-hidden,
+.goodobsidian-slide-dot.is-hidden {
+  display: none;
+}
+
+button.goodobsidian-slide-dot.clickable-icon {
+  position: absolute;
+  min-width: 44px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--gob-radius-pill, 999px);
+  background: transparent;
+  box-shadow: none;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.goodobsidian-slide-chip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px 0 6px;
+  border-radius: var(--gob-radius-pill, 999px);
+  background: var(--interactive-accent);
+  box-shadow: var(--gob-shadow-mark);
+  color: var(--text-on-accent);
+  font-size: 12px;
+  font-weight: var(--font-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.goodobsidian-slide-chip-icon {
+  display: flex;
+}
+
+.goodobsidian-slide-chip-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+button.goodobsidian-slide-dot.clickable-icon:hover .goodobsidian-slide-chip,
+button.goodobsidian-slide-dot.clickable-icon[data-pressed] .goodobsidian-slide-chip {
+  background: var(--interactive-accent-hover);
+}
+
+/* ==========================================================================
+   Text notes (`Title.note.md`, src/view/note-view.ts): typed text first,
+   with handwriting sections and pictures between the paragraphs.
+   ========================================================================== */
+
+.workspace-leaf-content > .view-content.finenotes-note-view {
+  --fn-note-accent: var(--interactive-accent);
+  --fn-note-tint: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+  --fn-note-glass: color-mix(in srgb, var(--background-primary) 80%, transparent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: var(--background-primary);
+}
+
+/* --- the bar: Apple Notes' layout ------------------------------------------
+   Where you are and undo on the left, what goes into the note in the middle,
+   the pen on the right; each group a pill floating over the note, in the
+   notebooks' look (`--gob-*`, so a chosen style and palette reach it). */
+
+.finenotes-note-bar {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px 6px;
+}
+
+.finenotes-note-bar-group {
+  display: flex;
+  flex: 1 1 0;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.finenotes-note-bar-group.is-middle {
+  flex: none;
+  justify-content: center;
+}
+
+.finenotes-note-bar-group.is-right {
+  justify-content: flex-end;
+}
+
+.finenotes-note-pill {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+  padding: 3px;
+  background: var(--gob-pill-bg);
+  border: var(--gob-bar-border);
+  border-radius: var(--gob-radius-pill);
+  box-shadow: var(--gob-shadow-float);
+  -webkit-backdrop-filter: var(--gob-blur, blur(18px) saturate(1.6));
+  backdrop-filter: var(--gob-blur, blur(18px) saturate(1.6));
+}
+
+button.clickable-icon.finenotes-note-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--text-normal);
+  background: transparent;
+  border-radius: var(--gob-tool-radius, 999px);
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.12s ease;
+}
+
+button.clickable-icon.finenotes-note-button .svg-icon {
+  width: 21px;
+  height: 21px;
+  stroke-width: var(--gob-icon-stroke, 1.75px);
+}
+
+/* "Aa", and the lettered lists' "A." and "a.": a word where no symbol says it. */
+button.clickable-icon.finenotes-note-button.is-text {
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+button.clickable-icon.finenotes-note-button:active {
+  transform: scale(0.92);
+}
+
+button.clickable-icon.finenotes-note-button.is-active {
+  color: var(--gob-active-fg);
+  background: var(--gob-active-bg);
+}
+
+button.clickable-icon.finenotes-note-button:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .finenotes-note-bar {
+    gap: 6px;
+    padding: 8px 8px 4px;
+  }
+
+  .finenotes-note-bar-group {
+    gap: 4px;
+  }
+
+  button.clickable-icon.finenotes-note-button {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* --- the page ------------------------------------------------------------ */
+
+.finenotes-note-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.finenotes-note-column {
+  --fn-col-pad: clamp(18px, 6vw, 72px);
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 4px var(--fn-col-pad) 0;
+}
+
+/* When the note was last changed: a small strip, centred over the title, as in Apple Notes. */
+.finenotes-note-date {
+  width: fit-content;
+  min-height: 16px;
+  margin: 2px auto 14px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  text-align: center;
+  background: var(--gob-well);
+  border-radius: 999px;
+  user-select: none;
+}
+
+.finenotes-note-date:empty {
+  display: none;
+}
+
+.finenotes-note-doc {
+  font-size: 17px;
+  line-height: 1.47;
+  color: var(--text-normal);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  caret-color: var(--fn-note-accent);
+  outline: none;
+  counter-reset: fn-n0 fn-n1 fn-n2 fn-n3;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.finenotes-note-doc::selection,
+.finenotes-note-doc *::selection {
+  background: color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+}
+
+.finenotes-note-line {
+  --fn-indent: 0;
+  position: relative;
+  min-height: 1.47em;
+  margin: 0;
+  padding: 1px 0;
+  counter-reset: fn-n0 fn-n1 fn-n2 fn-n3;
+}
+
+.finenotes-note-line[data-indent="1"] {
+  --fn-indent: 1;
+}
+
+.finenotes-note-line[data-indent="2"] {
+  --fn-indent: 2;
+}
+
+.finenotes-note-line[data-indent="3"] {
+  --fn-indent: 3;
+}
+
+/* Body text and quotes indent as list items do. */
+.finenotes-note-line:is([data-kind="body"], [data-kind="quote"])[data-indent] {
+  margin-inline-start: calc(var(--fn-indent) * 26px);
+}
+
+.finenotes-note-line[data-kind="title"] {
+  min-height: 1.2em;
+  margin-bottom: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+}
+
+.finenotes-note-line[data-kind="heading"] {
+  min-height: 1.25em;
+  margin-top: 14px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.008em;
+}
+
+.finenotes-note-line[data-kind="subheading"] {
+  margin-top: 8px;
+  font-weight: 650;
+}
+
+.finenotes-note-line[data-kind="title"]:first-child,
+.finenotes-note-line[data-kind="heading"]:first-child,
+.finenotes-note-line[data-kind="subheading"]:first-child {
+  margin-top: 0;
+}
+
+.finenotes-note-line[data-kind="mono"] {
+  padding: 1px 14px;
+  font-family: var(--font-monospace);
+  font-size: 14.5px;
+  line-height: 1.6;
+  background: var(--background-secondary);
+}
+
+.finenotes-note-doc > :not([data-kind="mono"]) + [data-kind="mono"],
+.finenotes-note-doc > [data-kind="mono"]:first-child {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-start-start-radius: 10px;
+  border-start-end-radius: 10px;
+}
+
+/* stylelint-disable-next-line selector-pseudo-class-disallowed-list -- rounds the last line of a monostyled run; scoped to the note's own lines */
+.finenotes-note-doc > [data-kind="mono"]:not(:has(+ [data-kind="mono"])) {
+  margin-bottom: 6px;
+  padding-bottom: 8px;
+  border-end-start-radius: 10px;
+  border-end-end-radius: 10px;
+}
+
+.finenotes-note-line[data-kind="quote"] {
+  margin-inline-start: 2px;
+  padding-inline-start: 14px;
+  color: var(--text-muted);
+  border-inline-start: 3px solid var(--fn-note-accent);
+}
+
+.finenotes-note-line:is(
+  [data-kind="bullet"],
+  [data-kind="dash"],
+  [data-kind="number"],
+  [data-kind="upper"],
+  [data-kind="lower"],
+  [data-kind="check"]
+) {
+  padding-inline-start: calc(30px + var(--fn-indent) * 26px);
+  counter-reset: none;
+}
+
+.finenotes-note-line:is(
+    [data-kind="bullet"],
+    [data-kind="dash"],
+    [data-kind="number"],
+    [data-kind="upper"],
+    [data-kind="lower"],
+    [data-kind="check"]
+  )::before {
+  position: absolute;
+  inset-inline-start: calc(var(--fn-indent) * 26px);
+  top: 1px;
+  box-sizing: border-box;
+  width: 24px;
+  color: var(--text-muted);
+  text-align: end;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.finenotes-note-line[data-kind="bullet"]::before {
+  width: 20px;
+  font-weight: 700;
+  content: "•";
+}
+
+.finenotes-note-line[data-kind="bullet"][data-indent="1"]::before,
+.finenotes-note-line[data-kind="bullet"][data-indent="3"]::before {
+  content: "◦";
+}
+
+.finenotes-note-line[data-kind="dash"]::before {
+  width: 20px;
+  content: "–";
+}
+
+/* Numbers and letters: the page counts them as the file does (`listMarkers`). */
+.finenotes-note-line:is([data-kind="number"], [data-kind="upper"], [data-kind="lower"])::before {
+  font-variant-numeric: tabular-nums;
+  content: attr(data-marker);
+}
+
+/* Links, as Obsidian draws them; a tap opens them. */
+.finenotes-note-doc .finenotes-note-link {
+  color: var(--link-color);
+  border-bottom: 1px solid color-mix(in srgb, var(--link-color) 45%, transparent);
+  cursor: pointer;
+}
+
+/* Typing [[: the vault's notes that match, under the caret. */
+.finenotes-note-suggest {
+  position: absolute;
+  top: var(--fn-suggest-y, 0);
+  left: var(--fn-suggest-x, 0);
+  z-index: 30;
+  min-width: 200px;
+  max-width: min(360px, 90%);
+  padding: 4px;
+  background: var(--gob-pop-bg);
+  border: var(--gob-bar-border);
+  border-radius: 12px;
+  box-shadow: var(--gob-shadow-sheet);
+  -webkit-backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+  backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+}
+
+.finenotes-note-suggest-row {
+  padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.finenotes-note-suggest-row.is-selected {
+  color: var(--gob-active-fg);
+  background: var(--gob-active-bg);
+}
+
+/* A highlight in the text, in the ink highlighter's colours. */
+.finenotes-note-doc mark {
+  --fn-tint: #ffd43b;
+  color: inherit;
+  background: color-mix(in srgb, var(--fn-tint) 48%, transparent);
+  border-radius: 3px;
+}
+
+.finenotes-note-doc mark[data-tint="green"] {
+  --fn-tint: #8ce99a;
+}
+
+.finenotes-note-doc mark[data-tint="pink"] {
+  --fn-tint: #ffa8a8;
+}
+
+.finenotes-note-doc mark[data-tint="blue"] {
+  --fn-tint: #74c0fc;
+}
+
+.finenotes-note-doc mark[data-tint="purple"] {
+  --fn-tint: #eebefa;
+}
+
+/* Folding: a heading that holds something shows a chevron in the margin before it;
+   folded, the chevron turns and what it holds is hidden. The tap is read by position. */
+.finenotes-note-line[data-foldable]::after {
+  position: absolute;
+  inset-inline-start: -26px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  content: "";
+  cursor: pointer;
+  background-color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity 0.15s ease,
+    transform 0.2s cubic-bezier(0.2, 0.9, 0.25, 1);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.finenotes-note-line[data-foldable]:hover::after,
+.finenotes-note-line[data-foldable="folded"]::after {
+  opacity: 0.8;
+}
+
+.finenotes-note-line[data-foldable="folded"]::after {
+  color: var(--interactive-accent);
+  background-color: var(--interactive-accent);
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+/* On a touch screen there is no hover: the chevron shows faintly all the time. */
+@media (hover: none) {
+  .finenotes-note-line[data-foldable="open"]::after {
+    opacity: 0.35;
+  }
+}
+
+.finenotes-note-doc > .is-folded-away {
+  display: none;
+}
+
+/* The checklist's circle: empty, or filled with a tick. The click is read by position. */
+.finenotes-note-line[data-kind="check"] {
+  cursor: text;
+}
+
+.finenotes-note-line[data-kind="check"]::before {
+  top: 0.26em;
+  width: 21px;
+  height: 21px;
+  content: "";
+  border: 1.6px solid var(--text-faint);
+  border-radius: 50%;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.finenotes-note-line[data-kind="check"][data-checked="true"]::before {
+  background-color: var(--fn-note-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 15px;
+  border-color: var(--fn-note-accent);
+}
+
+.finenotes-note-line[data-kind="check"][data-checked="true"] {
+  color: var(--text-faint);
+}
+
+/* The title's placeholder, on the first line while it is empty. */
+.finenotes-note-line.is-blank[data-placeholder]::after {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 1px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  pointer-events: none;
+  content: attr(data-placeholder);
+}
+
+.finenotes-note-line.is-blank[data-placeholder]:not([data-kind="title"])::after {
+  display: none;
+}
+
+.finenotes-note-tail {
+  min-height: 46vh;
+  cursor: text;
+  touch-action: pan-y pinch-zoom;
+}
+
+/* --- tables ----------------------------------------------------------------
+   A table is one section on the page; its cells are fields of their own.
+   Its buttons (rows, columns, delete) show while the caret is in it. */
+
+.finenotes-note-table {
+  position: relative;
+  margin: 10px 0;
+  border-radius: 8px;
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+}
+
+.finenotes-note-table.is-selected {
+  outline-color: var(--interactive-accent);
+}
+
+.finenotes-note-table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.finenotes-note-table table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.finenotes-note-table :is(th, td) {
+  min-width: 80px;
+  padding: 8px 10px;
+  font-size: inherit;
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid var(--background-modifier-border);
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.finenotes-note-table th {
+  font-weight: 650;
+  background: var(--gob-well);
+}
+
+.finenotes-note-table :is(th, td):focus {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+/* Above the table, so it never covers a cell. */
+.finenotes-note-table > .finenotes-note-table-bar {
+  top: auto;
+  bottom: calc(100% + 4px);
+  gap: 2px;
+}
+
+.finenotes-note-table:focus-within > .finenotes-note-table-bar,
+.finenotes-note-table.is-selected > .finenotes-note-table-bar {
+  display: flex;
+}
+
+/* --- sections: handwriting, pictures -------------------------------------- */
+
+.finenotes-note-ink,
+.finenotes-note-image,
+.finenotes-note-raw {
+  position: relative;
+  counter-reset: fn-n0 fn-n1 fn-n2 fn-n3;
+  box-sizing: border-box;
+  margin: 8px 0;
+  border-radius: 12px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    outline-color 0.15s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.finenotes-note-ink {
+  width: calc(100% + 2 * var(--fn-col-pad, 0px) - 16px);
+  margin-inline: calc(8px - var(--fn-col-pad, 0px));
+  aspect-ratio: var(--fn-ink-ratio, 720 / 260);
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+  transition:
+    outline-color 0.15s ease,
+    box-shadow 0.2s ease,
+    background-color 0.25s ease;
+}
+
+.finenotes-note-ink.is-pen-near,
+.finenotes-note-view.is-finger-draw.is-drawing .finenotes-note-ink {
+  touch-action: none;
+}
+
+.finenotes-note-ink-layer {
+  position: absolute;
+  inset-block-start: 0;
+  left: 0;
+  width: var(--fn-layer-w, 100%);
+  height: var(--fn-layer-h, 100%);
+  pointer-events: none;
+}
+
+/* A section with paper of its own draws its rules; nothing else goes behind them. */
+.finenotes-note-scroll.is-drawing .finenotes-note-ink[data-paper] {
+  background-image: none;
+}
+
+/* With the pen out, every section shows as paper to write on. */
+.finenotes-note-scroll.is-drawing .finenotes-note-ink {
+  cursor: crosshair;
+  background-color: color-mix(in srgb, var(--text-normal) 3.5%, transparent);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--text-normal) 20%, transparent) 1px,
+    transparent 1.5px
+  );
+  background-position: 11px 11px;
+  background-size: 22px 22px;
+}
+
+.finenotes-note-scroll.is-drawing .finenotes-note-tail {
+  cursor: crosshair;
+}
+
+.finenotes-note-scroll.is-drawing .finenotes-note-doc {
+  cursor: default;
+}
+
+.finenotes-note-ink.is-selected,
+.finenotes-note-image.is-selected,
+.finenotes-note-raw.is-selected {
+  outline-color: var(--fn-note-accent);
+}
+
+/* The foot of a section: a line with a dot, dragged to give it more or less room. */
+.finenotes-note-ink-edge {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: none;
+  height: 26px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.finenotes-note-ink-edge::before {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  content: "";
+  background: var(--fn-note-accent);
+}
+
+.finenotes-note-ink-grip {
+  position: absolute;
+  inset-inline-start: 14px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  background: var(--fn-note-accent);
+  border: 2px solid var(--background-primary);
+  border-radius: 50%;
+}
+
+.finenotes-note-scroll.is-drawing .finenotes-note-ink.is-active .finenotes-note-ink-edge,
+.finenotes-note-ink.is-selected .finenotes-note-ink-edge,
+.finenotes-note-ink.is-resizing .finenotes-note-ink-edge {
+  display: block;
+}
+
+.finenotes-note-ink.is-active,
+.finenotes-note-ink.is-selected,
+.finenotes-note-ink.is-resizing {
+  overflow: visible;
+}
+
+.finenotes-note-image {
+  width: calc(var(--fn-share, 1) * 100%);
+  min-width: 48px;
+  line-height: 0;
+}
+
+.finenotes-note-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.finenotes-note-image.is-missing {
+  min-height: 96px;
+  background: var(--background-secondary);
+  background-image: linear-gradient(
+    135deg,
+    transparent 46%,
+    var(--background-modifier-border) 46%,
+    var(--background-modifier-border) 54%,
+    transparent 54%
+  );
+}
+
+.finenotes-note-image.is-missing img {
+  display: none;
+}
+
+.finenotes-note-handle {
+  position: absolute;
+  inset-inline-end: -9px;
+  bottom: -9px;
+  display: none;
+  width: 30px;
+  height: 30px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.finenotes-note-handle::before {
+  position: absolute;
+  inset: 8px;
+  content: "";
+  background: var(--fn-note-accent);
+  border: 2px solid var(--background-primary);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.finenotes-note-image.is-selected .finenotes-note-handle {
+  display: block;
+}
+
+.finenotes-note-raw {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+}
+
+.finenotes-note-raw-icon {
+  display: inline-flex;
+}
+
+/* The one control a selected section shows. */
+.finenotes-note-island-bar {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  z-index: 2;
+  display: none;
+}
+
+.finenotes-note-ink.is-selected > .finenotes-note-island-bar,
+.finenotes-note-image.is-selected > .finenotes-note-island-bar,
+.finenotes-note-raw.is-selected > .finenotes-note-island-bar {
+  display: flex;
+}
+
+button.clickable-icon.finenotes-note-island-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--text-error);
+  background: var(--fn-note-glass);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+}
+
+/* A section lifted to move it, and the line that shows where it will land. */
+.finenotes-note-ink.is-lifted,
+.finenotes-note-image.is-lifted,
+.finenotes-note-raw.is-lifted {
+  z-index: 5;
+  background-color: var(--background-primary);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+  transform: translateY(var(--fn-lift, 0)) scale(1.015);
+  transition: box-shadow 0.2s ease;
+}
+
+.finenotes-note-scroll.is-moving {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.finenotes-note-drop {
+  position: absolute;
+  inset-inline: 24px;
+  top: var(--fn-drop, 0);
+  display: none;
+  height: 3px;
+  margin-top: -2px;
+  pointer-events: none;
+  background: var(--fn-note-accent);
+  border-radius: 2px;
+}
+
+.finenotes-note-drop.is-shown {
+  display: block;
+}
+
+/* --- the pen's palette ------------------------------------------------------
+   Upright at the left by default, as in Apple Notes; dragged by its grip it
+   docks on whichever side of the note it is let go nearest
+   (`note-view.ts`, `nearestDock`). */
+
+.finenotes-note-palette {
+  --fn-drag-x: 0px;
+  --fn-drag-y: 0px;
+  --fn-hide-x: 0px;
+  --fn-hide-y: 0px;
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 10px 8px;
+  pointer-events: none;
+  background: var(--gob-pop-bg);
+  border: var(--gob-bar-border);
+  border-radius: 30px;
+  box-shadow: var(--gob-shadow-sheet);
+  opacity: 0;
+  transition:
+    transform 0.34s cubic-bezier(0.2, 0.9, 0.25, 1),
+    opacity 0.2s ease;
+  scrollbar-width: none;
+  -webkit-backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+  backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+}
+
+.finenotes-note-palette[data-dock="left"],
+.finenotes-note-palette[data-dock="right"] {
+  top: 50%;
+  flex-direction: column;
+  gap: 6px;
+  width: 56px;
+  max-height: calc(100% - 96px);
+  padding: 8px 4px;
+  transform: translate(calc(var(--fn-hide-x) + var(--fn-drag-x)), calc(-50% + var(--fn-drag-y)));
+}
+
+.finenotes-note-palette[data-dock="left"] {
+  --fn-hide-x: -140%;
+  left: 14px;
+}
+
+.finenotes-note-palette[data-dock="right"] {
+  --fn-hide-x: 140%;
+  right: 14px;
+}
+
+.finenotes-note-palette[data-dock="top"],
+.finenotes-note-palette[data-dock="bottom"] {
+  left: 50%;
+  flex-direction: row;
+  max-width: calc(100% - 24px);
+  padding: 4px 10px;
+  transform: translate(calc(-50% + var(--fn-drag-x)), calc(var(--fn-hide-y) + var(--fn-drag-y)));
+}
+
+.finenotes-note-palette[data-dock="top"] {
+  --fn-hide-y: -60px;
+  top: 66px;
+}
+
+.finenotes-note-palette[data-dock="bottom"] {
+  --fn-hide-y: 160%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+/* On a computer Obsidian's status bar floats over the window's foot. */
+body:not(.is-mobile) .finenotes-note-palette[data-dock="bottom"] {
+  bottom: 44px;
+}
+
+.finenotes-note-view.is-drawing > .finenotes-note-palette {
+  --fn-hide-x: 0px;
+  --fn-hide-y: 0px;
+  pointer-events: auto;
+  opacity: 1;
+}
+
+/* While it folds, moves and unfolds, the docking slide stays out of the way. */
+.finenotes-note-palette.is-settling {
+  transition: opacity 0.2s ease;
+}
+
+/* The grip: a short bar, with a wider target round it. */
+/* The grab line, as on Apple's palette: a short bar centred on the edge away from
+   the note's edge (on top, or underneath when the palette hangs from the top). */
+.finenotes-note-palette-grip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  box-sizing: content-box;
+  width: 30px;
+  height: 4px;
+  padding: 6px 14px;
+  cursor: grab;
+  background: var(--text-faint);
+  background-clip: content-box;
+  border-radius: 10px;
+  opacity: 0.7;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+
+.finenotes-note-palette[data-dock="top"] .finenotes-note-palette-grip {
+  top: auto;
+  bottom: 0;
+}
+
+.finenotes-note-palette:is([data-dock="left"], [data-dock="right"]) .finenotes-note-palette-grip {
+  width: 22px;
+}
+
+/* Room for the grab line. */
+.finenotes-note-palette:is([data-dock="left"], [data-dock="right"]) {
+  padding-top: 18px;
+}
+
+.finenotes-note-palette[data-dock="bottom"] {
+  padding-top: 14px;
+}
+
+.finenotes-note-palette[data-dock="top"] {
+  padding-bottom: 14px;
+}
+
+/* Moving it: the palette folds away into a round token with the tool in hand,
+   which follows the finger; a bar marks the side it will dock on. */
+.finenotes-note-view.is-drawing > .finenotes-note-palette.is-folded {
+  opacity: 0;
+}
+
+.finenotes-note-palette-token {
+  position: absolute;
+  top: var(--fn-token-y, 0);
+  left: var(--fn-token-x, 0);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  color: var(--gob-active-fg);
+  pointer-events: none;
+  background: var(--gob-pop-bg);
+  border: var(--gob-bar-border);
+  border-radius: 50%;
+  box-shadow: var(--gob-shadow-sheet);
+  transform: translate(-50%, -50%);
+  animation: finenotes-note-token-in 0.2s cubic-bezier(0.2, 1.2, 0.32, 1);
+  transition:
+    top 0.24s cubic-bezier(0.2, 0.9, 0.25, 1),
+    left 0.24s cubic-bezier(0.2, 0.9, 0.25, 1),
+    opacity 0.24s ease,
+    scale 0.24s ease;
+  -webkit-backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+  backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+}
+
+/* Following the finger it moves at once; only its landing glides. */
+.finenotes-note-palette-token:not(.is-landing) {
+  transition: none;
+}
+
+.finenotes-note-palette-token.is-landing {
+  opacity: 0;
+  scale: 0.6;
+}
+
+.finenotes-note-palette-token .svg-icon {
+  width: 24px;
+  height: 24px;
+}
+
+@keyframes finenotes-note-token-in {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+.finenotes-note-dock-hint {
+  position: absolute;
+  z-index: 29;
+  pointer-events: none;
+  background: var(--interactive-accent);
+  border-radius: 4px;
+  opacity: 0.55;
+  transition:
+    inset 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+}
+
+.finenotes-note-dock-hint[data-dock="left"] {
+  top: 25%;
+  left: 6px;
+  width: 4px;
+  height: 50%;
+}
+
+.finenotes-note-dock-hint[data-dock="right"] {
+  top: 25%;
+  right: 6px;
+  width: 4px;
+  height: 50%;
+}
+
+.finenotes-note-dock-hint[data-dock="top"] {
+  top: 62px;
+  left: 25%;
+  width: 50%;
+  height: 4px;
+}
+
+.finenotes-note-dock-hint[data-dock="bottom"] {
+  bottom: 10px;
+  left: 25%;
+  width: 50%;
+  height: 4px;
+}
+
+.finenotes-note-palette-group {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+}
+
+.finenotes-note-palette:is([data-dock="left"], [data-dock="right"]) .finenotes-note-palette-group {
+  flex-direction: column;
+}
+
+.finenotes-note-palette:is([data-dock="left"], [data-dock="right"])
+  .finenotes-note-palette-group
+  + .finenotes-note-palette-group {
+  padding-top: 6px;
+  border-top: 1px solid var(--gob-line);
+}
+
+.finenotes-note-palette:is([data-dock="top"], [data-dock="bottom"])
+  .finenotes-note-palette-group
+  + .finenotes-note-palette-group {
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--gob-line);
+}
+
+.finenotes-note-palette button.clickable-icon.finenotes-note-button {
+  color: var(--text-muted);
+}
+
+.finenotes-note-palette button.clickable-icon.finenotes-note-button.is-active {
+  color: var(--gob-active-fg);
+  background: var(--gob-active-bg);
+}
+
+.finenotes-note-palette-group.is-history button.clickable-icon.finenotes-note-button {
+  width: 36px;
+  height: 36px;
+}
+
+.finenotes-note-palette-group.is-tools button.clickable-icon.finenotes-note-button .svg-icon {
+  width: 24px;
+  height: 24px;
+}
+
+button.clickable-icon.finenotes-note-swatch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+button.clickable-icon.finenotes-note-swatch::before {
+  width: 24px;
+  height: 24px;
+  content: "";
+  background: var(--fn-swatch);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.3);
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.25, 1.4);
+}
+
+button.clickable-icon.finenotes-note-swatch.is-active::before {
+  box-shadow:
+    0 0 0 2px var(--background-primary),
+    0 0 0 4px var(--fn-swatch);
+  transform: scale(0.8);
+}
+
+/* The size: the mark the tool makes; tapped, a slider for any size opens beside the palette. */
+.finenotes-note-palette-group.is-size {
+  position: relative;
+}
+
+button.clickable-icon.finenotes-note-size {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border-radius: 50%;
+}
+
+button.clickable-icon.finenotes-note-size.is-active {
+  background: var(--gob-active-bg);
+}
+
+.finenotes-note-size-pop {
+  position: absolute;
+  z-index: 1;
+  display: none;
+  padding: 6px 14px;
+  background: var(--gob-pop-bg);
+  border: var(--gob-bar-border);
+  border-radius: 999px;
+  box-shadow: var(--gob-shadow-sheet);
+  -webkit-backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+  backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+}
+
+.finenotes-note-palette-group.is-size.is-open > .finenotes-note-size-pop {
+  display: block;
+}
+
+.finenotes-note-palette[data-dock="left"] .finenotes-note-size-pop {
+  top: 50%;
+  left: calc(100% + 14px);
+  transform: translateY(-50%);
+}
+
+.finenotes-note-palette[data-dock="right"] .finenotes-note-size-pop {
+  top: 50%;
+  right: calc(100% + 14px);
+  transform: translateY(-50%);
+}
+
+.finenotes-note-palette[data-dock="bottom"] .finenotes-note-size-pop {
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.finenotes-note-palette[data-dock="top"] .finenotes-note-size-pop {
+  top: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.finenotes-note-size-mark {
+  flex: none;
+  width: var(--fn-mark, 6px);
+  height: var(--fn-mark, 6px);
+  background: var(--fn-mark-color, var(--text-normal));
+  border-radius: 50%;
+}
+
+.finenotes-note-size-mark.is-ring {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-muted);
+}
+
+.finenotes-note-size-track {
+  width: 180px;
+  margin: 0;
+}
+
+button.clickable-icon.finenotes-note-done {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-radius: 50%;
+}
+
+button.clickable-icon.finenotes-note-done:hover {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent-hover);
+}
+
+/* --- the Aa menu ------------------------------------------------------------
+   Apple Notes' format sheet: the text styles as words across the top, then
+   rows of grouped buttons: marks and the highlight; lists, depth and quote. */
+
+.finenotes-note-styles {
+  position: absolute;
+  top: var(--fn-styles-y, 56px);
+  left: var(--fn-styles-x, 50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 12px;
+  background: var(--gob-pop-bg);
+  border: var(--gob-bar-border);
+  border-radius: 26px;
+  box-shadow: var(--gob-shadow-sheet);
+  transform: translateX(-50%);
+  transform-origin: 50% 0;
+  animation: finenotes-note-pop 0.18s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  -webkit-backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+  backdrop-filter: var(--gob-blur, blur(22px) saturate(1.7));
+}
+
+@keyframes finenotes-note-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.92);
+  }
+}
+
+.finenotes-note-styles-kinds {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+button.clickable-icon.finenotes-note-style {
+  flex: none;
+  width: auto;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-normal);
+  white-space: nowrap;
+  background: transparent;
+  border-radius: 999px;
+}
+
+button.clickable-icon.finenotes-note-style[data-kind="title"] {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+button.clickable-icon.finenotes-note-style[data-kind="heading"] {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+button.clickable-icon.finenotes-note-style[data-kind="subheading"] {
+  font-weight: 650;
+}
+
+button.clickable-icon.finenotes-note-style[data-kind="mono"] {
+  font-family: var(--font-monospace);
+  font-size: 14px;
+}
+
+button.clickable-icon.finenotes-note-style.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.finenotes-note-styles-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.finenotes-note-styles-group {
+  display: flex;
+  gap: 0;
+  align-items: center;
+  overflow: hidden;
+  background: var(--gob-well);
+  border-radius: 18px;
+}
+
+.finenotes-note-styles-group button.clickable-icon.finenotes-note-button {
+  width: 46px;
+  height: 46px;
+  border-radius: 0;
+}
+
+.finenotes-note-styles-group button.clickable-icon.finenotes-note-button + button {
+  box-shadow: inset 1px 0 0 var(--gob-line);
+}
+
+.finenotes-note-styles-group button.clickable-icon.finenotes-note-button.is-text {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* The highlight's colour: a dot beside the highlighter; tapped, the five colours. */
+.finenotes-note-styles-group
+  button.clickable-icon.finenotes-note-button.finenotes-note-tint-dot::before {
+  width: 22px;
+  height: 22px;
+  content: "";
+  background: var(--fn-swatch);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.3);
+}
+
+.finenotes-note-tints {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  animation: finenotes-note-tints-in 0.18s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@keyframes finenotes-note-tints-in {
+  from {
+    opacity: 0;
+    translate: -8px 0;
+  }
+}
+
+.finenotes-note-tints.is-hidden {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .finenotes-note-styles-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .finenotes-note-styles-group button.clickable-icon.finenotes-note-button {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 520px) {
+  .finenotes-note-drop {
+    inset-inline: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finenotes-note-palette,
+  .finenotes-note-styles,
+  button.clickable-icon.finenotes-note-button {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* --- maths and graphs ------------------------------------------------------
+   A typed sum that ends in "=" shows its answer after it, in the accent, as
+   Apple Notes' Math Notes does; a tap types it in. A graph is a section like
+   a picture, the column's width, drawn by the notebook's graph painter. */
+
+.finenotes-note-line[data-answer]::after {
+  padding-inline-start: 0.3em;
+  font-weight: 600;
+  color: var(--fn-note-accent);
+  cursor: pointer;
+  content: attr(data-answer);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* A function line's mark: its graph, one tap away (put in under the line). */
+.finenotes-note-line[data-graph]:not([data-answer])::after {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-inline-start: 0.45em;
+  vertical-align: -0.18em;
+  cursor: pointer;
+  content: "";
+  background-color: var(--fn-note-accent);
+  -webkit-mask: var(--fn-graph-mark) center / contain no-repeat;
+  mask: var(--fn-graph-mark) center / contain no-repeat;
+  --fn-graph-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M7 16c2.5-7 5.5-10 12-11'/%3E%3C/svg%3E");
+}
+
+.finenotes-note-graph {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--fn-graph-h, 320px);
+  margin: 8px 0;
+  overflow: hidden;
+  line-height: 0;
+  border-radius: 12px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.15s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.finenotes-note-graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.finenotes-note-graph.is-selected {
+  outline-color: var(--fn-note-accent);
+}
+
+.finenotes-note-graph.is-selected > .finenotes-note-island-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.finenotes-note-graph.is-lifted {
+  z-index: 5;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+  transform: translateY(var(--fn-lift, 0)) scale(1.015);
+}
+
+button.clickable-icon.finenotes-note-island-button.is-edit {
+  color: var(--text-normal);
+}
+
+/* Text notes: what a search found. Typed words are tinted as Obsidian tints a
+   match; a handwriting section that holds it is outlined until its words light. */
+::highlight(finenotes-note-search) {
+  /* Custom properties reach a highlight from the root, where Obsidian defines none: the fallback is its yellow. */
+  background-color: var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+}
+
+.finenotes-note-ink.is-search-hit {
+  outline-color: var(--text-highlight-bg);
+}
+
+/* A note's search lists notes and notebooks: each result is headed by its name. */
+.goodobsidian-search-modal .finenotes-search-title {
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+/* --- Text notes: recordings ---------------------------------------------------
+   note-recording.ts (the card, the pill, the player) and note-view.ts (the
+   paperclip's recording mark). The notebook's audio buttons are styled
+   inside its own view; the same look here. */
+
+.finenotes-note-view .goodobsidian-audio-button.clickable-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: var(--gob-touch);
+  height: var(--gob-touch);
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--gob-radius-pill);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+  opacity: 1;
+  cursor: pointer;
+}
+
+.finenotes-note-view .goodobsidian-audio-button.clickable-icon:hover {
+  background: var(--background-modifier-hover);
+}
+
+.finenotes-note-view .goodobsidian-audio-button.clickable-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.finenotes-note-view .goodobsidian-rec-pill .goodobsidian-rec-stop.clickable-icon {
+  color: var(--color-red);
+  font-weight: var(--font-semibold, 600);
+}
+
+.finenotes-note-view .goodobsidian-rec-pill .goodobsidian-rec-discard.clickable-icon {
+  color: var(--text-muted);
+}
+
+/* Under the bar, at the right, as in a notebook. */
+.finenotes-note-view .goodobsidian-rec-pill {
+  top: 64px;
+}
+
+/* The player's standing hint is about tapping ink, which a note does not do. */
+.finenotes-note-view .goodobsidian-player-hint:not(.is-message) {
+  display: none;
+}
+
+.finenotes-note-view .goodobsidian-player {
+  bottom: 20px;
+}
+
+/* A recording in the note: play, its name and length, its transcript. */
+.finenotes-note-audio {
+  position: relative;
+  box-sizing: border-box;
+  margin: 8px 0;
+  border-radius: 12px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.15s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.finenotes-note-audio.is-selected {
+  outline-color: var(--fn-note-accent);
+}
+
+.finenotes-note-audio.is-selected > .finenotes-note-island-bar {
+  top: 50%;
+  display: flex;
+  transform: translateY(-50%);
+}
+
+/* Room for the bin while selected, so it never covers the transcript button. */
+.finenotes-note-audio.is-selected .finenotes-note-audio-card {
+  padding-inline-end: 52px;
+}
+
+.finenotes-note-audio.is-lifted {
+  z-index: 5;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+  transform: translateY(var(--fn-lift, 0)) scale(1.015);
+}
+
+.finenotes-note-audio-card {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 6px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.finenotes-note-view .finenotes-note-audio-play.clickable-icon {
+  width: var(--gob-touch);
+  padding: 0;
+  border-radius: 50%;
+  background: var(--fn-note-accent);
+  color: var(--text-on-accent);
+}
+
+.finenotes-note-view .finenotes-note-audio-play.clickable-icon:hover {
+  background: var(--fn-note-accent);
+}
+
+.finenotes-note-view .finenotes-note-audio-play.is-active {
+  box-shadow: 0 0 0 3px var(--fn-note-tint);
+}
+
+.finenotes-note-audio-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.finenotes-note-audio-name {
+  overflow: hidden;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold, 600);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finenotes-note-audio-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finenotes-note-audio-card.is-missing .finenotes-note-audio-meta {
+  color: var(--text-error);
+}
+
+/* A transcript there is: the button is tinted, a mark rather than a word. */
+.finenotes-note-view .finenotes-note-audio-transcript.has-transcript {
+  color: var(--fn-note-accent);
+  background: var(--fn-note-tint);
+}
+
+/* Recording: a red dot on the paperclip it was started from. */
+button.clickable-icon.finenotes-note-button.is-recording {
+  position: relative;
+}
+
+button.clickable-icon.finenotes-note-button.is-recording::before {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-red);
+  content: "";
+}
+
+/* --- The note list and search (note-list.ts) ---------------------------------
+   After Apple Notes on the iPad: a search field at the bar's right; the list
+   on the left of the note in the page sidebar's look, its folder's notes, or
+   while searching what was found, in sections, hairlines between rows. */
+
+/* The bar's search field: a pill, the magnifier, a ✕ while it holds words. */
+.finenotes-note-find {
+  display: flex;
+  flex: 0 1 240px;
+  gap: 6px;
+  align-items: center;
+  min-width: 120px;
+  height: 40px;
+  padding: 0 6px 0 14px;
+  border-radius: 999px;
+  /* The bar's pills' own look, so the field reads as one of them. */
+  background: var(--gob-pill-bg);
+  border: var(--gob-bar-border);
+  box-shadow: var(--gob-shadow-float);
+  color: var(--text-faint);
+  -webkit-backdrop-filter: var(--gob-blur, blur(18px) saturate(1.6));
+  backdrop-filter: var(--gob-blur, blur(18px) saturate(1.6));
+}
+
+.finenotes-note-find:focus-within {
+  box-shadow:
+    inset 0 0 0 1.5px var(--interactive-accent),
+    var(--gob-shadow-float);
+}
+
+.finenotes-note-find-icon .svg-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Obsidian styles input[type="search"] above one class: the field says it all again. */
+.finenotes-note-find input[type="search"],
+.finenotes-note-find input[type="search"]:hover,
+.finenotes-note-find input[type="search"]:focus,
+.finenotes-note-find input[type="search"]:focus-visible {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: var(--text-normal);
+  /* 16 px: iPadOS zooms into a smaller field on focus. */
+  font-size: 16px;
+}
+
+/* Obsidian's own ✕ in a search field: ours replaces it. */
+.finenotes-note-find input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
+
+button.finenotes-note-find-clear.clickable-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+button.finenotes-note-find-clear.clickable-icon.is-hidden,
+button.finenotes-note-button.clickable-icon.is-hidden {
+  display: none;
+}
+
+/* The list: on the left of the note, full height, the bar and the page beside it. */
+.finenotes-note-view > .goodobsidian-pagesidebar.finenotes-note-list {
+  position: absolute;
+  z-index: 14;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-width: 85%;
+  overflow: hidden;
+}
+
+.finenotes-note-view > .goodobsidian-pagesidebar.finenotes-note-list.is-hidden {
+  display: none;
+}
+
+.finenotes-note-view.has-note-list > .finenotes-note-bar,
+.finenotes-note-view.has-note-list > .finenotes-note-scroll {
+  width: auto;
+  margin-left: 320px;
+}
+
+/* Narrow: the list lies over the note instead. */
+@media (max-width: 700px) {
+  .finenotes-note-view.has-note-list > .finenotes-note-bar,
+  .finenotes-note-view.has-note-list > .finenotes-note-scroll {
+    margin-left: 0;
+  }
+
+  .finenotes-note-view > .goodobsidian-pagesidebar.finenotes-note-list {
+    box-shadow: var(--shadow-l);
+  }
+}
+
+/* The head: the toggle, the title (two lines while searching), the ⋯. */
+.finenotes-note-list-head {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  min-height: 60px;
+  padding: 10px 10px 6px;
+}
+
+button.finenotes-note-list-toggle.clickable-icon,
+button.finenotes-note-list-more.clickable-icon {
+  flex: none;
+  width: var(--gob-touch, 40px);
+  height: var(--gob-touch, 40px);
+  padding: 0;
+  border-radius: 50%;
+  color: var(--interactive-accent);
+}
+
+.finenotes-note-list-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.finenotes-note-list-title {
+  overflow: hidden;
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-bold, 700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finenotes-note-list-subtitle {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.finenotes-note-list-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 0 calc(12px + var(--goodobsidian-keyboard-pad, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+/* A section's head: its name, and how many at the right; a hairline under it. */
+.finenotes-note-list-section {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 14px 16px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gob-line, var(--background-modifier-border));
+}
+
+.finenotes-note-list-section-name {
+  font-weight: var(--font-bold, 700);
+}
+
+.finenotes-note-list-section-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+button.finenotes-note-list-row.clickable-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+  width: calc(100% - 16px);
+  height: auto;
+  margin: 0 8px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  color: var(--text-normal);
+  text-align: left;
+  white-space: normal;
+}
+
+/* Found rows: hairlines between them, as Apple's list draws them. */
+button.finenotes-note-list-row.clickable-icon.is-found {
+  position: relative;
+  border-radius: 0;
+}
+
+button.finenotes-note-list-row.clickable-icon.is-found + .finenotes-note-list-row::before {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  left: 8px;
+  border-top: 1px solid var(--gob-line, var(--background-modifier-border));
+  content: "";
+}
+
+button.finenotes-note-list-row.clickable-icon.is-current {
+  border-radius: 10px;
+  background: var(--fn-note-tint, color-mix(in srgb, var(--interactive-accent) 16%, transparent));
+}
+
+.finenotes-note-list-name {
+  overflow: hidden;
+  font-weight: var(--font-bold, 700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finenotes-note-list-line {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-ui-small);
+}
+
+.finenotes-note-list-when {
+  flex: none;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.finenotes-note-list
+  > .finenotes-note-list-rows
+  .finenotes-note-list-row:not(.is-found)
+  .finenotes-note-list-when {
+  color: var(--text-muted);
+}
+
+.finenotes-note-list-snippet {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finenotes-note-list-hit {
+  color: var(--interactive-accent);
+}
+
+.finenotes-note-list-folder {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+}
+
+.finenotes-note-list-folder-icon .svg-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.finenotes-note-list-empty {
+  padding: 24px 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* --- The Ask AI window -------------------------------------------------------
+   ask-window.ts: the chat in a FloatingWindow over a notebook or a text note,
+   as the calculator's window (moved by its bar, sized from its corner). The
+   notebook's sidebar layout (.goodobsidian-chatpanel) is styled above. */
+
+.goodobsidian-ask-window {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--gob-line);
+  border-radius: var(--gob-pop-radius);
+  background: var(--gob-pop-bg);
+  box-shadow: var(--gob-shadow-sheet);
+  color: var(--text-normal);
+}
+
+.goodobsidian-ask-window-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px 0 14px;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.goodobsidian-ask-window.is-front {
+  z-index: 21;
+}
+
+.goodobsidian-ask-window-title {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold, 600);
+}
+
+/* The reach pill's holder takes the rest of the bar, so the cross stays right. */
+.goodobsidian-ask-window-reach {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+button.clickable-icon.goodobsidian-ask-window-button {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--gob-radius-m);
+  color: var(--gob-icon);
+}
+
+/* While the iPad keyboard covers the window's foot, DialogKeyboard's `pad` lifts the field. */
+.goodobsidian-ask-window-body.goodobsidian-chat {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 12px calc(12px + var(--goodobsidian-keyboard-pad, 0px));
+}
+
+.goodobsidian-ask-window .goodobsidian-chat-tool-label {
+  display: none;
+}
+
+.goodobsidian-ask-window-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-faint);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.goodobsidian-ask-window-grip svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* A text note's export (src/view/note-export.ts): its pages export in their
+   own order, so a ticked page shows a tick, never its place. */
+.goodobsidian-export-grid.is-choosing.is-unordered
+  .goodobsidian-export-tile.is-selected
+  .goodobsidian-export-check-icon {
+  display: flex;
+}
+
+.goodobsidian-export-grid.is-choosing.is-unordered
+  .goodobsidian-export-tile.is-selected
+  .goodobsidian-export-check {
+  width: 22px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* A handwritten sum's answer, after its "=" in a text note's handwriting
+   section: what was read and the answer, in the accent colour; a tap writes it. */
+.finenotes-note-ink button.finenotes-note-ink-answer.clickable-icon {
+  position: absolute;
+  top: var(--fn-answer-y, 0);
+  left: var(--fn-answer-x, 0);
+  z-index: 3;
+  height: var(--fn-answer-h, 28px);
+  padding: 0 10px;
+  font-size: calc(var(--fn-answer-h, 28px) * 0.6);
+  color: var(--interactive-accent);
+  white-space: nowrap;
+  background: hsla(var(--interactive-accent-hsl), 0.12);
+  border-radius: 999px;
+  animation: finenotes-note-tints-in 0.18s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
 
 /* ============================================================================
  * FineNotes Locked Visual Identity Layer (UI Parts 1–7 + Palettes 1–6)

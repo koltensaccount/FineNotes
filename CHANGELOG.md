@@ -8,10 +8,108 @@ extracted from the matching section of this file by `release.yml`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Help improve Grape: new terms (version 3).** Before a shared item is used
+  to train Grape, its label may be checked against its ink by Claude, an AI by
+  Anthropic: only a picture of the ink and its text are sent, and Anthropic
+  may not train on it. Everyone who shares is asked to agree again before
+  anything more is sent; items shared under the old terms are never checked
+  this way. See PRIVACY.md, "The label check by Anthropic".
+
+### Added
+
+- **Insert space on boards, and on paper without lines**
+  ([discussion #276](https://github.com/Joost-8/FineNotes/discussions/276)).
+  With the lasso on **By line**, press anywhere on a board and drag down: everything
+  below the pen moves down, across the whole board, by whole dots or squares
+  (drag right to push things right instead). Drag back up to close empty
+  space again; it never closes over anything drawn. Ink, text, pictures,
+  sticky notes, tables and comments all move together, straight lines and
+  arrows stretch so branches stay joined, and one undo puts it all back.
+  The same works on notebook pages with no lines (blank, dotted, squared,
+  planners), within the page: it never pushes anything off the page's
+  edge. The insert-space arrows sit in a soft rail now.
+
+- **Erase on hover with the S Pen**
+  ([discussion #209](https://github.com/Joost-8/FineNotes/discussions/209)).
+  Settings › Stylus side button › **Erase, also hovering**: hold the side
+  button with the pen just above the page, not touching it, and move it over
+  what you want gone. It erases with your eraser's mode and size, the eraser
+  ring shows where, and each pass is one undo. A quick click of the button
+  still does what Side button click says. On Android, where holding the
+  button while the pen touches the screen may not reach FineNotes, this is
+  the way to erase with the button. "Copy shape diagnostics" now includes
+  the pen's last hover and button events, to send if it does not work on
+  your tablet.
+- **Notebooks sync page by page** (#274). A notebook now keeps its pages in
+  small files of their own, one per page per device, in a `Pages` folder
+  beside it. A save writes only the pages you changed, so Obsidian Sync
+  stores a few MB an hour of writing instead of hundreds, no file nears
+  Sync's 5 MB limit, and two devices writing in one notebook at once both
+  keep their ink. Every notebook moves over by itself at its first save
+  after updating; new notebooks start that way. While some of a notebook's
+  pages are still on their way it stays read-only and shows what has
+  arrived. A device still on an older FineNotes opens such a notebook
+  read-only until it updates; for it, **Export notebook as one file** (in
+  the command palette) makes a copy in the old layout.
+
+### Fixed
+
+- **Select all in the page sidebar works across the whole button.** The
+  title next to it was drawn over its right half and took those taps.
+- **Pinching a selected picture no longer raises an error** in the
+  background; the picture turned as before.
+- **A selected snippet opens its slide from its action bar.** Right after a
+  snippet is dropped it is selected, and its chip sat under the frame, out
+  of reach. While selected, the chip now steps aside and the bar offers the
+  slide; the top-right handle resizes as before.
+- **Small handwriting keeps its letters on older iPads** (#275). On iPadOS
+  before 26.2 the Pencil arrives rounded to whole pixels, and the smoothing
+  that steadies it could flatten letters written small, as on a Learn your
+  handwriting sheet ("Five" came out "Fi~"). Smoothing now moves each point
+  no further than the rounding did, so straight lines stay steady and letters
+  keep their shape.
+
+### Fixed
+
+- **Ink no longer vanishes when the notebook's file changes while you write**
+  ([#273](https://github.com/Joost-8/FineNotes/issues/273)). Since 2.10.0,
+  when the file changed on disk before your newest strokes were saved (a
+  sync landing, another app, or Obsidian reading back an older save of this
+  notebook), the notebook was replaced by the file: those strokes were gone,
+  and undo could not bring them back. A read of what the notebook already
+  had is now skipped, and a real change from elsewhere is merged with what
+  you wrote: pages and ink added on either side are kept. Ink this device
+  saved also stays when an older copy of the file arrives from another
+  device; in exchange, something erased on another device while this one
+  has the notebook open can come back. The diagnostics
+  export counts these reads (`diskReloads`).
+
 ## [2.10.0] - 2026-11-18
 
 ### Added
 
+- **Text notes.** A second kind of note beside notebooks, in the manner
+  of Apple Notes: you type into it, and handwriting and pictures sit in
+  sections of their own between the paragraphs. New › New note on Home, the
+  file list's right-click menu, or the command "New text note".
+  - Tap anywhere and type. The first line is the title; the Aa button has
+    Title, Heading, Subheading, Body and Monostyled, bold, italic, underline
+    and strikethrough, bulleted, numbered and check lists, and quotes.
+    Typing `- `, `1. `, `[] `, `> ` or `# ` at the start of a line makes the
+    list or heading, as in Markdown.
+  - The pen button, or simply the pen touching the space under the note,
+    starts a handwriting section. It grows as you write toward its foot,
+    its foot drags to size it, and Done trims it to what it holds. Fingers
+    scroll while the pen writes.
+  - A picture (the picture button, a paste or a drop) takes a line of its
+    own. Tap a picture or a handwriting section to select it: drag it to
+    move it between paragraphs, drag a picture's corner to size it.
+  - The file is ordinary Markdown, `Title.note.md`, named after the note's
+    title: it reads in any Markdown editor, and Obsidian's search, links and
+    sync treat it as a note. Handwriting is kept in a comment Obsidian's
+    reading view hides.
 - **Thank you, sponsors.** When a release comes with new GitHub sponsors,
   Home's what's-new card thanks them by name, then everyone who sponsored
   before them. The heart opens the sponsor page. The README shows every

@@ -27,10 +27,11 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 ### Simple look (hide Obsidian's bars)
 
 - **Id:** `settingSimpleLook`
-- **What:** Hides Obsidian's title bar, status bar, ribbon and sidebars so FineNotes looks like an app of its own; the tabs stay. Turn it off to bring them back.
-- **Where:** Settings › General › Simple look. Also in Notebook settings (gear), on the Welcome, and the command Simple look: hide or show….
-- **Words:** simple look, hide obsidian, clean, distraction free, focus, sidebars, ribbon, status bar, title bar, app look, full app
-- **Settings:** `simpleLook`
+- **What:** Hides Obsidian's title bar, status bar, ribbon and sidebars so FineNotes looks like an app of its own; the tabs stay. While it is on, the buttons under it (or the ⌄ beside Simple look on Home's folder rail) bring back parts one by one: Left sidebar, Right sidebar, Ribbon, Status bar (all off by default; a sidebar brought back starts closed, behind its own button, for other plugins' panels such as a calendar or a timer). With the left sidebar back, Home's folder rail steps aside. Turn the look off to bring everything back.
+- **Where:** Settings › General › Simple look, and the buttons under it. Also Home › folder rail › ⌄ beside Simple look, Notebook settings (gear), the Welcome, and the command Simple look: hide or show….
+- **Words:** simple look, easy mode, hide obsidian, clean, distraction free, focus, sidebars, right sidebar, other plugins, calendar, pomodoro, ribbon, status bar, title bar, app look, full app
+- **Seen as:** left panel disappears, left sidebar gone, side panels disappear, update kills the side panels, sidebars missing after update, panels hidden, cannot open settings, ribbon gone, status bar missing, menus disappeared, file explorer gone
+- **Settings:** `simpleLook`, `simpleLookShow`
 - **Commands:** `toggle-simple-look`
 - **Tip:** `simpleLook`
 
@@ -40,6 +41,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **What:** After you do something the slow way a few times, FineNotes names the faster way once. Turn off to stop these hints.
 - **Where:** Settings › General › Hints for faster ways
 - **Words:** hints, nudges, popups, suggestions, hint, stop hints, annoying
+- **Seen as:** popups keep appearing, annoying messages, hints will not go away
 - **Settings:** `gestureHints`
 
 ### Tool, width and colour a notebook opens with
@@ -66,6 +68,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **Where:** Settings › Writing › Two-finger double-tap to undo
 - **Notes:** Does nothing while the notebook is read-only.
 - **Words:** two finger tap, double tap undo, three finger redo, finger undo, gesture undo
+- **Seen as:** two finger double tap does not undo, accidental undo
 - **Settings:** `fingerTapUndo`
 - **Tip:** `undo`
 
@@ -84,16 +87,18 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **What:** Off (default, as in Goodnotes): every new text box fits its text as you type. On: with the Text tool, drag to draw a box's size; a tap still makes a box.
 - **Where:** Settings › Writing › Drag to size text boxes
 - **Words:** text box width, drag text box, size text box, resize text box, fixed width text
+- **Seen as:** text box will not resize, cannot make a text box bigger
 - **Settings:** `textDragSize`
 - **Tip:** `textDragSize`
 
 ### Stylus side button
 
 - **Id:** `settingStylusButton`
-- **What:** What a pen's side button does while you write: Erase (default), Lasso select, Move the page or Nothing; and what a click above the page does: open the pen menu (default), switch to the eraser, or nothing. A pen's eraser end always erases.
+- **What:** What a pen's side button does while you write: Erase (default), Erase, also hovering (the button held with the pen just above the page erases what it passes over), Lasso select, Move the page or Nothing; and what a click above the page does: open the pen menu (default), switch to the eraser, or nothing. A pen's eraser end always erases.
 - **Where:** Settings › Writing › Stylus side button
-- **Notes:** Apple Pencil has no side button, so the click choice is hidden on iPad and iPhone. Holding the button while writing may not work on Android tablets.
+- **Notes:** Apple Pencil has no side button, so the click choice is hidden on iPad and iPhone. Holding the button while writing may not work on Android tablets; Erase, also hovering does.
 - **Words:** side button, barrel button, stylus button, pen button, wacom, surface pen, samsung s pen, eraser button
+- **Seen as:** side button does not erase, S Pen button not working, barrel button does nothing
 - **Settings:** `barrelButton`, `stylusButtonClick`
 
 ### Pressure-sensitive pens
@@ -102,6 +107,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **What:** Off by default. On: the fountain pen widens as you press and the brush pen swells and tapers more; the ball pen stays even. Writing can feel a little less smooth with it on.
 - **Where:** Settings › Writing › Pressure-sensitive pens
 - **Words:** pressure, pressure sensitivity, thickness, line width varies, fountain pen pressure, brush pressure
+- **Seen as:** lines all the same thickness, no pressure, pressure not working, strokes too thick
 - **Settings:** `pressureWidth`
 - **Tip:** `pressure`
 
@@ -121,6 +127,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **Where:** Settings › Writing › Cursor over the page
 - **Notes:** Desktop only: there is no pointer on a tablet.
 - **Words:** cursor, pointer, mouse pointer, crosshair, ink dot
+- **Seen as:** cursor not showing, arrow instead of pen cursor, no dot under the pen
 - **Settings:** `penCursor`
 
 ### Custom colours in the pen's colour row
@@ -263,7 +270,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 ### Handwriting recognition (transcribe with AI)
 
 - **Id:** `settingRecognitionProvider`
-- **What:** What the Transcribe this notebook's handwriting command uses: Manual (default; you type the text yourself in the text layer), Cloud AI (an image of each page goes to your AI service), or Cloud AI by itself after you write (about 30 seconds after you stop, only changed pages).
+- **What:** What the Transcribe this notebook's handwriting command uses: Manual (default; you type the text yourself in the text layer), Cloud AI (an image of each page goes to your AI service), or Cloud AI by itself after you write (a page once you turn away from it or after 5 minutes without writing, only changed pages).
 - **Where:** Settings › AI › Handwriting recognition
 - **Notes:** Separate from Grape, which reads on the device for search.
 - **Words:** handwriting recognition, transcribe notebook, cloud ai transcription, text layer, automatic transcription
@@ -333,6 +340,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **What:** Prints the raw pen and touch events over the page. Turn it on when reporting strokes that go missing or break.
 - **Where:** Settings › Troubleshooting › Input debug overlay, or the command Show or hide the input debug overlay.
 - **Words:** debug, missing strokes, strokes disappear, broken lines, troubleshooting, lag, input problems
+- **Seen as:** lag, laggy, slow, choppy, stutter, delay, strokes missing, ink appears late
 - **Settings:** `debugHud`
 - **Commands:** `toggle-input-debug-overlay`
 
@@ -343,3 +351,4 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **Where:** iPad Settings › Apple Pencil › Scribble. FineNotes' settings show this as a note on the iPad until dismissed.
 - **Notes:** iPad only.
 - **Words:** scribble, missing strokes, strokes missing ipad, fast strokes lost, apple scribble, handwriting to text ipad
+- **Seen as:** strokes missing, pen skips, strokes disappear, letters dropped, ink cut short, handwriting turns into text

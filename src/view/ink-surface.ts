@@ -1,6 +1,9 @@
 import { bindScrollThumb } from "./scroll-thumb-drag";
 import { paintWritingGuides } from "../canvas/writing-guides";
 import type { WritingGuideStyle } from "../model/writing-guides";
+import { InkLatency, paintsPenDown } from "./ink-latency";
+import { joinRunOnLines } from "../translate/languages";
+import type { TranslateTarget } from "./translate-window";
 import { type PdfRenderArea, boundsMeet } from "../canvas/pdf-raster";
 import {
   ALIGN_GUIDE_OVERSHOOT_PX,
@@ -126,6 +129,7 @@ import {
   boundsCentre,
   boundsCorner,
   boxInLasso,
+  byLineStart,
   clampGroupDelta,
   cornerScale,
   crossPageDelta,
@@ -195,6 +199,7 @@ import { erasedPieces, erasesGrey } from "../canvas/erase-look";
 import { nightHighlighter } from "../canvas/night";
 import {
   type LineSpan,
+  MARGIN_SHARE,
   RuledEraser,
   inLineSpan,
   lineSpan,
@@ -349,8 +354,16 @@ import {
   isNoGrowth,
   pageAfterTurn,
 } from "../model/board";
+import {
+  type BoardSpacePlan,
+  type SpaceAxis,
+  boardSpaceStep,
+  boardSpaceStrip,
+  planBoardSpace,
+} from "../model/board-space";
 import { afterPainted } from "./after-painted";
-import { lowMemoryDevice } from "./pdf-backdrop";
+import { lowMemoryDevice, roomyDevice } from "./pdf-backdrop";
+import { slidesAround } from "../model/beside-pdfs";
 import { type PageSnapshot, prefersReducedMotion } from "./motion";
 import {
   BRUSH_PRESSURE,
@@ -410,6 +423,7 @@ import {
   type PageGeometry,
   type PdfBackdrop,
   type ShapeKind,
+  type SlideRef,
   CONNECTOR_SIDES,
   POINT_STRIDE,
   type ConnectorSide,
@@ -428,10 +442,12 @@ import {
   type TextLayout,
   type TextRect,
   type TextSelection,
+  rangeText,
   selectText,
   textMarkNote,
   textUnder,
 } from "../canvas/pdf-text";
+import { withFocusInk } from "../search/hit-strokes";
 import type { TextSpan } from "../search/notebook-search";
 import { readingOrder } from "../search/search-results";
 import { type PageLink, linkAt, notebookPageOf } from "../canvas/pdf-links";
@@ -448,6 +464,7 @@ import {
 import { TextPickView } from "./text-pick-view";
 import { followTopShift as offsetAfterTopShift } from "./pill-row-model";
 import { highlightText, isHighlight, textHighlightStrokes } from "../model/text-highlight";
+import { highlighterColor } from "../model/pen-inks";
 import { DUPLICATE_OFFSET, duplicateImage, nextImageId } from "../model/images";
 import {
   TABLE_MIN_COL,
@@ -680,6 +697,7 @@ import {
   type BarrelAction,
   type PressInput,
   barrelActionOf,
+  barrelErasesOnHover,
   dragZoom,
   pressOverride,
   stylusButtonDown,
@@ -705,6 +723,7 @@ import {
   strokeWidthFor,
   tableSizeFor,
 } from "./toolbar";
+import { isPdfTabTool } from "./toolbar-layout";
 import type { HighlighterTip, SnapMode } from "../settings-data";
 import { RegionFrames, type ShownRegion } from "./region-frames";
 import { SelectionActionBar, onTap } from "./selection-bar";
@@ -758,7 +777,25 @@ import { SizeWait, backingScale } from "./surface-size";
 import { StrokeIndex } from "./stroke-index";
 import { REST_MS, ViewRest } from "./view-rest";
 import { IdSequence, strokeIdsOf, textBoxIdsOf } from "./id-sequence";
-import { type PenCursorStyle, cursorCss, cursorFor, cursorSize, cursorToolOf } from "./pen-cursor";
+import { newSession, type SurfaceSession, type SurfaceSessionOptions } from "./surface-session";
+import { SnippetDrag, bindSnippetGrip } from "./snippet-drag";
+import { SlideDots } from "./slide-dots";
+import {
+  claimTilePages,
+  clampSavedView,
+  staleTilePages,
+  type SavedView,
+} from "./surface-session-state";
+import {
+  type PenCursorStyle,
+  crosshairCursor,
+  cursorCss,
+  cursorFor,
+  cursorSize,
+  cursorToolOf,
+  drawsPenHoverCursor,
+} from "./pen-cursor";
+import { PenHoverCursor } from "./pen-hover-cursor";
 import { type Span, toastSide } from "./toast-side";
 import { RulerOverlay } from "./ruler-overlay";
 import {
@@ -1060,11 +1097,53 @@ export interface InkSurfaceCallbacks {
   onAskAboutSelection?: (pageIndex: number, bounds: Bounds) => void;
   canAskAi?: () => boolean;
   /**
+   * Translate selected text (PDF text, a highlight's text, text boxes) on
+   * this device: the view opens its card. Translate is offered only with it.
+   */
+  onTranslate?: (target: TranslateTarget) => void;
+  /**
    * Screenshot of a patch of page `pageIndex` (page space): what a lasso
    * drawn round nothing offers, as Goodnotes does. The host draws the page
    * as it exports it (its paper, PDF and ink) and offers Copy and Share.
    */
   onRegionScreenshot?: (pageIndex: number, bounds: Bounds) => void;
+  /**
+   * A PDF's tab (`fixedPages`): an area of slide `pageIndex` (page px),
+   * lassoed, is being dragged off as a snippet (`model/snippet.ts`);
+   * `viewScale` is the device px per page px the view shows it at. Returns
+   * the picture for the drag's ghost, or null for an outline. Without it a
+   * PDF's tab has no snippets.
+   */
+  onSnippetStart?: (
+    pageIndex: number,
+    area: Bounds,
+    viewScale: number,
+  ) => Promise<Blob | null> | null;
+  /**
+   * The dragged snippet's pointer moved (client px): over the tab strip,
+   * maybe. True while it is over a tab it can go to.
+   */
+  onSnippetMove?: (clientX: number, clientY: number) => boolean;
+  /**
+   * The snippet was let go: on page `pageIndex` of the session shown by
+   * then, at page point (x, y); `null` when it went nowhere (the tab it came
+   * from is still shown, or the lift was off the pages).
+   */
+  onSnippetEnd?: (drop: { pageIndex: number; x: number; y: number } | null) => void;
+  /**
+   * How large the dragged snippet lands on page `pageIndex` of the session
+   * shown now (page px), or null: its ghost takes that size over the notes.
+   */
+  snippetLanding?: (pageIndex: number) => { w: number; h: number } | null;
+  /**
+   * An area was lassoed on a PDF's tab: true the first time on this device
+   * (the host remembers it), when the area says in words where it can go.
+   */
+  snippetHintOnce?: () => boolean;
+  /** A snippet's slide chip was tapped: open its slide (a tap on the picture is a picture's tap). */
+  onOpenSlide?: (slide: SlideRef) => void;
+  /** The name of PDF tab `tab`, for a slide chip's label. */
+  slideTabName?: (tab: string) => string;
   /**
    * "Edit graph" on a selected graph: the host opens the calculator with its
    * expressions, and commits what comes back (`EditGraph`). Without it the
@@ -1124,6 +1203,8 @@ export interface InkSurfaceCallbacks {
   onTextAnchor?: (rect: TextAnchorRect | null) => void;
   /** What the host did with the text pill last (debug HUD): where it put it, or why it hid it. */
   textPillState?: () => string;
+  /** The file read again while open, and what became of the ink (debug HUD, FineNotes#273). */
+  diskState?: () => string;
   /** "Drag to size text boxes" (settings): a Text-tool drag draws the new box. Read live. */
   textDragSize?: () => boolean;
   /** Whether a two-finger double tap undoes and a three-finger one redoes. */
@@ -1160,6 +1241,12 @@ export interface InkSurfaceCallbacks {
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   /** An undo (`redo` false) or redo took `command` back or did it again. */
   onHistoryStep?: (command: Command, redo: boolean) => void;
+  /**
+   * Another session is shown (`showSession`): its document is the one
+   * edited now. A host supplies again what it lit on the document shown
+   * before (search hits, faded playback strokes), which the swap put out.
+   */
+  onSessionChange?: (session: SurfaceSession) => void;
   /**
    * The user scrolled onto a different page. `index` is 0-based.
    * Hosts use it to keep the toolbar's page navigation in step.
@@ -1306,7 +1393,12 @@ export type StrokeTapHandler = (page: Page, stroke: Stroke) => boolean;
  * view glides to it and marks it more strongly. A group of `words`, a text
  * box, or one match's rectangles among the `printed` ones.
  */
-export type SearchFocus = { words: number } | { box: string } | { printed: readonly TextRect[] };
+export type SearchFocus =
+  | { words: number }
+  /** One match's own ink, lit with the rest (added to them when none is the same ink). */
+  | { ink: readonly string[] }
+  | { box: string }
+  | { printed: readonly TextRect[] };
 
 /** A calculation note as the surface shows it (`showCalcNote`): the glowing sum and its card. */
 export interface CalcNoteSpec {
@@ -1449,6 +1541,9 @@ const IOS_MIN_INPUT_FONT_PX = 16;
 
 /** A lasso press that moves less than this, in screen px, is a tap, not a lasso. */
 const TAP_SLOP_PX = 8;
+
+/** How far in from the view's left edge a board's insert-space column stands, screen px (#276). */
+const BOARD_SPACE_INSET_PX = 22;
 /** A press on a folded note that moves less than this, screen px, opens it on lift. */
 const FOLDED_TAP_SLOP_PX = 12;
 /** Lasso points closer than this to the previous one are dropped, screen px. */
@@ -1572,6 +1667,8 @@ const IMAGE_CHROME_CLEAR_PX = 10;
 const PRESS_CLEAR_PX = 28;
 /** Room kept between selected PDF text and its bar: clear of a handle's knob, screen px. */
 const TEXT_KNOB_CLEAR_PX = 12;
+/** Page px round selected PDF text in the picture Ask AI gets, so no letter is cut. */
+const TEXT_ASK_PAD_PX = 4;
 /** Device-local mark that the right-click-to-select hint has been shown. */
 const PDF_SELECT_HINT_KEY = "finenotes-pdf-select-hint";
 /** The hint shows at most once a session, mark or no mark. */
@@ -1757,6 +1854,11 @@ interface LassoDraft {
   to: Pt;
   /** The pen was held still long enough to open the Paste / Unlock bar instead. */
   held: boolean;
+  /**
+   * A by-line lasso that came down on a PDF's text, which it selects as the
+   * pen drags (`startTextDrag`); `held` is set too, so the pen sweeps words.
+   */
+  textDrag?: true;
   /** The page's lines, for a lasso selecting by line; empty otherwise. */
   lines: LineBlock[];
   /**
@@ -1764,6 +1866,17 @@ interface LassoDraft {
    * line it started from, and how many lines the drag has opened so far.
    */
   space: { target: SpaceTarget; count: number; plan: SpacePlan | null; text: string } | null;
+  /**
+   * A by-line lasso on a board, which has no lines (discussion #276): it
+   * inserts space from wherever it went down, down or right as the drag
+   * first heads (`axis`, null until it has moved), and back to close it up.
+   */
+  boardSpace: {
+    axis: SpaceAxis | null;
+    amount: number;
+    plan: BoardSpacePlan | null;
+    text: string;
+  } | null;
 }
 
 /**
@@ -2077,6 +2190,11 @@ function swallowClickAfterTap(target: HTMLElement): void {
   win.setTimeout(() => {
     for (const type of ["mousedown", "click"]) win.removeEventListener(type, stop, options);
   }, CLICK_AFTER_TAP_MS);
+}
+
+/** Whether two page lists hold the same pages, in the same order. */
+function samePages(a: readonly Page[], b: readonly Page[]): boolean {
+  return a.length === b.length && a.every((page, i) => page === b[i]);
 }
 
 /** The tools a practice file has: writing and rubbing out. */
@@ -2462,6 +2580,8 @@ export class InkSurface {
   private penCursor: PenCursorStyle = "arrow";
   /** What the ink cursor was last drawn for, so an unchanged one is not set again. */
   private inkCursorKey = "";
+  /** The cursor drawn under a hovering tablet pen, on Linux (FineNotes#266). */
+  private penHover: PenHoverCursor | null = null;
   /** Where the page was when the current finger gesture began, to undo a palm's scroll. */
   private palmUndo: {
     t: number;
@@ -2508,6 +2628,8 @@ export class InkSurface {
   private snapRowAfterZoom = false;
   /** Whether pulling past the last page adds one (a notebook, not a single page). */
   private pullAddEnabled = false;
+  /** What the host asked for (`setPullToAddPage`), before a PDF's tab says no. */
+  private pullAddWanted = false;
   private readonly pullAdd: PullAddIndicator;
   /** Pressure the tiles were last rasterised with; a change invalidates them. */
   private tilesPressure: boolean | null = null;
@@ -2601,13 +2723,17 @@ export class InkSurface {
   /** Set by a host while taps on ink mean something else (audio replay). */
   private strokeTapHandler: StrokeTapHandler | null = null;
   /** New strokes' and text boxes' ids: `s<N>` and `t<N>`, above any the document holds. */
-  private readonly strokeIds = new IdSequence("s");
-  private readonly textBoxIds = new IdSequence("t");
-  private readonly history = new History();
+  private strokeIds = new IdSequence("s", () => this.doc);
+  private textBoxIds = new IdSequence("t", () => this.doc);
+  private history = new History();
+  /** The session shown: these fields are its own (`surface-session.ts`). */
+  private session!: SurfaceSession;
+  /** Which session the cached tiles of each page id were made for (`staleTilePages`). */
+  private readonly tileOwners = new Map<string, SurfaceSession>();
   /** The undo/redo availability last reported to the host, as "undo/redo". */
   private historyShown = "";
   /** Every stroke by page position and by id; kept in step with each edit. */
-  private readonly strokeIndex = (() => {
+  private strokeIndex = (() => {
     const index = new StrokeIndex();
     // With the pages joined no tool acts on a mirror: tools find its owner.
     index.skip = (stroke) => this.joined && isMirror(stroke);
@@ -2677,6 +2803,18 @@ export class InkSurface {
   private selection: GroupSelection | null = null;
   /** Where the lasso that made `selection` was drawn (`selectionPatch`). */
   private selectionArea: DrawnArea | null = null;
+  /**
+   * A snippet being dragged off a PDF's tab (`startSnippetDrag`): the drag,
+   * the session it came from, and a lassoed area's loop, hidden meanwhile
+   * and shown again if the drag goes nowhere.
+   */
+  private snippetDrag: {
+    drag: SnippetDrag;
+    session: SurfaceSession;
+    hold: HTMLElement | null;
+  } | null = null;
+  /** The link dot on each snippet on the notes (`slide-dots.ts`). */
+  private readonly slideDots: SlideDots;
   /** An arrow joining two shapes, picked up on its own (a lasso tap on it), by page and id. */
   private connectorSel: { pageId: string; id: string } | null = null;
   /** Its highlight over the page: the route drawn wide in the accent colour. */
@@ -2769,9 +2907,9 @@ export class InkSurface {
   /** Ink a playing recording has not reached yet, drawn pale (2.5). */
   private fadedStrokes: ReadonlySet<string> = new Set();
   /** `[[links]]` written by hand, found on the device, by page id: offered, not made. */
-  private readonly linkSuggestions = new Map<string, readonly HandwrittenLink[]>();
+  private linkSuggestions = new Map<string, readonly HandwrittenLink[]>();
   /** Words Grape may have misread, by page id: a wavy underline each. */
-  private readonly wordFlags = new Map<string, ReadonlyArray<readonly string[]>>();
+  private wordFlags = new Map<string, ReadonlyArray<readonly string[]>>();
   private readonly wordMarks: HTMLElement[] = [];
   /** The flagged word whose menu is open (page id, stroke key): drawn red. */
   private activeWordFlag: { pageId: string; key: string; strokes: readonly string[] } | null = null;
@@ -2926,6 +3064,9 @@ export class InkSurface {
   private hudTextEnd = "";
   /** What the highlighter last did on a PDF page (`textMarkNote`). */
   private hudTextMark = "";
+  /** The debug HUD's last drag over the notebook, and its drop (`debugDrop`). */
+  private hudDragIn = "";
+  private hudDrop = "";
   /** The surface's path blurring a text box right now; "" while the browser does it. */
   private textBlurBy = "";
   private hudLayouts = 0;
@@ -2933,6 +3074,8 @@ export class InkSurface {
   private hudFps = 0;
   private hudPaintMs = 0;
   private hudInkMs = 0;
+  /** Pen sample to wet paint, and to the frame after it (FineNotes#287). */
+  private readonly inkLatency = new InkLatency();
   private readonly hudRun = new FrameRun();
   private hudLastFrameT = 0;
   /** The display's frame length, learned from this surface's own frames. */
@@ -2997,6 +3140,9 @@ export class InkSurface {
         }),
     );
     this.scrollEl = this.surfaceEl.createDiv({ cls: "goodobsidian-scroll" });
+    if (drawsPenHoverCursor({ isLinux: Platform.isLinux, isMobile: Platform.isMobile })) {
+      this.penHover = new PenHoverCursor(this.surfaceEl, this.scrollEl);
+    }
     // A first Zoom box drag is UI, not a stroke: in Stylus-only mode, where
     // fingers do nothing on the page, a catcher over it lets a finger draw it
     // too. It is shown only then, with the Magnifier in hand and no target
@@ -3171,6 +3317,12 @@ export class InkSurface {
     this.commentMarkersEl = this.paperEl.createDiv({
       cls: "goodobsidian-comment-markers is-hidden",
     });
+    // A chip on each snippet from a PDF's slide; a tap on it opens the slide.
+    this.slideDots = new SlideDots(
+      this.paperEl,
+      (slide) => this.callbacks.onOpenSlide?.(slide),
+      (tab) => this.callbacks.slideTabName?.(tab) ?? "PDF",
+    );
     this.regionFrames = new RegionFrames(this.paperEl, (shown, anchor) =>
       this.callbacks.onTapRegion?.(shown, anchor),
     );
@@ -3326,6 +3478,8 @@ export class InkSurface {
     // the CPU (a desktop with its GPU turned off), the larger canvas cost
     // more each frame than it saved.
     renderer.useOverscan(Platform.isMobile);
+    // Tiles for a pan to come back to, where there is memory for them (#298).
+    renderer.setPanRoom(roomyDevice());
     this.renderer = renderer;
 
     // The ruler hears every press first (capture, on the surface): a finger
@@ -3360,6 +3514,7 @@ export class InkSurface {
         onlyStylus: () => this.callbacks.onlyStylusMode?.() === true,
         fingerDraws: () => this.callbacks.fingerDrawing?.() === true,
         stylusClicks: () => this.stylusClickWanted(),
+        hoverErase: () => this.hoverEraseWanted(),
         stylusSelectBridge: () => Platform.isAndroidApp === true,
       },
     );
@@ -3440,6 +3595,11 @@ export class InkSurface {
         return;
       }
       const type = (event as Partial<PointerEvent>).pointerType;
+      if (type === "pen") {
+        const { buttons, button, timeStamp } = event;
+        const pressure = (event as Partial<PointerEvent>).pressure ?? 0;
+        this.pointerInput?.logPen("contextmenu", { buttons, button, pressure, timeStamp });
+      }
       // Android's WebView: the pen touching down with its side button held is
       // this alone, as a mouse's. It is no click of the button, and no menu.
       if (type !== "touch" && this.pointerInput?.stylusTouched()) return;
@@ -3516,6 +3676,20 @@ export class InkSurface {
     // Every path that changes the history — a stroke, an erase, a withdrawn
     // empty text box, undo, a new file — reaches the host's buttons this way.
     this.history.onChange = () => this.syncHistory();
+    // The first session is made of the fields above (`surface-session.ts`).
+    this.session = {
+      doc,
+      history: this.history,
+      strokeIds: this.strokeIds,
+      textBoxIds: this.textBoxIds,
+      strokeIndex: this.strokeIndex,
+      fixedPages: false,
+      view: null,
+      indexed: true,
+      mirroredStep: null,
+      linkSuggestions: this.linkSuggestions,
+      wordFlags: this.wordFlags,
+    };
     this.setDocument(doc);
   }
 
@@ -3608,6 +3782,11 @@ export class InkSurface {
    * host's to remove.
    */
   destroy(): void {
+    this.penHover?.destroy();
+    this.penHover = null;
+    this.snippetDrag?.drag.cancel();
+    this.snippetDrag?.hold?.remove();
+    this.snippetDrag = null;
     this.dropEmptyLasso();
     this.endCellEdit(true);
     this.cellEditor?.remove();
@@ -3679,6 +3858,9 @@ export class InkSurface {
     this.endExplore(false);
     if (this.zoomBox) this.closeZoomBox(true);
     this.doc = doc;
+    // The session shown takes the new document; its history starts again.
+    this.session.doc = doc;
+    this.session.indexed = true;
     this.parkedText = null;
     this.strokeIds.restart(strokeIdsOf(doc));
     this.textBoxIds.restart(textBoxIdsOf(doc));
@@ -3691,10 +3873,280 @@ export class InkSurface {
     this.eraseReset();
     this.strokeIndex.rebuild(doc.pages);
     this.renderer?.invalidateAll();
+    // Every tile is gone: whatever is made from here on is this session's.
+    this.tileOwners.clear();
+    // No PDF's tab yet: the usual tile budget, until one is made (`createSession`).
+    this.renderer?.setWarmViewports(0);
     this.layout();
     // Opening a note says where you are, page and zoom, then both fade.
     this.flashChrome(true);
     this.reportStatus();
+  }
+
+  // --- Sessions: several documents shown by one surface ------------------------
+
+  /** The session shown now. */
+  get activeSession(): SurfaceSession {
+    return this.session;
+  }
+
+  /**
+   * A session for `doc`, not shown yet (`showSession` shows it): its own
+   * history, id counters and stroke index. A PDF's tab passes `fixedPages`.
+   */
+  createSession(doc: InkDocument, options: SurfaceSessionOptions = {}): SurfaceSession {
+    // A PDF's tab beside the notes: room for both to stay warm, so a switch
+    // back and forth makes no tile (a 2 GB device gets less).
+    if (options.fixedPages) this.renderer?.setWarmViewports(lowMemoryDevice() ? 1 : 2);
+    return newSession(doc, options, (stroke) => this.joined && isMirror(stroke));
+  }
+
+  /**
+   * Whether the document shown has fixed pages (a PDF's tab): no page is
+   * added, removed or moved, and only the tools of a PDF's tab work
+   * (`isPdfTabTool`): nothing places text, pictures or shapes on it.
+   */
+  get fixedPages(): boolean {
+    // Read before the constructor sets the first session, too.
+    return (this.session as SurfaceSession | undefined)?.fixedPages === true;
+  }
+
+  /**
+   * Where the reader is, to come back to later (a PDF's tab, `BesideView`):
+   * the page being read, the zoom (1 is fitted) and the page point (page
+   * px) at the pane's top-left corner. `null` before the first layout.
+   */
+  readingView(): { page: number; zoom: number; x: number; y: number } | null {
+    if (!(this.cssW > 0 && this.cssH > 0)) return null;
+    const page = this.pageIndex;
+    const box = this.pageLayout.boxes[page];
+    if (!box) return null;
+    const scale = this.unitScale;
+    const left = -this.offsetX / scale;
+    const top = this.viewport.scrollY;
+    return { page, zoom: this.userZoom, x: left - box.x, y: top - box.y };
+  }
+
+  /**
+   * Go back to a view {@link readingView} gave: its zoom, then the page
+   * point at the pane's top-left corner. A page past the end goes to the
+   * last; a zoom out of range is clamped. Returns whether it could (the
+   * pane is laid out).
+   */
+  showReadingView(view: { page: number; zoom: number; x: number; y: number }): boolean {
+    if (!(this.cssW > 0 && this.cssH > 0) || this.board) return false;
+    const page = Math.max(0, Math.min(this.doc.pages.length - 1, Math.floor(view.page)));
+    this.goToPage(page);
+    const rect = this.surfaceEl.getBoundingClientRect();
+    const zoom = this.clampZoom(view.zoom);
+    if (zoom !== this.userZoom) this.applyZoom(zoom, rect.left, rect.top);
+    const box = this.pageLayout.boxes[page];
+    if (!box) return true;
+    const scale = this.unitScale;
+    const x = Number.isFinite(view.x) ? view.x : 0;
+    const y = Number.isFinite(view.y) ? view.y : 0;
+    this.scroller.setPosition((box.x + x) * scale, Math.max(0, (box.y + y) * scale));
+    this.syncViewport();
+    this.requestFrame();
+    this.reportStatus();
+    return true;
+  }
+
+  /**
+   * Show `next` in place of the session shown now. Whatever is under way
+   * (a stroke, a drag, a selection, the zoom box, a text box being typed
+   * in) ends; the outgoing session keeps its history and the view it was
+   * left at; the incoming one comes back to its own view, or opens as a
+   * notebook opens the first time it is shown. The tile cache is kept: each
+   * document's tiles stay warm, and only a page id the two documents share
+   * has its tiles dropped. The host hears of it through `onSessionChange`
+   * and `onHistoryChange`.
+   */
+  showSession(next: SurfaceSession): void {
+    const prev = this.session;
+    if (next === prev) return;
+    this.interruptForSwap();
+    // The outgoing session: its view, its mirror mark, the pages its tiles are of.
+    prev.view = this.saveView();
+    prev.mirroredStep = this.mirroredStep;
+    claimTilePages(
+      this.tileOwners,
+      prev,
+      prev.doc.pages.map((page) => page.id),
+    );
+    prev.history.onChange = null;
+
+    this.session = next;
+    this.doc = next.doc;
+    this.history = next.history;
+    this.strokeIds = next.strokeIds;
+    this.textBoxIds = next.textBoxIds;
+    this.strokeIndex = next.strokeIndex;
+    this.linkSuggestions = next.linkSuggestions;
+    this.wordFlags = next.wordFlags;
+    this.mirroredStep = next.mirroredStep;
+    // New ids count on past any the document gained while it was not shown.
+    this.strokeIds.catchUp(strokeIdsOf(next.doc));
+    this.textBoxIds.catchUp(textBoxIdsOf(next.doc));
+    this.history.onChange = () => this.syncHistory();
+
+    const pageIds = next.doc.pages.map((page) => page.id);
+    for (const id of staleTilePages(this.tileOwners, next, pageIds)) {
+      this.renderer?.invalidatePage(id);
+    }
+    claimTilePages(this.tileOwners, next, pageIds);
+
+    if (next.view) {
+      this.restoreView(clampSavedView(next.view, next.doc.pages.length, next.doc.pages));
+    } else {
+      this.freshView(next.doc);
+    }
+    if (!next.indexed) {
+      next.indexed = true;
+      next.strokeIndex.rebuild(next.doc.pages);
+    }
+    this.renderer?.repaintAll();
+    // A PDF's tab takes no pages; the notes take them as the host said.
+    if (this.pullAddEnabled !== (this.pullAddWanted && !this.fixedPages))
+      this.setPullToAddPage(this.pullAddWanted);
+    // A PDF's tab has its own few tools: another one in hand gives way to the pen.
+    if (next.fixedPages && !isPdfTabTool(this.toolState.tool)) {
+      this.setTool("pen");
+      this.callbacks.onToolChange?.(this.toolState.tool);
+    }
+    this.layout();
+    this.syncHistory();
+    this.callbacks.onSessionChange?.(next);
+    this.reportStatus();
+  }
+
+  /** End everything under way that belongs to the session shown, before a swap. */
+  private interruptForSwap(): void {
+    // A lasso round nothing is of the page going away (a snippet's drag outlives it).
+    this.dropEmptyLasso();
+    this.endExplore(false);
+    if (this.zoomBox) this.closeZoomBox(true);
+    this.endWetStroke();
+    this.activePage = null;
+    this.stopPress();
+    this.cancelImageDrag();
+    this.cancelGroupDrag();
+    this.endCrop(false);
+    this.dropSelection();
+    this.eraseReset();
+    this.dropTextBoxViews();
+    this.parkedText = null;
+    this.lastTextBoxAdd = null;
+    this.heldText = null;
+    this.circleLoop = null;
+    this.circlePress = null;
+    this.picking = null;
+    this.textMark = null;
+    this.hideOffPage();
+    this.hideTextCopy();
+    this.zoomPositionHistory.length = 0;
+    this.setSearchHits(null);
+    this.setFadedStrokes(null);
+    this.setActiveWordFlag(null);
+    // The view stops where it is; the outgoing session keeps that spot.
+    this.scroller.stop();
+    this.pinch = null;
+    this.zoomAnim = null;
+    this.rowSettle = null;
+  }
+
+  /**
+   * Remove every text box element: they are keyed by page and box id, which
+   * another document may share. The layout makes the incoming ones.
+   */
+  private dropTextBoxViews(): void {
+    const views = [...this.textBoxInputs.values()];
+    this.textBoxInputs.clear();
+    for (const view of views) {
+      if (this.viewDoc.activeElement === view.input) this.blurTextInput(view.input, "gone");
+      view.root.remove();
+    }
+  }
+
+  /** The view as it is now, for {@link restoreView}. */
+  private saveView(): SavedView {
+    const at = this.scroller.position;
+    return {
+      scrollX: at.x,
+      scrollY: at.y,
+      userZoom: this.userZoom,
+      minZoom: this.minZoom,
+      baseScale: this.baseScale,
+      zoomInitialised: this.zoomInitialised,
+      pageIndex: this.pageIndex,
+      heldPage: this.heldPage,
+      direction: this.direction,
+      joined: this.joined,
+      board: this.board,
+      boardRef: this.boardRef,
+      boardLaidOut: this.boardLaidOut,
+      boardDrawn: this.boardDrawn,
+      boardHold: this.boardHold,
+      rowSlot: this.rowSlot,
+      rowGap: this.rowGap,
+      pageLayout: this.pageLayout,
+      viewport: { ...this.viewport },
+      offsetX: this.offsetX,
+      cssW: this.cssW,
+      cssH: this.cssH,
+    };
+  }
+
+  /**
+   * Put a saved view back, as it was before it was left; the layout that
+   * follows then treats any change of pane since as a resize.
+   */
+  private restoreView(view: SavedView): void {
+    this.userZoom = view.userZoom;
+    this.minZoom = view.minZoom;
+    this.baseScale = view.baseScale;
+    this.zoomInitialised = view.zoomInitialised;
+    this.pageIndex = view.pageIndex;
+    this.heldPage = view.heldPage;
+    this.direction = view.direction;
+    this.joined = view.joined;
+    this.board = view.board;
+    this.boardRef = view.boardRef;
+    this.boardLaidOut = view.boardLaidOut;
+    this.boardDrawn = view.boardDrawn;
+    this.boardHold = view.boardHold;
+    this.boardShift = { x: 0, y: 0 };
+    this.rowSlot = view.rowSlot;
+    this.rowGap = view.rowGap;
+    this.pageLayout = view.pageLayout;
+    this.renderer?.setLayout(view.pageLayout);
+    this.renderer?.setPreviewWindow(view.board ? () => this.boardPreviewWindow() : null);
+    this.viewport = { ...view.viewport };
+    this.offsetX = view.offsetX;
+    this.cssW = view.cssW;
+    this.cssH = view.cssH;
+    this.ensurePaperSize();
+    this.scroller.setPosition(view.scrollX, view.scrollY);
+  }
+
+  /** A session shown for the first time opens as a notebook does: its first page, fitted. */
+  private freshView(doc: InkDocument): void {
+    this.userZoom = 1;
+    this.zoomInitialised = false;
+    this.pageIndex = 0;
+    this.heldPage = null;
+    this.direction = scrollDirectionOf(doc);
+    // The index is built under the incoming document's joining.
+    this.joined = joinedPagesOf(doc);
+    this.board = false;
+    this.boardRef = null;
+    this.boardLaidOut = null;
+    this.boardDrawn = null;
+    this.boardHold = null;
+    this.boardShift = { x: 0, y: 0 };
+    this.rowGap = Number.NaN;
+    this.renderer?.setPreviewWindow(null);
+    this.scroller.setPosition(0, 0);
   }
 
   /**
@@ -3761,7 +4213,14 @@ export class InkSurface {
     this.endExplore(true);
     this.dropSelection();
     const place = this.readingPlace();
+    const pagesBefore = this.fixedPages ? [...this.doc.pages] : null;
     this.history.push(this.doc, command);
+    // A PDF's tab keeps its pages as the PDF has them: a command that added,
+    // removed or moved one is taken back at once.
+    if (pagesBefore && !samePages(pagesBefore, this.doc.pages)) {
+      this.history.withdraw(this.doc, command);
+      return;
+    }
     // A host command can bring in elements with ids of their own (a duplicated
     // page does), so the id sequences must never fall behind the document.
     this.strokeIds.catchUp(strokeIdsOf(this.doc));
@@ -3771,6 +4230,33 @@ export class InkSurface {
     this.layout();
     if (command.keepsReading) this.keepReading(place);
     this.changed();
+  }
+
+  /**
+   * Run `run`, handing `sink` each command it makes a step of: how Ask AI's
+   * edits are told from the user's (`run` is synchronous, so nothing else
+   * can come in between).
+   */
+  recordCommands<T>(sink: (command: Command) => void, run: () => T): T {
+    const was = this.history.onPush;
+    this.history.onPush = (command) => {
+      was?.(command);
+      sink(command);
+    };
+    try {
+      return run();
+    } finally {
+      this.history.onPush = was;
+    }
+  }
+
+  /**
+   * Make `commands`, the newest steps, one undo step named `label` (an Ask
+   * AI answer). False, and nothing changed, when something else came after
+   * or among them.
+   */
+  groupSteps(commands: readonly Command[], label: string): boolean {
+    return this.history.group(commands, label);
   }
 
   /**
@@ -4466,6 +4952,9 @@ export class InkSurface {
 
   /** Let (or stop) a pull past the last page add a page. The host knows single pages. */
   setPullToAddPage(enabled: boolean): void {
+    this.pullAddWanted = enabled;
+    // A PDF's tab never takes a page (`fixedPages`).
+    enabled = enabled && !this.fixedPages;
     this.pullAddEnabled = enabled;
     if (!enabled) {
       this.endWheelPull();
@@ -4539,6 +5028,8 @@ export class InkSurface {
     if (tool === "pen" && this.toolState.penType === "highlighter") tool = "highlighter";
     // A practice file has the pen and the eraser only.
     if (this.practice && !isPracticeTool(tool)) tool = "pen";
+    // A PDF's tab has its own few (`isPdfTabTool`).
+    if (this.fixedPages && !isPdfTabTool(tool)) tool = "pen";
     // The toolbar shares `toolState` and has already written the new tool
     // into it, so the one being replaced is read from `toolSeen`.
     if (tool === "text" && this.toolSeen !== "text") this.toolBeforeText = this.toolSeen;
@@ -4677,13 +5168,22 @@ export class InkSurface {
     this.hudEl.toggleClass("is-hidden", !enabled);
     if (!enabled) return;
     this.hud.restart();
+    this.inkLatency.reset();
     this.renderHud();
   }
 
-  /** A line in the debug HUD for something the view saw, such as a drop. */
-  debugMark(label: string): void {
+  /**
+   * The debug HUD's drag and drop lines (discussion #288): a drag that came
+   * over the notebook (`drag`, which starts a new pair), and what its drop
+   * carried and became (`drop`). Lines of their own, so the pointer log's
+   * run never pushes them off the screen in a recording.
+   */
+  debugDrop(kind: "drag" | "drop", label: string): void {
     if (!this.debug) return;
-    this.hud.mark(label);
+    if (kind === "drag") {
+      this.hudDragIn = label;
+      this.hudDrop = "";
+    } else this.hudDrop = label;
     this.renderHud();
   }
 
@@ -4853,6 +5353,7 @@ export class InkSurface {
   stylusEraserClick(): void {
     const step = eraserClickStep(this.toolState.tool, this.eraserClickBack, this.drawingTool);
     if (this.practice && !isPracticeTool(step.tool)) return;
+    if (this.fixedPages && !isPdfTabTool(step.tool)) return;
     if (this.callbacks.toolOff?.(step.tool) === true) return;
     this.setTool(step.tool);
     this.eraserClickBack = step.back;
@@ -4869,6 +5370,10 @@ export class InkSurface {
     );
     if (this.practice && !isPracticeTool(next)) {
       this.keyVerdict = "practice";
+      return;
+    }
+    if (this.fixedPages && !isPdfTabTool(next)) {
+      this.keyVerdict = "off";
       return;
     }
     if (this.callbacks.toolOff?.(next) === true) {
@@ -4911,6 +5416,7 @@ export class InkSurface {
     const tool = shortcutTool(row.action.id);
     if (!tool) return;
     if (this.practice && !isPracticeTool(tool)) return;
+    if (this.fixedPages && !isPdfTabTool(tool)) return;
     const mod = input.mods.includes("Mod");
     const key = input.type === "key" ? input.key : null;
     const bit = input.type === "button" ? buttonBit(input.button) : 0;
@@ -5096,6 +5602,7 @@ export class InkSurface {
     this.surfaceEl.toggleClass("is-ink-cursor", style === "ink" && pen);
     this.surfaceEl.toggleClass("is-no-cursor", style === "none" && pen);
     this.surfaceEl.toggleClass("is-laser", tool === "laser");
+    if (style !== "ink") this.penHover?.setImage(style === "crosshair" ? crosshairCursor() : null);
     this.syncInkCursor();
   }
 
@@ -5123,6 +5630,7 @@ export class InkSurface {
     this.inkCursorKey = key;
     const hover = cursorFor(tool, shown, width, { highlighterAlpha });
     const down = cursorFor(tool, shown, width, { highlighterAlpha, drawing: true });
+    this.penHover?.setImage(hover);
     this.surfaceEl.setCssProps({
       "--goodobsidian-pen-cursor": cursorCss(hover, "crosshair"),
       "--goodobsidian-pen-cursor-drawing": cursorCss(down, "crosshair"),
@@ -5426,9 +5934,17 @@ export class InkSurface {
     this.layoutTail(cssW, cssH);
   }
 
+  /** The backdrop painter's caches are sized to the screen in device px (#298). */
+  private tellPainterScreen(): void {
+    if (!(this.cssW > 0 && this.cssH > 0)) return;
+    const dpr = backingScale(this.win.devicePixelRatio);
+    this.backdropPainter?.setScreen?.(Math.round(this.cssW * dpr), Math.round(this.cssH * dpr));
+  }
+
   /** The end of every layout: size the canvases, place the paper and paint. */
   private layoutTail(cssW: number, cssH: number): void {
     this.renderer?.resize(cssW, cssH, backingScale(this.win.devicePixelRatio));
+    this.tellPainterScreen();
     this.syncViewport();
     this.syncInkCursor();
     this.settleIfIdle();
@@ -5986,6 +6502,8 @@ export class InkSurface {
         ? (this.cssW - paperWidth) / 2
         : -x;
     this.paperEl.setCssStyles({ transform: `translate(${this.offsetX}px, ${-y}px)` });
+    // A board's insert-space column stays at the view's edge as it scrolls.
+    if (this.board && this.toolState.tool === "select") this.syncSpaceHandles();
     this.viewport = { scrollY: y / scale, scale, width: this.pageLayout.width };
     this.renderer.setViewport(this.viewport, this.offsetX);
     this.updatePageIndicator();
@@ -6002,8 +6520,10 @@ export class InkSurface {
       const top = this.viewport.scrollY;
       index = currentPageIndex(this.pageLayout, top, top + this.cssH / scale);
     }
+    // A PDF's tab counts slides (`fixedPages`).
+    const counted = { page: total > 0 ? index + 1 : 0, total };
     this.indicatorEl.setText(
-      t("surface.pageIndicator", { page: total > 0 ? index + 1 : 0, total }),
+      this.fixedPages ? t("surface.slideIndicator", counted) : t("surface.pageIndicator", counted),
     );
     const seen = this.visiblePageRect(index);
     if (seen) this.callbacks.onReadingPoint?.(index, seen.y + seen.h / 3);
@@ -6385,7 +6905,12 @@ export class InkSurface {
    * page by page has them made whole while it rests (`Renderer.prefetch`).
    */
   private pagesToTurnTo(): number[] {
-    if (!this.turnsPages || this.board) return [];
+    if (this.board) return [];
+    // A PDF's tab: the slides either side of the one read, the next first,
+    // so going on to it never meets a tile still to make.
+    if (this.fixedPages && !this.turnsPages)
+      return slidesAround(this.pageIndex, this.doc.pages.length);
+    if (!this.turnsPages) return [];
     const on = this.turnedBack ? -1 : 1;
     // The page after the next shows at the pane's edge as a turn ends.
     return [this.pageIndex + on, this.pageIndex - on, this.pageIndex + 2 * on].filter(
@@ -8295,6 +8820,7 @@ export class InkSurface {
    */
   setBackdropPainter(painter: BackdropPainter | null): void {
     this.backdropPainter = painter;
+    this.tellPainterScreen();
     this.renderer?.setPainter(painter);
     this.requestFrame();
   }
@@ -8532,6 +9058,9 @@ export class InkSurface {
     // 26.2) is smoothed; one that reports fractions is kept exact.
     const rounded = this.penController?.strokeRounded ?? false;
     const smoothing: Smoothing = rounded ? "centred" : "off";
+    // Smoothing moves a sample no further than the rounding did: half a
+    // step of that grid, in page px where the pen writes (FineNotes#275).
+    const grid = this.penController?.strokeGrid ?? null;
     // The pen in hand's stroke stabilization, on screen like the spacing.
     // Not for the Shape tool, whose strokes become clean shapes, nor for a
     // practice file's training data.
@@ -8559,6 +9088,7 @@ export class InkSurface {
       // them. Where every sample arrives, the stroke is stored as it is.
       densify: !this.coalescedInput,
       smoothing,
+      ...(grid !== null ? { grid: grid / this.gestureScale } : {}),
       stabilize: this.atFitZoom(stabilizationReach(percent / 100)),
       // A practice file is training data: keep the pen's samples as they came.
       record: this.practice !== null,
@@ -8928,6 +9458,9 @@ export class InkSurface {
       );
     },
     onDebug: (record) => this.onPointerEvent(record),
+    onHoverErase: (kind) => {
+      if (this.debug) this.hud.mark(`hover-erase:${kind}`);
+    },
   };
 
   /**
@@ -9206,6 +9739,18 @@ export class InkSurface {
 
   private barrel(): BarrelAction {
     return barrelActionOf(this.callbacks.barrelAction?.());
+  }
+
+  /**
+   * Whether the hovering pen with its side button held erases (discussion
+   * #209): the setting asks for it, the button is not a shortcut's, and
+   * nothing else is waiting for the pen (text being typed, a sticky note to
+   * place).
+   */
+  private hoverEraseWanted(): boolean {
+    if (!barrelErasesOnHover(this.barrel()) || this.sideButtonBound()) return false;
+    if (this.stickyPlace !== null || this.practice !== null) return false;
+    return !this.editingTextView() && !this.heldText && !this.cellEdit;
   }
 
   /**
@@ -11097,6 +11642,13 @@ export class InkSurface {
     // A carried-on stroke is drawn wet at once: its committed ink has just
     // been taken back, and the dry layer drops it on the next frame.
     if (resumed) this.drawWet();
+    else if (paintsPenDown(builder.awaitingReading)) {
+      // The dot under the pen shows on the next frame, not after the first
+      // move's: a pen that rests a moment before it moves showed nothing
+      // (FineNotes#287).
+      if (this.debug) this.inkLatency.input([sample.t], now());
+      this.scheduleWet();
+    }
   }
 
   /**
@@ -11211,6 +11763,11 @@ export class InkSurface {
       builder.add({ ...sample, ...local });
       this.trackHold(local);
     }
+    if (this.debug)
+      this.inkLatency.input(
+        samples.map((sample) => sample.t),
+        now(),
+      );
     this.scheduleWet();
   }
 
@@ -11432,6 +11989,8 @@ export class InkSurface {
         holdMs: HOLD_MS,
         holdRadius: HOLD_RADIUS,
         pointers: this.diagSums,
+        sideButton: this.barrel(),
+        penHover: this.pointerInput?.penReport() ?? [],
         keys: this.keyLog.report(),
         strokes: this.diagnostics,
       },
@@ -11523,7 +12082,8 @@ export class InkSurface {
 
   /**
    * The HUD's text: the pointer log and counts, the last shape verdict, the
-   * pointer and page, then where everything is on screen.
+   * pointer and page, the last drag and drop, then where everything is on
+   * screen.
    */
   private renderHud(): void {
     if (!this.debug) return;
@@ -11534,6 +12094,8 @@ export class InkSurface {
         `${this.hud.tilt()}\n` +
         (this.hudTextEnd ? `${this.hudTextEnd}\n` : "") +
         (this.hudTextMark ? `highlighter ${this.hudTextMark}\n` : "") +
+        (this.hudDragIn ? `drag ${this.hudDragIn}\n` : "") +
+        (this.hudDrop ? `drop ${this.hudDrop}\n` : "") +
         this.hudGeometry(),
     );
   }
@@ -11560,12 +12122,15 @@ export class InkSurface {
       `cv ${canvas ? `${canvas.width}x${canvas.height}` : "-"} layouts=${this.hudLayouts}
 ` +
       `pill=${this.callbacks.textPillState?.() ?? "-"} ` +
+      `disk=${this.callbacks.diskState?.() ?? "-"} ` +
       `focus=${focus} zoom=${this.scale.toFixed(2)} kb=${r(keyboardHeight())} ` +
       `app=${r(document.querySelector(".app-container")?.getBoundingClientRect().height ?? -1)}
 ` +
       `${this.keyLog.hudLine()}
 ` +
-      this.hudFrames()
+      this.hudFrames() +
+      `
+${this.inkLatency.line()} desync=${this.renderer?.wetLowLatency() ?? "-"}`
     );
   }
 
@@ -11628,8 +12193,13 @@ export class InkSurface {
       }
       const started = now();
       this.drawWet();
-      const ink = now() - started;
+      const ended = now();
+      const ink = ended - started;
       this.hudInkMs = this.hudInkMs ? this.hudInkMs * 0.8 + ink * 0.2 : ink;
+      const shown = this.inkLatency.painted(ended);
+      if (shown !== null) {
+        this.win.requestAnimationFrame(() => this.inkLatency.framed(shown, now()));
+      }
       this.countFrame(t);
       this.scheduleHud();
     });
@@ -12528,7 +13098,10 @@ export class InkSurface {
     if (!this.textSource) return;
     const tool = this.toolState.tool;
     const snaps =
-      tool === "highlighter" || (tool === "tape" && this.toolState.tapeSnapText === true);
+      tool === "highlighter" ||
+      (tool === "tape" && this.toolState.tapeSnapText === true) ||
+      // The by-line lasso selects a PDF's text by dragging over it.
+      (tool === "select" && lassoModeFor(this.toolState) === "lines");
     if (!snaps) return;
     for (const index of [this.pageIndex, this.pageIndex + 1, this.pageIndex - 1]) {
       this.pageText(index);
@@ -13375,24 +13948,49 @@ export class InkSurface {
     let mode = lassoModeFor(this.toolState);
     let lines: LineBlock[] = [];
     let space: LassoDraft["space"] = null;
-    if (mode === "lines") {
-      // By line needs a line under the pen; elsewhere it drags a rectangle.
-      // From the margin next to a line, it inserts space instead.
-      const page = this.pageAt(box.index);
-      lines = page ? writingLines(page.backdrop, page.geometry) : [];
-      const target = page ? spaceTargetAt(lines, page.geometry.width, local.x, local.y) : null;
-      if (lines.length === 0) this.flashReadout(t("surface.readout.noLinesSelecting"));
-      if (target) {
-        space = {
-          target,
-          count: 0,
+    let boardSpace: LassoDraft["boardSpace"] = null;
+    const page = mode === "lines" ? this.pageAt(box.index) : undefined;
+    if (mode === "lines" && page) {
+      // What by line does here: `byLineStart` (canvas/lasso.ts).
+      const free = this.insertsFreeSpace(page);
+      lines = free ? [] : writingLines(page.backdrop, page.geometry);
+      const target = free ? null : spaceTargetAt(lines, page.geometry.width, local.x, local.y);
+      const start = byLineStart({
+        onText: this.pressSelectsText(box, local),
+        freeSpace: free,
+        inMargin: target !== null,
+        onLine: lineAt(lines, local.x, local.y) !== null,
+      });
+      if (start === "text") {
+        this.startTextDrag(box, local);
+        return;
+      }
+      if (start === "free-space") {
+        // A board, or paper with no lines, has no lines to select: by line, it
+        // inserts space from wherever the pen goes down (discussion #276).
+        boardSpace = {
+          axis: null,
+          amount: 0,
           plan: null,
-          text: t("surface.readout.dragToInsertOrRemove"),
+          text: t("surface.readout.boardDragToInsert"),
         };
-        this.flashReadout(space.text);
-      } else if (!lineAt(lines, local.x, local.y)) {
-        mode = "rect";
-        lines = [];
+        this.flashReadout(boardSpace.text);
+      } else {
+        if (lines.length === 0 && !this.hasPageText(box.index)) {
+          this.flashReadout(t("surface.readout.noLinesSelecting"));
+        }
+        if (start === "space" && target) {
+          space = {
+            target,
+            count: 0,
+            plan: null,
+            text: t("surface.readout.dragToInsertOrRemove"),
+          };
+          this.flashReadout(space.text);
+        } else if (start === "rect") {
+          mode = "rect";
+          lines = [];
+        }
       }
     }
     this.lasso = {
@@ -13404,9 +14002,50 @@ export class InkSurface {
       held: false,
       lines,
       space,
+      boardSpace,
     };
     // Held still, the press opens the Paste / Unlock bar instead.
     this.startPress(() => this.lassoHeld());
+  }
+
+  /**
+   * A by-line lasso came down on a PDF's printed text: it selects that text
+   * at once, as a PDF viewer's drag does, without the hold the other lassos
+   * need (`lassoHeld`). The pen sweeps on over the words
+   * (`sweepPressText`), and the lift brings the text's bar.
+   */
+  private startTextDrag(box: PageBox, local: Pt): void {
+    this.openPressMenu(box, local);
+    const text = this.pressMenu?.text;
+    if (!text) return;
+    // The bar waits for the lift, as it does while a held press sweeps.
+    text.sweeping = true;
+    this.syncActionBar();
+    const path = new LassoPath(box, LASSO_SPACING_PX / this.gestureScale);
+    path.add(local);
+    this.lasso = {
+      box,
+      mode: "lines",
+      path,
+      origin: { x: local.x, y: local.y },
+      to: { x: local.x, y: local.y },
+      held: true,
+      textDrag: true,
+      lines: [],
+      space: null,
+      boardSpace: null,
+    };
+  }
+
+  /** Whether a lasso's pen went further than a tap's slop from where it came down. */
+  private lassoTravelled(lasso: LassoDraft): boolean {
+    const { origin, to } = lasso;
+    return Math.hypot(to.x - origin.x, to.y - origin.y) * this.gestureScale >= TAP_SLOP_PX;
+  }
+
+  /** Whether page `index` has PDF text read and ready to select. */
+  private hasPageText(index: number): boolean {
+    return (this.pageText(index)?.lines.length ?? 0) > 0;
   }
 
   /** The pen moved: extend the loop (clamped to its page) and redraw it. */
@@ -13415,7 +14054,8 @@ export class InkSurface {
     const last = samples[samples.length - 1];
     if (!lasso || !last) return;
     if (lasso.held) {
-      // Held on PDF text: the pen sweeps on over words.
+      // Held on PDF text, or a by-line lasso on it: the pen sweeps on over words.
+      lasso.to = { x: last.x, y: last.y };
       this.sweepPressText(lasso.box, last);
       return;
     }
@@ -13426,6 +14066,10 @@ export class InkSurface {
     lasso.to = { x: last.x, y: last.y };
     if (lasso.space) {
       this.dragSpace(lasso, lasso.space);
+      return;
+    }
+    if (lasso.boardSpace) {
+      this.dragBoardSpace(lasso, lasso.boardSpace, moved);
       return;
     }
     const loop = this.lassoLoop(lasso);
@@ -13708,6 +14352,103 @@ export class InkSurface {
     this.flashReadout(space.text);
   }
 
+  /**
+   * A board's insert-space drag moved (discussion #276): once past a tap, it
+   * picks down or right by where it first heads; then the band it opens (or
+   * closes) is drawn across the whole board, with what will happen in the
+   * readout, planned again only when the whole steps change.
+   */
+  private dragBoardSpace(
+    lasso: LassoDraft,
+    space: NonNullable<LassoDraft["boardSpace"]>,
+    moved: number,
+  ): void {
+    if (!space.axis) {
+      if (moved <= TAP_SLOP_PX) {
+        this.flashReadout(space.text);
+        return;
+      }
+      const dx = Math.abs(lasso.to.x - lasso.origin.x);
+      const dy = Math.abs(lasso.to.y - lasso.origin.y);
+      space.axis = dx > dy ? "x" : "y";
+      space.amount = Number.NaN;
+    }
+    const page = this.pageAt(lasso.box.index);
+    if (!page) return;
+    const axis = space.axis;
+    const step = boardSpaceStep(page.backdrop);
+    const amount = Math.trunc((lasso.to[axis] - lasso.origin[axis]) / step) * step;
+    if (amount === space.amount) {
+      // Kept up while the pen is down, or the readout would fade mid-drag.
+      this.flashReadout(space.text);
+      return;
+    }
+    space.amount = amount;
+    space.plan = this.planBoardSpaceFor(lasso, axis);
+    const shift = space.plan?.amount ?? 0;
+    if (shift === 0) {
+      this.renderer?.clearWet();
+      this.requestZoomPaint();
+      space.text =
+        amount < 0
+          ? t("surface.readout.noEmptySpace")
+          : amount > 0 && !this.board
+            ? t("surface.readout.noRoomOnPage")
+            : t("surface.readout.boardDragToInsert");
+      this.flashReadout(space.text);
+      return;
+    }
+    const strip = boardSpaceStrip(
+      axis,
+      lasso.origin[axis],
+      shift,
+      page.geometry.width,
+      page.geometry.height,
+    );
+    this.renderer?.renderLasso(lasso.box.index, [
+      strip.minX,
+      strip.minY,
+      strip.maxX,
+      strip.minY,
+      strip.maxX,
+      strip.maxY,
+      strip.minX,
+      strip.maxY,
+    ]);
+    this.requestZoomPaint();
+    space.text = shift > 0 ? t("surface.command.insertSpace") : t("surface.command.removeSpace");
+    this.flashReadout(space.text);
+  }
+
+  /** A board insert from the lasso's pen-down to the pen along `axis`, on the board as it is now. */
+  private planBoardSpaceFor(lasso: LassoDraft, axis: SpaceAxis): BoardSpacePlan | null {
+    const page = this.pageAt(lasso.box.index);
+    if (!page) return null;
+    return planBoardSpace(
+      page,
+      axis,
+      lasso.origin[axis],
+      lasso.to[axis] - lasso.origin[axis],
+      boardSpaceStep(page.backdrop),
+      (text) => this.textBoxCoverOf(page.id, text).h,
+      // A board grows; a notebook page keeps its size, so nothing goes past its edge.
+      this.board ? undefined : axis === "x" ? page.geometry.width : page.geometry.height,
+    );
+  }
+
+  /**
+   * Whether the by-line lasso inserts space freely on `page` (discussion
+   * #276): on a board, and on notebook paper with no lines to select
+   * (blank, dots, squares, planners). Not on a PDF, whose notes belong by
+   * its printed words, nor on a cover.
+   */
+  private insertsFreeSpace(page: Page): boolean {
+    if (this.board) return true;
+    const kind = page.backdrop.kind;
+    if (kind === "pdf" || kind.startsWith("cover-")) return false;
+    return writingLines(page.backdrop, page.geometry).length === 0;
+  }
+
   /** How the insert-space planner sees this surface's pages. */
   private spaceLayout(): SpaceLayout {
     return {
@@ -13731,6 +14472,13 @@ export class InkSurface {
     this.activePage = null;
     this.stopPress();
     this.renderer?.clearWet();
+    // A by-line tap on a highlight takes the highlight, as any lasso's tap
+    // does; only a drag over it takes the words under it.
+    if (lasso?.textDrag && this.pressMenu?.ink && !this.lassoTravelled(lasso)) {
+      this.clearSelection();
+      this.tapSelect(lasso.box, lasso.origin, PEN_TAP_TOLERANCE_PX);
+      return;
+    }
     this.endTextSweep();
     // A held press has opened its bar already; the lift only lets go.
     if (!lasso || lasso.held) return;
@@ -13742,6 +14490,12 @@ export class InkSurface {
         count === 0
           ? null
           : planInsertSpace(this.doc, lasso.box.index, target, count, this.spaceLayout());
+      if (plan?.command) this.applyCommand(plan.command);
+      return;
+    }
+    // A board's insert that never moved was a tap: it selects, as any lasso's tap does.
+    if (lasso.boardSpace?.axis) {
+      const plan = this.planBoardSpaceFor(lasso, lasso.boardSpace.axis);
       if (plan?.command) this.applyCommand(plan.command);
       return;
     }
@@ -13765,6 +14519,14 @@ export class InkSurface {
       const span = this.lassoSpan(lasso);
       if (span) this.selectOnLines(lasso.box, lasso.lines, span);
       this.keepOutline(this.lassoLoop(lasso));
+      return;
+    }
+    // On a PDF's tab a lasso's job is the snippet: it always keeps the
+    // AREA (its outline and the drag-to-Notes chip), ink in it or not, and
+    // the ink inside is part of the picture, never a selection of its own.
+    if (this.snippetsOn) {
+      this.dropSelection();
+      this.showEmptyLasso(lasso.box, lasso.mode === "rect" ? loop : smoothPath(loop), lasso.to);
       return;
     }
     this.selectInside(lasso.box, loop);
@@ -13829,6 +14591,13 @@ export class InkSurface {
       if (ask)
         action(t("surface.selectionBar.askAi"), "messages-square", () => ask(box.index, bounds));
     }
+    // On a PDF's tab the area stays until the next press, to be dragged off
+    // onto the notes as a snippet (`startSnippetDrag`).
+    if (this.snippetsOn) {
+      this.addSnippetGrip(el, box, bounds);
+      this.emptyLasso = { el, timers: [] };
+      return;
+    }
     const win = this.surfaceEl.ownerDocument.defaultView ?? window;
     this.emptyLasso = {
       el,
@@ -13838,6 +14607,159 @@ export class InkSurface {
         win.setTimeout(() => this.dropEmptyLasso(), EMPTY_LASSO_MS + EMPTY_LASSO_FADE_MS),
       ],
     };
+  }
+
+  // --- Snippets: an area of a PDF's slide dragged onto the notes ---------------
+
+  /** Whether a lassoed area of this tab's slides can be dragged off as a snippet. */
+  private get snippetsOn(): boolean {
+    return this.fixedPages && this.callbacks.onSnippetStart !== undefined;
+  }
+
+  /**
+   * The lassoed area `bounds` (page px of `box`), inside the empty lasso's
+   * element `el`, as something to press: a drag past the slop carries it
+   * off as a snippet, a tap lets go of it.
+   */
+  private addSnippetGrip(el: HTMLElement, box: PageBox, bounds: Bounds): void {
+    const scale = this.unitScale;
+    const grip = el.createDiv({ cls: "goodobsidian-snippet-grip" });
+    const left = (box.x + bounds.minX) * scale;
+    const top = (box.y + bounds.minY) * scale;
+    const width = (bounds.maxX - bounds.minX) * scale;
+    const height = (bounds.maxY - bounds.minY) * scale;
+    grip.setCssStyles({
+      left: `${left.toFixed(1)}px`,
+      top: `${top.toFixed(1)}px`,
+      width: `${width.toFixed(1)}px`,
+      height: `${height.toFixed(1)}px`,
+    });
+    // Where it goes, as a mark: grip, arrow, Notes. Pressing it drags too.
+    const chip = el.createDiv({
+      cls: "goodobsidian-snippet-chip",
+      attr: { role: "button", "aria-label": t("surface.snippet.dragToNotes") },
+    });
+    iconInto(chip.createSpan({ cls: "goodobsidian-snippet-chip-icon" }), "grip", "");
+    iconInto(
+      chip.createSpan({ cls: "goodobsidian-snippet-chip-icon is-arrow" }),
+      "arrow-right",
+      "",
+    );
+    iconInto(chip.createSpan({ cls: "goodobsidian-snippet-chip-icon" }), "notebook-pen", "");
+    chip.setCssStyles({
+      left: `${(left + width / 2).toFixed(1)}px`,
+      top: `${(top + height).toFixed(1)}px`,
+    });
+    // The first time on this device, in words, under the chip.
+    if (this.callbacks.snippetHintOnce?.() === true) {
+      const hint = el.createDiv({
+        cls: "goodobsidian-snippet-hint",
+        text: t("surface.snippet.dragHint"),
+      });
+      hint.setCssStyles({
+        left: `${(left + width / 2).toFixed(1)}px`,
+        top: `${(top + height).toFixed(1)}px`,
+      });
+      // Any press anywhere ends it.
+      const doc = this.surfaceEl.ownerDocument;
+      const end = (): void => {
+        hint.remove();
+        doc.removeEventListener("pointerdown", end, true);
+      };
+      doc.addEventListener("pointerdown", end, true);
+    }
+    for (const target of [grip, chip])
+      bindSnippetGrip(target, {
+        blocked: () => this.snippetDrag !== null || this.callbacks.isLocked?.() === true,
+        drag: (event) => this.startSnippetDrag(event, box, bounds, el),
+        // A tap on the area lets go of it, as a tap beside it does.
+        tap: () => this.dropEmptyLasso(),
+      });
+  }
+
+  /**
+   * Carry the area `area` (page px of `box`) off as a snippet, from pointer
+   * `event`: the host draws its picture for the ghost, and hears where it
+   * goes (`onSnippetMove`) and where it lands (`endSnippetDrag`). `hold` is
+   * a lassoed area's loop, hidden meanwhile. The slide's ink stays where it
+   * is: a snippet is a picture of the slide, never a move.
+   */
+  private startSnippetDrag(
+    event: PointerEvent,
+    box: PageBox,
+    area: Bounds,
+    hold: HTMLElement | null,
+  ): void {
+    const start = this.callbacks.onSnippetStart;
+    if (!start || this.snippetDrag) return;
+    const picture = start(box.index, area, this.deviceScale);
+    if (hold && this.emptyLasso?.el === hold) {
+      // Kept out of `dropEmptyLasso`'s reach while it is carried.
+      const win = this.surfaceEl.ownerDocument.defaultView ?? window;
+      for (const timer of this.emptyLasso.timers) win.clearTimeout(timer);
+      this.emptyLasso = null;
+    }
+    hold?.addClass("is-carried");
+    const scale = this.unitScale;
+    const drag = new SnippetDrag(
+      this.surfaceEl,
+      event.pointerId,
+      event.clientX,
+      event.clientY,
+      (area.maxX - area.minX) * scale,
+      (area.maxY - area.minY) * scale,
+      picture,
+      {
+        move: (x, y) => {
+          const over = this.callbacks.onSnippetMove?.(x, y) === true;
+          this.sizeSnippetGhost(x, y);
+          return over;
+        },
+        end: (x, y, cancelled) => this.endSnippetDrag(x, y, cancelled),
+      },
+    );
+    this.snippetDrag = { drag, session: this.session, hold };
+  }
+
+  /**
+   * Over the notes (another session than the one the drag began on), the
+   * ghost takes exactly the size the picture will land at, on the page
+   * under client point (x, y) (the page in view when it is off the pages),
+   * at this zoom; over the PDF's tab it keeps the area's own size.
+   */
+  private sizeSnippetGhost(clientX: number, clientY: number): void {
+    const held = this.snippetDrag;
+    if (!held || this.session === held.session) return;
+    const at = this.toLayout(clientX, clientY);
+    const index = boxAtPoint(this.pageLayout, at.x, at.y)?.index ?? this.currentPage;
+    const size = this.callbacks.snippetLanding?.(index);
+    if (!size) return;
+    const scale = this.unitScale;
+    held.drag.landingSize(size.w * scale, size.h * scale);
+  }
+
+  /**
+   * The snippet's pointer lifted at client point (x, y): dropped on a page
+   * when another session (the notes) is shown by now, else nothing, and a
+   * lassoed area comes back where it was.
+   */
+  private endSnippetDrag(clientX: number, clientY: number, cancelled: boolean): void {
+    const held = this.snippetDrag;
+    this.snippetDrag = null;
+    if (!held) return;
+    let drop: { pageIndex: number; x: number; y: number } | null = null;
+    if (!cancelled && this.session !== held.session) {
+      const at = this.toLayout(clientX, clientY);
+      const box = boxAtPoint(this.pageLayout, at.x, at.y);
+      if (box) drop = { pageIndex: box.index, ...this.toPage(box, at) };
+    }
+    if (held.hold) {
+      if (this.session === held.session && !this.emptyLasso) {
+        held.hold.removeClass("is-carried");
+        this.emptyLasso = { el: held.hold, timers: [] };
+      } else held.hold.remove();
+    }
+    this.callbacks.onSnippetEnd?.(drop);
   }
 
   /** Take an empty lasso's loop and button away (`showEmptyLasso`). */
@@ -14618,6 +15540,8 @@ export class InkSurface {
     const image = crop || group ? null : this.liveImageSelection();
     const connector = crop || group || image ? null : this.liveConnector();
     const press = crop || group || image || connector ? null : this.pressMenu;
+    // A snippet's chip steps aside while its picture is selected or cropped.
+    this.slideDots.setAside(crop?.image ?? image?.image ?? null);
     const pageId =
       crop?.pageId ?? group?.pageId ?? image?.pageId ?? connector?.pageId ?? press?.pageId ?? "";
     const box = this.boxForPage(pageId);
@@ -14733,6 +15657,23 @@ export class InkSurface {
     const can = (to: ImageLayer): boolean =>
       page !== undefined && canReorderImage(page, sel.image, to);
     const actions = this.pictureActions(sel, can);
+    const slide = sel.image.slide;
+    if (slide && !this.fixedPages && this.callbacks.onOpenSlide) {
+      // A snippet: the way back to its slide, in place of the chip that steps
+      // aside while it is selected (slide-dots.ts).
+      actions.unshift({
+        id: "open-slide",
+        icon: "presentation",
+        label: t("surface.snippet.openSlideOf", {
+          page: slide.page + 1,
+          name: this.callbacks.slideTabName?.(slide.tab) ?? "PDF",
+        }),
+        group: "crop",
+        bar: true,
+        menu: "none",
+        run: () => this.callbacks.onOpenSlide?.(slide),
+      });
+    }
     const note = sel.image.sticky;
     if (!note) return actions;
     // A sticky note is paper, not a picture: its colour in place of the
@@ -15064,6 +16005,17 @@ export class InkSurface {
         run: () => this.copyText(highlighted),
       });
     }
+    // Translate the highlighted PDF text, or the selected text boxes' text.
+    const boxText = sel.textBoxes
+      .map((box) => box.text.trim())
+      .filter((text) => text !== "")
+      .join("\n\n");
+    const loneBox =
+      sel.textBoxes.length === 1 && selectedCount(sel) === 1 ? sel.textBoxes[0] : undefined;
+    const translate = highlighted
+      ? this.translateAction(sel.pageId, heading, highlighted, { fromPdf: true })
+      : this.translateAction(sel.pageId, heading, boxText, { textBox: loneBox });
+    if (translate) actions.push(translate);
     // The word check's card, for any word, underlined or not.
     const correct = this.correctWordAction(index, sel.strokes);
     if (menu.handwriting && correct) actions.push(correct);
@@ -15382,8 +16334,151 @@ export class InkSurface {
         this.clearSelection();
       },
     };
+    const picked = text !== null && text.pick.rects.length > 0;
+    // Marked as the highlighter marks it when it snaps to the text (FineNotes#159).
+    const highlight: SelectionAction = {
+      id: "highlight-text",
+      icon: "highlighter",
+      label: t("surface.selectionBar.highlight"),
+      group: "press",
+      bar: true,
+      menu: "none",
+      enabled: picked,
+      run: () => {
+        if (text) this.highlightPick(press.pageId, text.pick);
+        this.clearSelection();
+      },
+    };
+    const own: SelectionAction[] = [copy, highlight];
+    // Ask AI about it, sent as a picture of the lines, as a lasso's selection is.
+    const ask = this.callbacks.canAskAi?.() ? this.callbacks.onAskAboutSelection : undefined;
+    const bounds = text ? pickBounds(text.pick) : null;
+    const index = this.doc.pages.findIndex((page) => page.id === press.pageId);
+    if (ask && bounds && index >= 0) {
+      own.push({
+        id: "ask-ai",
+        icon: "messages-square",
+        label: t("surface.selectionBar.askAi"),
+        group: "press",
+        bar: true,
+        menu: "none",
+        run: () => {
+          this.clearSelection();
+          ask(index, padBounds(bounds, TEXT_ASK_PAD_PX));
+        },
+      });
+    }
     const rest = this.pressActions(press).filter((action) => action.id !== "select-page");
-    return [copy, ...rest.map((action) => ({ ...action, bar: false, menu: "row" as const }))];
+    // Translate beside Copy, as iPadOS offers it over selected text.
+    const translate =
+      text && text.pick.text
+        ? this.translateAction(press.pageId, rectsBounds(text.pick.rects), text.pick.text, {
+            fromPdf: true,
+            group: "press",
+            bar: true,
+            menu: "none",
+            showLabel: true,
+          })
+        : null;
+    const [first, ...others] = own;
+    return [
+      first,
+      ...(translate ? [translate] : []),
+      ...others,
+      ...rest.map((action) => ({ ...action, bar: false, menu: "row" as const })),
+    ];
+  }
+
+  /**
+   * Translate: the card for `text`, opened under `bounds` (page space) on
+   * page `pageId`. Its Add as text box puts the translation under them;
+   * `textBox` (a lone selected box) adds Replace. Null when the view does
+   * not translate or there is no text.
+   */
+  private translateAction(
+    pageId: string,
+    bounds: Bounds | null,
+    text: string,
+    options: Partial<SelectionAction> & { fromPdf?: boolean; textBox?: TextBoxElement } = {},
+  ): SelectionAction | null {
+    // Offered on any selected text whether or not the Translate tool is on
+    // the bar: hiding the tool hides only the way in without a selection
+    // (Joost, 2026-11-22). Never gate this on `toolOff` or `itemOff`.
+    const onTranslate = this.callbacks.onTranslate;
+    if (!onTranslate || !text.trim()) return null;
+    const { fromPdf, textBox, ...extra } = options;
+    return {
+      id: "translate",
+      icon: "languages",
+      label: t("surface.selectionBar.translate"),
+      group: "edit",
+      ...extra,
+      run: () => {
+        const index = this.doc.pages.findIndex((page) => page.id === pageId);
+        const box = this.boxForPage(pageId);
+        let at: { x: number; y: number; top: number } | undefined;
+        if (box && bounds) {
+          const x = box.x + (bounds.minX + bounds.maxX) / 2;
+          const bottom = this.toClient({ x, y: box.y + bounds.maxY });
+          at = { x: bottom.x, y: bottom.y, top: this.toClient({ x, y: box.y + bounds.minY }).y };
+        }
+        const below = bounds ? { x: bounds.minX, y: bounds.maxY + 12 } : null;
+        // The window takes the selection bar's place, as Copy text lets go too.
+        this.clearSelection();
+        onTranslate({
+          text: fromPdf ? joinRunOnLines(text) : text,
+          context: index >= 0 ? this.pageWords(index) : undefined,
+          at,
+          onInsert:
+            index >= 0 && below && !this.callbacks.isLocked?.()
+              ? (out) => this.addPastedText(index, below, out)
+              : undefined,
+          onReplace:
+            textBox && !this.callbacks.isLocked?.()
+              ? (out) => this.replaceTextBoxText(pageId, textBox.id, out)
+              : undefined,
+        });
+      },
+    };
+  }
+
+  /**
+   * The words on page `index`: its PDF text, then its text boxes'. The
+   * Translate window tells a short selection's language from them.
+   */
+  private pageWords(index: number): string {
+    const parts: string[] = [];
+    const layout = this.pageText(index);
+    if (layout) parts.push(rangeText(layout, { start: 0, end: layout.chars.length }));
+    for (const box of this.pageAt(index)?.textBoxes ?? []) parts.push(box.text);
+    return parts.join(" ").trim();
+  }
+
+  /** A text box's text replaced by `text`: one undo step. */
+  private replaceTextBoxText(pageId: string, id: string, text: string): void {
+    const page = this.doc.pages.find((p) => p.id === pageId);
+    if (!page?.textBoxes.some((box) => box.id === id)) return;
+    this.history.push(this.doc, new SetTextBoxText(pageId, id, text));
+    this.syncTextBoxes();
+    this.changed([pageId]);
+  }
+
+  /** Highlight `pick` on page `pageId` in the highlighter's colour: one stroke a line, one undo step. */
+  private highlightPick(pageId: string, pick: TextPick): void {
+    const box = this.boxForPage(pageId);
+    const page = box ? this.pageAt(box.index) : undefined;
+    if (!box || !page) return;
+    const state = this.toolState;
+    const color = highlighterColor(state.penType, state.color, state.penInks ?? {});
+    const strokes = textHighlightStrokes(pick.rects, color, () => this.strokeIds.next());
+    if (strokes.length === 0) return;
+    const command = highlightText(page, strokes, this.clock());
+    this.history.push(this.doc, command);
+    for (const stroke of strokes) {
+      this.strokeIndex.add(page.id, stroke);
+      this.renderer?.appendCommittedStroke(box.index, stroke, this.inkPressure);
+    }
+    this.inkChanged([page.id]);
   }
 
   /** The word of page `index`'s PDF text at page point `p`, or null when there is none. */
@@ -15498,8 +16593,8 @@ export class InkSurface {
         run: () => this.pasteHere(press.pageId, press.at),
       },
     ];
-    // A practice file takes the pen alone (`practice.ts`).
-    if (this.practice) return actions;
+    // A practice file takes the pen alone (`practice.ts`); a PDF's tab takes ink only.
+    if (this.practice || this.fixedPages) return actions;
     // Held on handwriting: its word's card comes first.
     const index = page ? this.doc.pages.indexOf(page) : -1;
     const correct = press.ink
@@ -15594,6 +16689,45 @@ export class InkSurface {
             : t("surface.notice.nothingToPaste"),
       );
     });
+  }
+
+  /**
+   * Text dropped at a client point (discussion #288): a text box whose
+   * corner is the drop, on the page or board under it, else on the page in
+   * view; one undo step, selected, as a paste makes. False when the drop is
+   * not this surface's to take: a practice file or fixed pages take
+   * handwriting only, a protected note refuses it, and a text box being
+   * typed in keeps its own drops.
+   */
+  dropText(clientX: number, clientY: number, text: string): boolean {
+    if (!text || this.practice !== null || this.fixedPages || this.cropping) return false;
+    if (this.editingTextView() || this.callbacks.isLocked?.()) return false;
+    const layoutAt = this.toLayout(clientX, clientY);
+    const box = boxAtPoint(this.pageLayout, layoutAt.x, layoutAt.y);
+    if (box) {
+      this.addPastedText(box.index, this.toPage(box, layoutAt), text);
+      return true;
+    }
+    // Between pages: the page in view, as a paste does.
+    const region = this.visibleRegion(this.pageIndex);
+    if (!region) return false;
+    const at = { x: (region.minX + region.maxX) / 2, y: (region.minY + region.maxY) / 2 };
+    this.addPastedText(this.pageIndex, at, text);
+    return true;
+  }
+
+  /**
+   * `text` as a new text box in the middle of the page in view, selected,
+   * as a pasted text lands (the Translate window's Add as text box). False
+   * when the notebook is locked or no page is in view.
+   */
+  addTextInView(text: string): boolean {
+    if (this.callbacks.isLocked?.() || !text.trim()) return false;
+    const region = this.visibleRegion(this.pageIndex);
+    if (!region) return false;
+    const at = { x: (region.minX + region.maxX) / 2, y: (region.minY + region.maxY) / 2 };
+    this.addPastedText(this.pageIndex, at, text);
+    return true;
   }
 
   /** Text from the system clipboard as a new text box at `at`, selected: one undo step. */
@@ -15900,11 +17034,10 @@ export class InkSurface {
       event.preventDefault();
       return true;
     }
-    const onImage = this.imagesShown && !this.practice ? this.callbacks.onPasteImage : undefined;
+    const inkOnly = this.practice !== null || this.fixedPages;
+    const onImage = this.imagesShown && !inkOnly ? this.callbacks.onPasteImage : undefined;
     const file = onImage ? imageFileOf(event.clipboardData) : null;
-    const text = this.practice
-      ? ""
-      : cleanPastedText(event.clipboardData?.getData("text/plain") ?? "");
+    const text = inkOnly ? "" : cleanPastedText(event.clipboardData?.getData("text/plain") ?? "");
     const systemFirst =
       (file !== null || text !== "") &&
       (clipboard.leftSinceCopy || !clipboard.canPaste(this.imagesShown));
@@ -16158,13 +17291,41 @@ export class InkSurface {
     // Not built yet (the first change can come from the constructor's load).
     if (!this.spaceHandlesEl || !this.pageLayout) return;
     let used = 0;
-    if (this.toolState.tool === "select" && lassoModeFor(this.toolState) === "lines") {
+    const board = this.board ? this.boardSpaceColumn() : null;
+    if (board) {
+      // A board has no margin: one column down the view's left edge, kept
+      // there as it scrolls, its marks a step of the paper apart (#276).
+      let el = this.spaceHandleEls[0];
+      if (!el) {
+        el = this.spaceHandlesEl.createDiv({ cls: "goodobsidian-space-handle" });
+        this.spaceHandleEls.push(el);
+      }
+      el.removeClass("is-hidden");
+      el.setCssStyles({
+        left: `${board.left}px`,
+        top: `${board.top}px`,
+        height: `${board.height}px`,
+      });
+      el.setCssProps({ "--gob-space-pitch": `${board.pitch}px` });
+      used = 1;
+    } else if (this.toolState.tool === "select" && lassoModeFor(this.toolState) === "lines") {
       const scale = this.unitScale;
       for (const box of this.pageLayout.boxes) {
         const page = this.pageAt(box.index);
         if (!page) continue;
         const lines = writingLines(page.backdrop, page.geometry);
-        for (const column of spaceHandles(lines, page.geometry.width)) {
+        const columns = spaceHandles(lines, page.geometry.width);
+        if (lines.length === 0 && this.insertsFreeSpace(page)) {
+          // Paper with no lines: one column in the margin, a step of the paper apart (#276).
+          const pitch = boardSpaceStep(page.backdrop);
+          columns.push({
+            x: (page.geometry.width * MARGIN_SHARE) / 2,
+            top: 0,
+            pitch,
+            lines: Math.floor(page.geometry.height / pitch),
+          });
+        }
+        for (const column of columns) {
           let el = this.spaceHandleEls[used];
           if (!el) {
             el = this.spaceHandlesEl.createDiv({ cls: "goodobsidian-space-handle" });
@@ -16188,6 +17349,30 @@ export class InkSurface {
   }
 
   /**
+   * Where a board's insert-space column goes while the by-line lasso is the
+   * tool, in the paper element's px: a screen inset from the view's left
+   * edge, from a step above the view's top to a step below its bottom,
+   * starting on a step of the paper. Null off a board, or with another tool.
+   */
+  private boardSpaceColumn(): { left: number; top: number; height: number; pitch: number } | null {
+    if (this.toolState.tool !== "select" || lassoModeFor(this.toolState) !== "lines") return null;
+    const page = this.boardPage;
+    const box = this.pageLayout.boxes[0];
+    if (!page || !box) return null;
+    const scale = this.unitScale;
+    const pitch = boardSpaceStep(page.backdrop) * scale;
+    const origin = box.y * scale;
+    const y = this.scroller.position.y;
+    const top = origin + Math.floor((y - origin) / pitch) * pitch;
+    return {
+      left: -this.offsetX + BOARD_SPACE_INSET_PX,
+      top,
+      height: Math.ceil((y + this.cssH - top) / pitch + 1) * pitch,
+      pitch,
+    };
+  }
+
+  /**
    * A practice file says what it was written on: the device, once, and the
    * kind of pointer of the latest stroke (training leaves out mouse ink).
    */
@@ -16201,6 +17386,7 @@ export class InkSurface {
   /** The lasso's type changed (the toolbar wrote it into the tool state): its page marks follow. */
   refreshLassoChrome(): void {
     this.syncSpaceHandles();
+    this.prefetchText();
   }
 
   /** One ribbon at the page's left edge for each section, level with its heading. */
@@ -16361,6 +17547,9 @@ export class InkSurface {
     focus: SearchFocus | null = null,
   ): void {
     const had = this.searchHits !== null;
+    // A match's own ink is one of the lit words: the same ink, or added.
+    let focusInk: string[] | null = null;
+    if (focus && "ink" in focus) ({ words, focus: focusInk } = withFocusInk(words, focus.ink));
     // The words in reading order, so `focus.words` counts as the results list does.
     const onPage = this.doc.pages.find((p) => p.id === pageId);
     if (onPage && words.length > 1) {
@@ -16369,6 +17558,7 @@ export class InkSurface {
       );
       words = readingOrder(spots).map((i) => words[i]);
     }
+    if (focus && "ink" in focus) focus = focusInk ? { words: words.indexOf(focusInk) } : null;
     this.searchHits =
       pageId !== null && (words.length > 0 || boxes.length > 0 || printed.length > 0)
         ? { pageId, words, boxes, printed, focus }
@@ -16437,6 +17627,8 @@ export class InkSurface {
       const box = page.textBoxes.find((b) => b.id === focus.box);
       return box ? { x: box.x + box.w / 2, y: box.y } : null;
     }
+    // A match's ink was made one of `words` when the hits were set.
+    if (!("printed" in focus)) return null;
     const rect = focus.printed[0];
     return rect ? { x: rect.x + rect.w / 2, y: rect.y } : null;
   }
@@ -16798,6 +17990,13 @@ export class InkSurface {
       this.commentMarkers[i].addClass("is-hidden");
     }
     this.commentMarkersEl.toggleClass("is-hidden", targets.length === 0);
+    // Snippets' link dots move with the same layouts and edits.
+    this.slideDots.sync(
+      this.pageLayout.boxes,
+      (index) => this.pageAt(index),
+      scale,
+      !this.fixedPages && this.callbacks.onOpenSlide !== undefined,
+    );
   }
 
   private syncLockBadges(): void {
@@ -17630,6 +18829,19 @@ export class InkSurface {
     if (!drag.lifted && moved < IMAGE_DRAG_SLOP_PX) return;
     const box = this.boxForPage(drag.selection.pageId);
     if (!box) return;
+    // On a PDF's tab the selection's body is dragged off as a snippet of
+    // the lassoed area, its ink in the picture and left where it is.
+    if (!drag.lifted && !drag.scale && !drag.turn && !drag.copied && this.snippetsOn) {
+      const area = this.selectionArea;
+      this.endGroupDrag(false);
+      this.startSnippetDrag(
+        event,
+        box,
+        area && area.pageId === drag.selection.pageId ? area.loop : drag.bounds,
+        null,
+      );
+      return;
+    }
     this.moveGroupDrag(drag, box, this.pagePoint(box, event.clientX, event.clientY));
   };
 
@@ -20347,7 +21559,8 @@ export class InkSurface {
     if (this.imageDrag) {
       // A second finger beside the one dragging it: a turn of the picture.
       if (finger && this.imageDrag.finger === true) this.addFrameFinger(this.imageFrameEl, event);
-      this.imageDrag.crowded = true;
+      // The second finger may have begun a turn, which takes the drag over.
+      if (this.imageDrag) this.imageDrag.crowded = true;
       return;
     }
     const box = this.boxForPage(sel.pageId);
@@ -22167,6 +23380,19 @@ function selectablesOf(page: Page): ElementLists {
 }
 
 /** How many elements a selection holds. */
+/** The page-space bounds of a text pick's line boxes, or null for none. */
+function rectsBounds(
+  rects: readonly { x: number; y: number; w: number; h: number }[],
+): Bounds | null {
+  if (rects.length === 0) return null;
+  return {
+    minX: Math.min(...rects.map((r) => r.x)),
+    minY: Math.min(...rects.map((r) => r.y)),
+    maxX: Math.max(...rects.map((r) => r.x + r.w)),
+    maxY: Math.max(...rects.map((r) => r.y + r.h)),
+  };
+}
+
 function selectedCount(sel: ElementLists): number {
   return (
     sel.strokes.length +

@@ -12,6 +12,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DocumentLayout } from "../../src/canvas/page-layout";
+import { panTileBytes } from "../../src/canvas/tile-grid";
 import { Renderer, overscanLead } from "../../src/canvas/renderer";
 import { type InkDocument, blankPage, emptyDocument } from "../../src/model/document";
 import { DrawLog, LoggedPath2D } from "./draw-log";
@@ -215,5 +216,79 @@ describe("pages made whole ahead of a turn", () => {
   it("stops at the budget and says there is more", () => {
     const { renderer, doc } = row();
     expect(renderer.prefetch(doc, false, -1, [1])).toBe(true);
+  });
+
+  it("makes room from its own document only: another's tiles stay warm (PDF tabs)", () => {
+    const { renderer, doc } = row();
+    // The notes: one huge page whose tiles fill the budget.
+    const notes = emptyDocument(800);
+    notes.pages = [{ ...blankPage("n0", { width: 4200, height: 3200 }) }];
+    renderer.setLayout({
+      boxes: [{ index: 0, id: "n0", x: 0, y: 0, width: 4200, height: 3200 }],
+      width: 4200,
+      height: 3200,
+      direction: "vertical",
+      fitWidth: 4200,
+    });
+    renderer.prefetch(notes, false, 1000, [0]);
+    const warm = renderer.stats().tileBytes;
+    expect(warm).toBeGreaterThan(40 * 1024 * 1024);
+    // Back on the tab: its next page wants room, and gets none of the notes'.
+    renderer.setLayout(ROW);
+    renderer.prefetch(doc, false, 1000, [1]);
+    expect(renderer.stats().tileBytes).toBeGreaterThanOrEqual(warm);
+  });
+
+  it("keeps room for more panes' worth of tiles while warm viewports are asked for", () => {
+    const { renderer, doc } = row();
+    const notes = emptyDocument(800);
+    notes.pages = [{ ...blankPage("n0", { width: 4200, height: 12800 }) }];
+    renderer.setLayout({
+      boxes: [{ index: 0, id: "n0", x: 0, y: 0, width: 4200, height: 12800 }],
+      width: 4200,
+      height: 12800,
+      direction: "vertical",
+      fitWidth: 4200,
+    });
+    renderer.resize(4000, 3000, 1);
+    const fill = (): number => {
+      renderer.prefetch(notes, false, 1000, [0]);
+      return renderer.stats().tileBytes;
+    };
+    const plain = fill();
+    renderer.setWarmViewports(2);
+    expect(fill()).toBeGreaterThan(plain);
+    renderer.setWarmViewports(0);
+    // Back to 2.5 panes of 4000 x 3000 at once.
+    expect(renderer.stats().tileBytes).toBeLessThanOrEqual(2.5 * 4000 * 3000 * 4);
+    void doc;
+  });
+  it("keeps every tile a pan can come back to where there is memory for it (#298)", () => {
+    const { renderer } = row();
+    const notes = emptyDocument(800);
+    notes.pages = [{ ...blankPage("n0", { width: 6400, height: 12800 }) }];
+    renderer.setLayout({
+      boxes: [{ index: 0, id: "n0", x: 0, y: 0, width: 6400, height: 12800 }],
+      width: 6400,
+      height: 12800,
+      direction: "vertical",
+      fitWidth: 6400,
+    });
+    // An Android tablet's screen, overscan on as on every phone and tablet.
+    renderer.useOverscan(true);
+    renderer.resize(1280, 800, 2.5);
+    const screen = 3200 * 2000 * 4;
+    const fill = (): number => {
+      renderer.prefetch(notes, false, 1000, [0]);
+      return renderer.stats().tileBytes;
+    };
+    expect(fill()).toBeLessThanOrEqual(2.5 * screen);
+    renderer.setPanRoom(true);
+    const roomy = fill();
+    // More than the dry layer alone touches, which 2.5 screens did not hold.
+    expect(roomy).toBeGreaterThan(2.5 * screen);
+    expect(roomy).toBeLessThanOrEqual(panTileBytes(3200, 2000, 480 + 512, 300 + 512));
+    renderer.setPanRoom(false);
+    expect(renderer.stats().tileBytes).toBeLessThanOrEqual(2.5 * screen);
   });
 });

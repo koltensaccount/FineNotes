@@ -24,6 +24,15 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **Words:** api key, key, set up ai, provider, openai, anthropic, claude, gpt, gemini, google, openrouter, model, ai service, token, secret, configure ai
 - **Settings:** `llmVendor`, `llmModel`, `llmModels`, `apiKeys`, `llmBaseUrl`
 
+### A cheaper model for transcription, and a fallback model
+
+- **Id:** `aiModelChoice`
+- **What:** Transcription can use a model of its own: type it in "Page transcription model" (empty uses "AI model"), so automatic transcription can run on a cheap model while Ask AI keeps a stronger one. It can also use another service with its own API key: pick it in "Transcribe pages with" (for example Gemini for transcription while Ask uses Claude), then add that service's key in the row that appears below. "Fallback model" is tried once when the model is turned down for its rate limit or quota (also when OpenRouter credits run out or Claude is overloaded), for transcription and Ask alike; a wrong key or any other error is shown at once. The fallback is a model of the AI service, so it is not used when transcription has a service of its own. Each service remembers its own models.
+- **Where:** Settings › AI › Transcribing › "Transcribe pages with", "Page transcription model" and "<Service> API key for transcription". Settings › AI › Service › "Fallback model".
+- **Notes:** In Ask AI, the fallback takes over only when the first request of an answer is turned down; once the notebook's tools have run, the answer stays with the model that began it.
+- **Words:** transcription model, cheaper model, different model, second model, fallback model, backup model, rate limit, quota, 429, too many requests, out of credits, free model
+- **Settings:** `transcribeVendor`, `llmTranscribeModel`, `llmFallbackModel`
+
 ### Where API keys are stored
 
 - **Id:** `apiKeyStorage`
@@ -75,7 +84,7 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 - **Where:** Toolbar › AI › "Ask…". Send with the round arrow button or Return; Shift+Return adds a new line.
 - **Notes:** Needs an AI service with a key (or your own endpoint) and internet. Greyed out with the reason when not set up, and "This page is empty" / "This notebook is empty" when nothing is on any page.
 - **Words:** ask ai, chat, chatgpt, claude, question, explain, summarize, summarise, tutor, help me study, ai chat, ask about my notes, conversation
-- **Settings:** `llmVendor`, `llmModel`, `askLayout`, `askSaveChats`, `askVaultScope`, `askShowCost`
+- **Settings:** `llmVendor`, `llmModel`, `askLayout`, `askVaultScope`, `askShowCost`
 
 ### Pick which pages Ask AI sees
 
@@ -121,18 +130,18 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 ### Show Ask AI as a sidebar or a window
 
 - **Id:** `askLayout`
-- **What:** The chat can be a window over the notebook or a sidebar on the left of the page, which pushes the page aside and closes the page sidebar. The choice is remembered.
+- **What:** The chat can be a window over the notebook or a sidebar on the left of the page, which pushes the page aside and closes the page sidebar. The window is moved by its title bar and sized from its bottom-right corner, and opens where it was left on this device. The choice is remembered. In a text note, Ask AI is always the window.
 - **Where:** Ask › "Show in the sidebar" / "Show as a window" button in the chat's top bar.
-- **Words:** sidebar, side panel, window, dock, layout, beside the page
+- **Words:** sidebar, side panel, window, dock, layout, beside the page, move, resize, drag
 - **Settings:** `askLayout`
 
-### Save Ask AI chats and reopen them
+### Where Ask AI chats are kept, and deleting one
 
 - **Id:** `askSaveChats`
-- **What:** "Save chat" keeps the conversation as a Markdown note, by default in an "AI chats" folder next to the notebook; while saved it updates as you go, and tapping again stops saving (the note goes to the trash). "Chats" lists this notebook's saved chats to continue one. "New chat" starts fresh. The Save chat choice is remembered for new chats.
-- **Where:** Ask › top bar: Save chat (bookmark icon), Chats (history icon), New chat. Folder: Settings › Files and folders › "Folder for AI chats".
-- **Words:** save chat, chat history, previous chats, conversation history, keep chat, reopen chat
-- **Settings:** `askSaveChats`, `chatsFolder`
+- **What:** Every Ask AI conversation is kept as a Markdown note in the "AI chats" folder of the notebook or text note it was about, and updates as you go. Open or delete one there, as any file; the chat has no save or history buttons. "New chat" starts fresh.
+- **Where:** The notebook's (or note's) "AI chats" folder in the file list. Folder: Settings › Files and folders › "Folder for AI chats".
+- **Words:** save chat, chat history, previous chats, conversation history, keep chat, delete chat, AI chats folder
+- **Settings:** `chatsFolder`
 
 ### What Ask AI can read (this notebook, its folder, the whole vault)
 
@@ -239,10 +248,10 @@ Part of FineNotes' guide (see `README.md` here): what Ask AI looks up to answer 
 ### Transcribe automatically after writing
 
 - **Id:** `autoRecognize`
-- **What:** About 30 seconds after you stop writing, the page you are on is transcribed by cloud AI in the background, and only when it changed. It works only after you have agreed to send once (run a transcription by hand first).
+- **What:** A page you wrote on is transcribed by cloud AI in the background once you are done with it: a few seconds after you turn to another page, or after 5 minutes without writing on it, and only when it changed. A page still waiting when you close the notebook is read when you open it again. To have the page in view transcribed right away, use AI menu › "Transcribe this page" (or the command of that name); without an AI set up, the same entry lets you type the page's transcript yourself. Every page's transcription is listed in the sidebar's Files tab under Transcripts (where it came from: AI, this device, typed or edited by you); tap one to read it, edit it or go to its page. A transcript you typed or edited is never overwritten: a new transcription waits beside it, marked with a dot, and you keep one of the two there. After a failure (a spent quota, a wrong key, no connection) it says so once and waits 10 minutes, then longer, before trying again. It works only after you have agreed to send once (run a transcription by hand first).
 - **Where:** Settings › AI › Transcribing › "Handwriting recognition" › "Cloud AI, by itself after you write".
 - **Notes:** needs a key and internet.
-- **Words:** auto transcribe, automatic recognition, background transcription, recognize automatically
+- **Words:** auto transcribe, automatic recognition, background transcription, recognize automatically, transcribe now, transcribe this page, when does it transcribe, where is my transcript, transcript list, compare transcripts, type transcript, transcribe by hand, manual transcription, overwritten transcript
 - **Settings:** `autoRecognize`, `recognitionProviderId`
 
 ### The text layer (transcription, links, tags)

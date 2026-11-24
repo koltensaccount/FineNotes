@@ -6,6 +6,7 @@
  */
 
 import { setIcon } from "obsidian";
+import { dragRange } from "./range-drag";
 import { blankPage } from "../model/document";
 import {
   DEFAULT_WRITING_GUIDES,
@@ -109,6 +110,7 @@ export function renderWritingGuideControls(
     input.min = String(min);
     input.max = String(max);
     input.step = String(step);
+    dragRange(input);
     input.addEventListener("input", () => host.configure({ [key]: Number(input.value) / factor }));
     sliders.set(key, { input, value: val });
   }

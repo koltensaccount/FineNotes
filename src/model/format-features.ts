@@ -42,6 +42,20 @@ import { SCHEMA_VERSION } from "../constants";
  *   notebook with a board among its pages (`Page.board`) (discussion #160,
  *   `model/board.ts`); an older build would read them as pages metres long
  *   and drop the board flags on its save.
+ * - `pdf-tabs`: PDFs kept beside the notes as tabs, with the ink written on
+ *   them (`InkDocument.beside`) or a snippet that remembers its slide (`ImageElement.slide`)
+ *   (`model/beside-pdfs`); an older build would drop the tabs and their ink
+ *   on its next save.
+ * - `device-pages`: the notebook keeps its pages in one file per page per
+ *   device (`model/device-pages`, FineNotes#274); the payload is only the
+ *   notebook as it was when it moved there. Even a build that knows the
+ *   feature never decodes it as the whole notebook: a save from it would put
+ *   the old pages back over every page written since. It carries the
+ *   notebook's id, `device-pages=<id>`, which names its page folder: the id
+ *   lives in the label, not the frontmatter, because two devices moving one
+ *   notebook at once make the same edit, and Obsidian Sync's merge applies
+ *   an edit both sides made twice. Twice in a label is harmless (the first
+ *   id counts); twice in the frontmatter breaks Obsidian's reading of it.
  */
 export const FORMAT_FEATURES = [
   "sticky",
@@ -52,6 +66,8 @@ export const FORMAT_FEATURES = [
   "shape-content",
   "text-turn",
   "boards",
+  "pdf-tabs",
+  "device-pages",
 ] as const;
 
 export type FormatFeature = (typeof FORMAT_FEATURES)[number];
@@ -60,7 +76,12 @@ export type FormatFeature = (typeof FORMAT_FEATURES)[number];
 export interface PayloadLabel {
   version: number;
   features: FormatFeature[];
+  /** The id `device-pages=<id>` names, the first one when it is there twice. */
+  pagesId?: string;
 }
+
+/** What an id in a label may be made of: it names a folder. */
+const PAGES_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Why a label cannot be read: malformed, or naming a feature this build lacks. */
 export type LabelProblem = { kind: "malformed" } | { kind: "unknown-feature"; feature: string };
@@ -75,9 +96,14 @@ function ordered(features: Iterable<string>): FormatFeature[] {
   return FORMAT_FEATURES.filter((feature) => wanted.has(feature));
 }
 
-/** The label, colon excluded, for a notebook that uses `features`. */
-export function payloadLabel(features: Iterable<string> = []): string {
-  return [`v${SCHEMA_VERSION}`, ...ordered(features)].join("+");
+/**
+ * The label, colon excluded, for a notebook that uses `features`; with
+ * `pagesId`, `device-pages` carries it (`device-pages=<id>`).
+ */
+export function payloadLabel(features: Iterable<string> = [], pagesId?: string): string {
+  return [`v${SCHEMA_VERSION}`, ...ordered(features)]
+    .map((name) => (name === "device-pages" && pagesId !== undefined ? `${name}=${pagesId}` : name))
+    .join("+");
 }
 
 /**
@@ -94,11 +120,23 @@ export function readPayloadLabel(label: string): PayloadLabel | LabelProblem {
   const version = Number(first);
   if (!Number.isFinite(version)) return { kind: "malformed" };
   const features: FormatFeature[] = [];
+  let pagesId: string | undefined;
   for (const name of rest) {
+    const eq = name.indexOf("=");
+    if (eq >= 0) {
+      // Only `device-pages` carries a value; an unsafe id is a label this build cannot read.
+      const id = name.slice(eq + 1);
+      if (name.slice(0, eq) !== "device-pages" || !PAGES_ID.test(id)) {
+        return { kind: "unknown-feature", feature: name };
+      }
+      pagesId ??= id;
+      if (!features.includes("device-pages")) features.push("device-pages");
+      continue;
+    }
     if (!isFeature(name)) return { kind: "unknown-feature", feature: name };
-    features.push(name);
+    if (!features.includes(name)) features.push(name);
   }
-  return { version, features };
+  return pagesId === undefined ? { version, features } : { version, features, pagesId };
 }
 
 /** Whether {@link readPayloadLabel}'s answer is a problem. */

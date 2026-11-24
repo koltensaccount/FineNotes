@@ -3,7 +3,7 @@ import { WorkspaceLeaf, TFile } from "./fake-obsidian";
 vi.mock("obsidian", () => import("./fake-obsidian"));
 const { InkView } = await import("../../src/view/ink-view");
 const { DEFAULT_SETTINGS } = await import("../../src/settings");
-function setup(text = "", uri = "") {
+function setup(text = "", uri = "", html = "") {
   const view = new InkView(new WorkspaceLeaf({}) as never, { settings: DEFAULT_SETTINGS } as never);
   const existing = [
     new TFile("Lecture.pdf", 100),
@@ -26,9 +26,28 @@ function setup(text = "", uri = "") {
   const image = vi.spyOn(view, "insertImageBytes").mockResolvedValue(null);
   const vaultImage = vi.spyOn(view, "insertImageFromVault").mockResolvedValue(null);
   const event = {
+    target: null as EventTarget | null,
+    clientX: 0,
+    clientY: 0,
     dataTransfer: {
       files: [] as File[],
-      getData: (type: string) => (type === "text/plain" ? text : uri),
+      // As a browser lists them: files, then the text types the drag carries.
+      get types(): string[] {
+        return [
+          ...(this.files.length ? ["Files"] : []),
+          ...(text ? ["text/plain"] : []),
+          ...(uri ? ["text/uri-list"] : []),
+          ...(html ? ["text/html"] : []),
+        ];
+      },
+      getData: (type: string) =>
+        type === "text/plain"
+          ? text
+          : type === "text/uri-list"
+            ? uri
+            : type === "text/html"
+              ? html
+              : "",
     },
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
@@ -54,7 +73,7 @@ describe("file drop routing", () => {
     const { pdf, event, drop } = setup();
     await drop([file]);
     // A drop adds every page after the last, without the page picker.
-    expect(pdf).toHaveBeenCalledWith(file, false);
+    expect(pdf).toHaveBeenCalledWith(file);
     expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(event.stopPropagation).toHaveBeenCalledOnce();
   });
@@ -77,7 +96,7 @@ describe("file drop routing", () => {
   it("references an existing vault PDF without copying it", async () => {
     const { vaultPdf, pdf, drop } = setup("[[Lecture.pdf#page=2|Lecture]]");
     await drop();
-    expect(vaultPdf).toHaveBeenCalledWith("Lecture.pdf", false);
+    expect(vaultPdf).toHaveBeenCalledWith("Lecture.pdf");
     expect(pdf).not.toHaveBeenCalled();
   });
   it("takes a file dragged from Obsidian's file list when the drop carries no text (iPad)", async () => {
@@ -87,7 +106,7 @@ describe("file drop routing", () => {
       dragManager: { draggable: { type: "file", file: new TFile("Lecture.pdf", 100) } },
     });
     await drop();
-    expect(vaultPdf).toHaveBeenCalledWith("Lecture.pdf", false);
+    expect(vaultPdf).toHaveBeenCalledWith("Lecture.pdf");
   });
   it("takes every PDF and picture of a dragged selection, in order, and skips notes", async () => {
     const { internal, vaultPdf, vaultImage, drop } = setup("ignored.pdf");
@@ -99,7 +118,7 @@ describe("file drop routing", () => {
     ];
     Object.assign(app, { dragManager: { draggable: { type: "files", files } } });
     await drop();
-    expect(vaultPdf).toHaveBeenCalledExactlyOnceWith("Lecture.pdf", false);
+    expect(vaultPdf).toHaveBeenCalledExactlyOnceWith("Lecture.pdf");
     expect(vaultImage).toHaveBeenCalledExactlyOnceWith("photo.png");
   });
   it.each([
@@ -162,5 +181,87 @@ describe("file drop routing", () => {
     await drop([picture().file, new File(["%PDF-"], "Lecture.pdf")]);
     expect(image).not.toHaveBeenCalled();
     expect(pdf).not.toHaveBeenCalled();
+  });
+});
+
+describe("text drop (discussion #288)", () => {
+  function withSurface(text: string, html = "") {
+    const made = setup(text, "", html);
+    const dropText = vi.fn().mockReturnValue(true);
+    made.internal.surface = { dropText, debugDrop: vi.fn() };
+    made.event.clientX = 120;
+    made.event.clientY = 340;
+    return { ...made, dropText };
+  }
+
+  it("makes the dropped paragraphs a text box at the drop point", async () => {
+    const { dropText, event, drop } = withSurface("First paragraph.\r\n\r\nSecond one.");
+    await drop();
+    expect(dropText).toHaveBeenCalledExactlyOnceWith(120, 340, "First paragraph.\n\nSecond one.");
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+  });
+
+  it("reads HTML when the drag has no plain text", async () => {
+    const { dropText, drop } = withSurface("", "<p>One</p><p>Two &amp; three</p>");
+    await drop();
+    expect(dropText).toHaveBeenCalledExactlyOnceWith(120, 340, "One\n\nTwo & three");
+  });
+
+  it("leaves a drop the surface refuses to the browser", async () => {
+    const { dropText, event, drop } = withSurface("Some words.");
+    dropText.mockReturnValue(false);
+    await drop();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("takes but writes nothing into a protected notebook", async () => {
+    const { internal, dropText, event, drop } = withSurface("Some words.");
+    vi.spyOn(internal, "isProtected").mockReturnValue(true);
+    await drop();
+    expect(dropText).not.toHaveBeenCalled();
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("imports a vault link instead of writing it", async () => {
+    const { dropText, vaultPdf, drop } = withSurface("[[Lecture.pdf]]");
+    await drop();
+    expect(vaultPdf).toHaveBeenCalledWith("Lecture.pdf");
+    expect(dropText).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing for a link to a note", async () => {
+    const { dropText, drop } = withSurface("[[note.md]]");
+    await drop();
+    expect(dropText).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing while Obsidian drags one of its own things", async () => {
+    const { internal, dropText, drop } = withSurface("Some words.");
+    const app = (internal as unknown as { app: object }).app;
+    Object.assign(app, { dragManager: { draggable: { type: "link", linktext: "x" } } });
+    await drop();
+    expect(dropText).not.toHaveBeenCalled();
+  });
+
+  it("leaves a file's name alone, but not prose beside it", async () => {
+    const named = withSurface("note.txt");
+    await named.drop([new File(["text"], "note.txt")]);
+    expect(named.dropText).not.toHaveBeenCalled();
+    const prose = withSurface("A whole sentence from another app.");
+    await prose.drop([new File(["text"], "clip.rtf")]);
+    expect(prose.dropText).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a text field's own drop to it", async () => {
+    const { dropText, event, drop } = withSurface("Some words.");
+    event.target = {
+      nodeType: 1,
+      tagName: "TEXTAREA",
+      classList: [],
+      isContentEditable: false,
+    } as unknown as EventTarget;
+    await drop();
+    expect(dropText).not.toHaveBeenCalled();
   });
 });

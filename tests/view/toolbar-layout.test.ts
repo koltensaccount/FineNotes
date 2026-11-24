@@ -49,6 +49,7 @@ describe("the default layout", () => {
       "laser",
       "record",
       "fill",
+      "translate",
     ]);
   });
 

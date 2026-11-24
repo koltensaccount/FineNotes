@@ -38,6 +38,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "Notebooks are ordinary files in your vault (Title.notebook.md, and with Each notebook gets its own folder on, a folder beside it with its pictures, recordings and exports). Any way of syncing the vault works: Obsidian Sync, iCloud, Syncthing and others. Let the sync finish before writing on the other device; a notebook whose ink did not load cleanly opens read-only until it has.",
     where: "Use the vault's own sync; FineNotes needs no setup for it.",
     notes: "Keyboard shortcuts and AI keys stay on each device; they do not sync.",
+    seen: "notebook lost after sync, sync conflict, pages missing on other device, notebook empty on iPad, changes gone",
     settings: ["notebookOwnFolder"],
   },
   {
@@ -65,9 +66,10 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     title: "Report a bug or ask for a feature",
     words:
       "bug, broken, not working, crash, problem, issue, report, feature request, idea, suggestion, missing feature, wish, github, contact, feedback, support",
-    what: "Report bugs and ask for features on GitHub: https://github.com/Joost-8/FineNotes/issues (a bug report or a feature request). Ideas and questions also go to GitHub Discussions. For strokes that go missing or break, turn on the Input debug overlay first and describe what it shows.",
+    what: "Report bugs and ask for features on GitHub: https://github.com/Joost-8/FineNotes/issues (a bug report or a feature request). Report a bug first asks what went wrong and shows what the tips and this guide say about it, so an answer that already exists is found at once; its last row opens GitHub's bug form with the FineNotes and Obsidian versions and the device filled in. Ideas and questions also go to GitHub Discussions. For strokes that go missing or break, turn on the Input debug overlay first and describe what it shows.",
     where:
-      "Settings › Feedback and community, under the list of sections: Report a bug, Ideas and questions.",
+      "Settings › Feedback and community, under the list of sections: Report a bug, Ideas and questions. Also the command Report a bug.",
+    commands: ["report-bug"],
   },
   {
     id: "fromGoodnotes",
@@ -133,6 +135,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "FineNotes checks once a day whether a newer release exists (nothing about you is sent) and marks the toolbar's gear with a dot; Remind me also says so under the gear. Updating itself is Obsidian's Update button for the plugin.",
     where:
       "Obsidian Settings › Community plugins › FineNotes › Update. Reminders: Settings › General › Updates.",
+    seen: "new version not showing, update not available, still on the old version",
     settings: ["checkForUpdates", "updateReminders"],
   },
   {
@@ -171,11 +174,12 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     area: "settings",
     title: "Simple look (hide Obsidian's bars)",
     words:
-      "simple look, hide obsidian, clean, distraction free, focus, sidebars, ribbon, status bar, title bar, app look, full app",
-    what: "Hides Obsidian's title bar, status bar, ribbon and sidebars so FineNotes looks like an app of its own; the tabs stay. Turn it off to bring them back.",
+      "simple look, easy mode, hide obsidian, clean, distraction free, focus, sidebars, right sidebar, other plugins, calendar, pomodoro, ribbon, status bar, title bar, app look, full app",
+    what: "Hides Obsidian's title bar, status bar, ribbon and sidebars so FineNotes looks like an app of its own; the tabs stay. While it is on, the buttons under it (or the ⌄ beside Simple look on Home's folder rail) bring back parts one by one: Left sidebar, Right sidebar, Ribbon, Status bar (all off by default; a sidebar brought back starts closed, behind its own button, for other plugins' panels such as a calendar or a timer). With the left sidebar back, Home's folder rail steps aside. Turn the look off to bring everything back.",
     where:
-      "Settings › General › Simple look. Also in Notebook settings (gear), on the Welcome, and the command Simple look: hide or show….",
-    settings: ["simpleLook"],
+      "Settings › General › Simple look, and the buttons under it. Also Home › folder rail › ⌄ beside Simple look, Notebook settings (gear), the Welcome, and the command Simple look: hide or show….",
+    seen: "left panel disappears, left sidebar gone, side panels disappear, update kills the side panels, sidebars missing after update, panels hidden, cannot open settings, ribbon gone, status bar missing, menus disappeared, file explorer gone",
+    settings: ["simpleLook", "simpleLookShow"],
     commands: ["toggle-simple-look"],
     feature: "simpleLook",
   },
@@ -186,6 +190,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     words: "hints, nudges, popups, suggestions, hint, stop hints, annoying",
     what: "After you do something the slow way a few times, FineNotes names the faster way once. Turn off to stop these hints.",
     where: "Settings › General › Hints for faster ways",
+    seen: "popups keep appearing, annoying messages, hints will not go away",
     settings: ["gestureHints"],
   },
   {
@@ -216,6 +221,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "Double-tap with two fingers to undo; with three fingers to redo. On by default.",
     where: "Settings › Writing › Two-finger double-tap to undo",
     notes: "Does nothing while the notebook is read-only.",
+    seen: "two finger double tap does not undo, accidental undo",
     settings: ["fingerTapUndo"],
     feature: "undo",
   },
@@ -236,6 +242,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     words: "text box width, drag text box, size text box, resize text box, fixed width text",
     what: "Off (default, as in Goodnotes): every new text box fits its text as you type. On: with the Text tool, drag to draw a box's size; a tap still makes a box.",
     where: "Settings › Writing › Drag to size text boxes",
+    seen: "text box will not resize, cannot make a text box bigger",
     settings: ["textDragSize"],
     feature: "textDragSize",
   },
@@ -245,10 +252,11 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     title: "Stylus side button",
     words:
       "side button, barrel button, stylus button, pen button, wacom, surface pen, samsung s pen, eraser button",
-    what: "What a pen's side button does while you write: Erase (default), Lasso select, Move the page or Nothing; and what a click above the page does: open the pen menu (default), switch to the eraser, or nothing. A pen's eraser end always erases.",
+    what: "What a pen's side button does while you write: Erase (default), Erase, also hovering (the button held with the pen just above the page erases what it passes over), Lasso select, Move the page or Nothing; and what a click above the page does: open the pen menu (default), switch to the eraser, or nothing. A pen's eraser end always erases.",
     where: "Settings › Writing › Stylus side button",
     notes:
-      "Apple Pencil has no side button, so the click choice is hidden on iPad and iPhone. Holding the button while writing may not work on Android tablets.",
+      "Apple Pencil has no side button, so the click choice is hidden on iPad and iPhone. Holding the button while writing may not work on Android tablets; Erase, also hovering does.",
+    seen: "side button does not erase, S Pen button not working, barrel button does nothing",
     settings: ["barrelButton", "stylusButtonClick"],
   },
   {
@@ -259,6 +267,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
       "pressure, pressure sensitivity, thickness, line width varies, fountain pen pressure, brush pressure",
     what: "Off by default. On: the fountain pen widens as you press and the brush pen swells and tapers more; the ball pen stays even. Writing can feel a little less smooth with it on.",
     where: "Settings › Writing › Pressure-sensitive pens",
+    seen: "lines all the same thickness, no pressure, pressure not working, strokes too thick",
     settings: ["pressureWidth"],
     feature: "pressure",
   },
@@ -280,6 +289,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "The pointer shown over the page while a pen is in hand: Ink dot (default), Crosshair, Arrow or None.",
     where: "Settings › Writing › Cursor over the page",
     notes: "Desktop only: there is no pointer on a tablet.",
+    seen: "cursor not showing, arrow instead of pen cursor, no dot under the pen",
     settings: ["penCursor"],
   },
   {
@@ -455,7 +465,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     title: "Handwriting recognition (transcribe with AI)",
     words:
       "handwriting recognition, transcribe notebook, cloud ai transcription, text layer, automatic transcription",
-    what: "What the Transcribe this notebook's handwriting command uses: Manual (default; you type the text yourself in the text layer), Cloud AI (an image of each page goes to your AI service), or Cloud AI by itself after you write (about 30 seconds after you stop, only changed pages).",
+    what: "What the Transcribe this notebook's handwriting command uses: Manual (default; you type the text yourself in the text layer), Cloud AI (an image of each page goes to your AI service), or Cloud AI by itself after you write (a page once you turn away from it or after 5 minutes without writing, only changed pages).",
     where: "Settings › AI › Handwriting recognition",
     notes: "Separate from Grape, which reads on the device for search.",
     settings: ["recognitionProviderId", "autoRecognize"],
@@ -537,6 +547,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "Prints the raw pen and touch events over the page. Turn it on when reporting strokes that go missing or break.",
     where:
       "Settings › Troubleshooting › Input debug overlay, or the command Show or hide the input debug overlay.",
+    seen: "lag, laggy, slow, choppy, stutter, delay, strokes missing, ink appears late",
     settings: ["debugHud"],
     commands: ["toggle-input-debug-overlay"],
   },
@@ -550,6 +561,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     where:
       "iPad Settings › Apple Pencil › Scribble. FineNotes' settings show this as a note on the iPad until dismissed.",
     notes: "iPad only.",
+    seen: "strokes missing, pen skips, strokes disappear, letters dropped, ink cut short, handwriting turns into text",
   },
   {
     id: "penTool",
@@ -857,6 +869,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     words: "eraser size, big eraser, small eraser, eraser width",
     what: "Three size presets drawn as eraser footprints; the ⌄ opens a slider with preview and a reset to default sizes. A preset keeps the size the slider gave it.",
     where: "Toolbar › Eraser › pill › size buttons / ⌄ (Eraser size)",
+    seen: "eraser size does not stay, eraser size resets, custom eraser size lost",
     settings: ["eraserSize", "eraserPresets"],
   },
   {
@@ -1098,6 +1111,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: 'Only the pen acts on the page; a resting hand moves neither ink nor page. Button lights while on. Turned off for the while when "Draw with finger" is on.',
     where: "Toolbar › More tools › Stylus only (the button shows Stylus only: on/off).",
     notes: "(meant for touch devices)",
+    seen: "finger draws lines, finger writes instead of scrolling, cannot draw with finger, finger does nothing",
     settings: ["onlyStylusMode"],
     commands: ["toggle-only-stylus-mode"],
     feature: "stylusOnly",
@@ -1597,6 +1611,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     where:
       'With the Pen or Highlighter (or the Shapes tool), draw the shape and keep the Pencil still for a moment. Switch: pen\'s options › Pen settings › Pen gestures › "Make shapes" ("When I hold the pen still" / "When I lift the pen, too"), plus "How curved a stroke may be and still snap".',
     notes: "(any pen, mouse or Pencil; not a finger unless Draw with finger is on)",
+    seen: "lines turn into shapes, shapes snap by themselves, snaps too fast, shape does not snap",
     settings: ["snapMode", "snapCurvatureThreshold", "drawAndHold", "penAutoShape"],
     feature: "hold",
   },
@@ -1608,6 +1623,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: 'With "When I lift the pen, too", a stroke that reads as a shape also snaps when the pen lifts, without holding still. The Shapes tool\'s "Auto-shape" button does the same for the Shapes tool.',
     where:
       'Pen settings › Pen gestures › Make shapes › "When I lift the pen, too". Shapes tool: "Auto-shape: draw any shape and it snaps clean".',
+    seen: "lines turn into shapes when I lift, shapes appear by themselves",
     settings: ["snapMode"],
   },
   {
@@ -1772,15 +1788,18 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "Anything that is not a finger writes; while a stroke is open, a finger that lands is the writing hand and is ignored. If a palm moved the page just before the pen landed, the page jumps back.",
     where: "Automatic.",
     notes: "touch only",
+    seen: "palm draws lines, hand leaves marks, stray marks, page moves when resting my hand",
     settings: ["onlyStylusMode"],
   },
   {
     id: "barrelButton",
     area: "page",
     title: "Stylus side button while writing",
-    words: "side button, barrel button, pen button, s pen, wacom button, erase with button",
-    what: "Holding a tablet pen's side button while writing erases (default), lassos, moves the page, or does nothing.",
-    where: 'Settings › "Stylus side button" (Erase, Lasso select, Move the page, Nothing).',
+    words:
+      "side button, barrel button, pen button, s pen, wacom button, erase with button, erase on hover, hover erase",
+    what: "Holding a tablet pen's side button while writing erases (default), lassos, moves the page, or does nothing. Erase, also hovering erases with the pen held just above the page too, the button held: the way to erase with the S Pen's button on Android.",
+    where:
+      'Settings › "Stylus side button" (Erase, Erase also hovering, Lasso select, Move the page, Nothing).',
     notes: "desktop/Android pens with a side button (not the Apple Pencil)",
     settings: ["barrelButton"],
   },
@@ -2058,10 +2077,10 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     id: "insertSpace",
     area: "page",
     title: "Insert space between lines",
-    words: "insert space, make room, push down, add lines, remove empty lines",
-    what: "With the lasso on By line, small arrows sit in the margin of lined paper; drag one down to push the writing below down by whole lines (onto the next page, adding pages if needed), or up to close empty lines.",
-    where: 'Lasso › Lasso type "By line", then drag a margin arrow.',
-    notes: "(lined paper only)",
+    words: "insert space, make room, push down, push right, add lines, remove empty lines, board",
+    what: "With the lasso on By line, small arrows sit in the margin of lined paper; drag one down to push the writing below down by whole lines (onto the next page, adding pages if needed), or up to close empty lines. On a board, or on paper with no lines (blank, dotted, squared, planners), press anywhere and drag down (or right) to push everything below (or right of) the pen, by whole dots or squares; drag back to close empty space. On a notebook page nothing is pushed off the page.",
+    where: 'Lasso › Lasso type "By line", then drag a margin arrow (on a board, drag anywhere).',
+    notes: "(any paper but PDFs; lined paper from the margin)",
     settings: ["lassoMode"],
     feature: "insertSpace",
   },
@@ -2441,6 +2460,16 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
       "sort, order, by name, by date, last edited, date created, page count, list view, grid view, hide files, notebooks only",
     what: 'The Sort button\'s menu: Select items, Grid or List, "Notebooks only" (hides other files), and sort by Date created, Last edited, Name or Pages (tap the current one again to reverse).',
     where: "Home › Sort (up-down arrows icon)",
+  },
+  {
+    id: "homeHide",
+    area: "notebooks",
+    title: "Hide notebooks and files from Home",
+    words:
+      "hide, hide notebook, hide file, unhide, show hidden, declutter, archive, take off home, hidden items",
+    what: 'A cover\'s or folder\'s ⌄ menu has "Hide from Home": the item (and all a folder holds) leaves Home, Continue, the folder rail and search; the file stays in the vault. Sort › "Show hidden items" (there only while something is hidden) shows them dimmed, and their ⌄ menu has "Show on Home".',
+    where: "Home › an item's ⌄ › Hide from Home; Home › Sort › Show hidden items",
+    settings: ["libraryHidden"],
   },
   {
     id: "homeFavorites",
@@ -3146,6 +3175,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     what: "Hides Obsidian's title bar, status bar, left ribbon and sidebars (tabs stay) so FineNotes looks like its own app; Home then shows its folder rail.",
     where:
       'Settings › General › Simple look; gear (Notebook settings) › Simple look; Home\'s card "Only here for FineNotes?"; welcome; command palette "Simple look: hide or show Obsidian\'s tabs, sidebars and menus"',
+    seen: "left panel disappears, side panels gone, sidebars missing, ribbon gone, menus disappeared",
     settings: ["simpleLook"],
     commands: ["toggle-simple-look"],
   },
@@ -3193,6 +3223,19 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
       'Settings › AI › Service: "AI service", "AI model", "<Service> API key" (Add key / Replace). From a notebook: AI menu › "Set up AI…" or "AI settings…".',
     notes: "Needs internet and your own paid API key; nothing is bundled.",
     settings: ["llmVendor", "llmModel", "llmModels", "apiKeys", "llmBaseUrl"],
+  },
+  {
+    id: "aiModelChoice",
+    area: "ai",
+    title: "A cheaper model for transcription, and a fallback model",
+    words:
+      "transcription model, cheaper model, different model, second model, fallback model, backup model, rate limit, quota, 429, too many requests, out of credits, free model",
+    what: 'Transcription can use a model of its own: type it in "Page transcription model" (empty uses "AI model"), so automatic transcription can run on a cheap model while Ask AI keeps a stronger one. It can also use another service with its own API key: pick it in "Transcribe pages with" (for example Gemini for transcription while Ask uses Claude), then add that service\'s key in the row that appears below. "Fallback model" is tried once when the model is turned down for its rate limit or quota (also when OpenRouter credits run out or Claude is overloaded), for transcription and Ask alike; a wrong key or any other error is shown at once. The fallback is a model of the AI service, so it is not used when transcription has a service of its own. Each service remembers its own models.',
+    where:
+      'Settings › AI › Transcribing › "Transcribe pages with", "Page transcription model" and "<Service> API key for transcription". Settings › AI › Service › "Fallback model".',
+    notes:
+      "In Ask AI, the fallback takes over only when the first request of an answer is turned down; once the notebook's tools have run, the answer stays with the model that began it.",
+    settings: ["transcribeVendor", "llmTranscribeModel", "llmFallbackModel"],
   },
   {
     id: "apiKeyStorage",
@@ -3260,14 +3303,7 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
       'Toolbar › AI › "Ask…". Send with the round arrow button or Return; Shift+Return adds a new line.',
     notes:
       'Needs an AI service with a key (or your own endpoint) and internet. Greyed out with the reason when not set up, and "This page is empty" / "This notebook is empty" when nothing is on any page.',
-    settings: [
-      "llmVendor",
-      "llmModel",
-      "askLayout",
-      "askSaveChats",
-      "askVaultScope",
-      "askShowCost",
-    ],
+    settings: ["llmVendor", "llmModel", "askLayout", "askVaultScope", "askShowCost"],
   },
   {
     id: "askPagePicker",
@@ -3323,20 +3359,21 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     id: "askLayout",
     area: "ai",
     title: "Show Ask AI as a sidebar or a window",
-    words: "sidebar, side panel, window, dock, layout, beside the page",
-    what: "The chat can be a window over the notebook or a sidebar on the left of the page, which pushes the page aside and closes the page sidebar. The choice is remembered.",
+    words: "sidebar, side panel, window, dock, layout, beside the page, move, resize, drag",
+    what: "The chat can be a window over the notebook or a sidebar on the left of the page, which pushes the page aside and closes the page sidebar. The window is moved by its title bar and sized from its bottom-right corner, and opens where it was left on this device. The choice is remembered. In a text note, Ask AI is always the window.",
     where: 'Ask › "Show in the sidebar" / "Show as a window" button in the chat\'s top bar.',
     settings: ["askLayout"],
   },
   {
     id: "askSaveChats",
     area: "ai",
-    title: "Save Ask AI chats and reopen them",
-    words: "save chat, chat history, previous chats, conversation history, keep chat, reopen chat",
-    what: '"Save chat" keeps the conversation as a Markdown note, by default in an "AI chats" folder next to the notebook; while saved it updates as you go, and tapping again stops saving (the note goes to the trash). "Chats" lists this notebook\'s saved chats to continue one. "New chat" starts fresh. The Save chat choice is remembered for new chats.',
+    title: "Where Ask AI chats are kept, and deleting one",
+    words:
+      "save chat, chat history, previous chats, conversation history, keep chat, delete chat, AI chats folder",
+    what: 'Every Ask AI conversation is kept as a Markdown note in the "AI chats" folder of the notebook or text note it was about, and updates as you go. Open or delete one there, as any file; the chat has no save or history buttons. "New chat" starts fresh.',
     where:
-      'Ask › top bar: Save chat (bookmark icon), Chats (history icon), New chat. Folder: Settings › Files and folders › "Folder for AI chats".',
-    settings: ["askSaveChats", "chatsFolder"],
+      'The notebook\'s (or note\'s) "AI chats" folder in the file list. Folder: Settings › Files and folders › "Folder for AI chats".',
+    settings: ["chatsFolder"],
   },
   {
     id: "askVaultScope",
@@ -3470,8 +3507,8 @@ export const GUIDE_ENTRIES: readonly GuideEntry[] = [
     area: "ai",
     title: "Transcribe automatically after writing",
     words:
-      "auto transcribe, automatic recognition, background transcription, recognize automatically",
-    what: "About 30 seconds after you stop writing, the page you are on is transcribed by cloud AI in the background, and only when it changed. It works only after you have agreed to send once (run a transcription by hand first).",
+      "auto transcribe, automatic recognition, background transcription, recognize automatically, transcribe now, transcribe this page, when does it transcribe, where is my transcript, transcript list, compare transcripts, type transcript, transcribe by hand, manual transcription, overwritten transcript",
+    what: "A page you wrote on is transcribed by cloud AI in the background once you are done with it: a few seconds after you turn to another page, or after 5 minutes without writing on it, and only when it changed. A page still waiting when you close the notebook is read when you open it again. To have the page in view transcribed right away, use AI menu › \"Transcribe this page\" (or the command of that name); without an AI set up, the same entry lets you type the page's transcript yourself. Every page's transcription is listed in the sidebar's Files tab under Transcripts (where it came from: AI, this device, typed or edited by you); tap one to read it, edit it or go to its page. A transcript you typed or edited is never overwritten: a new transcription waits beside it, marked with a dot, and you keep one of the two there. After a failure (a spent quota, a wrong key, no connection) it says so once and waits 10 minutes, then longer, before trying again. It works only after you have agreed to send once (run a transcription by hand first).",
     where:
       'Settings › AI › Transcribing › "Handwriting recognition" › "Cloud AI, by itself after you write".',
     notes: "needs a key and internet.",

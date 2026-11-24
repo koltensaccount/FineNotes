@@ -39,6 +39,7 @@ import { DEFAULT_PEN_GESTURES, type PenGestures, penGesturesOf } from "./ink/pen
 import {
   type Editor,
   MarkdownView,
+  apiVersion,
   Notice,
   addIcon,
   getIcon,
@@ -54,6 +55,8 @@ import {
   normalizePath,
 } from "obsidian";
 import { disposeVaultFonts } from "./view/font-store";
+import { type OsFacts, bugFormDevice, bugReportUrl, osName } from "./model/bug-report";
+import { readOsFacts } from "./view/os-facts";
 import {
   ICON_IMPORT_NOTEBOOK,
   ICON_IMPORT_NOTEBOOK_SVG,
@@ -64,6 +67,7 @@ import {
   ICON_STYLUS_ONLY_SVG,
   PREVIOUS_PLUGIN_ID,
   VIEW_TYPE_INK,
+  VIEW_TYPE_NOTE,
   VIEW_TYPE_LIBRARY,
 } from "./constants";
 import { DEFAULT_SETTINGS, GoodObsidianSettingTab, type GoodObsidianSettings } from "./settings";
@@ -72,10 +76,13 @@ import {
   type PageAppearance,
   type PenPreferences,
   loadSnapSettings,
+  modelIdOf,
+  modelMemoryOf,
   shownPaperTheme,
   storeHandwritingReader,
   storePenPreferences,
   switchLlmVendor,
+  switchTranscribeVendor,
 } from "./settings-data";
 import { type PenCursorStyle, penCursorStyleOf } from "./view/pen-cursor";
 import { LearnWindow } from "./view/learn-window";
@@ -85,6 +92,9 @@ import { type BarDock, parseBarDock, pillAfterBarMove } from "./view/bar-dock-mo
 import { parsePillRowOn } from "./view/pill-row-model";
 import { ShortcutStore } from "./view/shortcut-store";
 import { buildInkFile, parseInkFile } from "./model/serialize";
+import { devicePagesNotebookText } from "./model/device-pages-writer";
+import { notebookIdOfText } from "./model/device-pages";
+import { movePagesFolder } from "./view/device-pages-files";
 import {
   ReceivePages,
   type TransferTarget,
@@ -98,6 +108,14 @@ import { createProviderRegistry, resolveProvider } from "./recognition/registry"
 import { MANUAL_PROVIDER_ID } from "./recognition/manual";
 import { LlmProvider } from "./recognition/llm";
 import { LLM_PROVIDER_ID, type LlmVendor, VENDORS } from "./recognition/llm-request";
+import { transcriptionModel } from "./recognition/model-choice";
+import {
+  type AutoBackoff,
+  NO_BACKOFF,
+  afterAutoFailure,
+  autoWaitLeft,
+  showsAutoFailure,
+} from "./recognition/auto-backoff";
 import { postJson } from "./recognition/http";
 import {
   type KeyStore,
@@ -106,7 +124,13 @@ import {
   SettingsKeyStore,
   migrateKeys,
 } from "./recognition/key-store";
-import { type AiSetup, resolveImageVendor } from "./recognition/ai-menu-model";
+import {
+  type AiSetup,
+  TRANSCRIBE_VENDOR_CHOICES,
+  type TranscribeVendorChoice,
+  resolveImageVendor,
+  resolveTranscribeVendor,
+} from "./recognition/ai-menu-model";
 import { DEFAULT_IMAGE_MODELS, canGenerateImages } from "./recognition/ai-image";
 import {
   type AiVendorConfig,
@@ -159,6 +183,9 @@ import {
 } from "./model/tips";
 import { sponsorThanks } from "./model/sponsors";
 import { type TipsPage, TipsModal } from "./view/tips-modal";
+import { ICON_TEXT_NOTE, TextNoteView } from "./view/note-view";
+import { followNoteFiles } from "./view/note-files";
+import { freeNoteName, isTextNoteName, newNoteFile } from "./model/text-note-file";
 import {
   type Feature,
   PEN_GESTURE_PREFIX,
@@ -193,7 +220,12 @@ import { CompanionPdfManager } from "./view/companion-pdf";
 import { FolderSuggestModal } from "./view/folder-suggest";
 import { InkView } from "./view/ink-view";
 import { starsOf } from "./model/favorites";
-import { SIMPLE_CLASS, simpleClasses } from "./model/simple-mode";
+import {
+  type SimplePart,
+  allSimpleClasses,
+  simpleClasses,
+  simplePartsOf,
+} from "./model/simple-mode";
 import {
   LOOK_PALETTES,
   LOOK_STYLES,
@@ -279,6 +311,7 @@ export interface TransferReceipt {
 }
 import { FileMoveTracker } from "./view/file-moves";
 import { measurePdfPages } from "./view/pdf-pages";
+import { NotebookPickModal } from "./view/notebook-pick-modal";
 import { readPdfOutline } from "./view/pdf-outline";
 import { SetPagesContents } from "./model/contents";
 import { addedEntries, outlineContents } from "./model/pdf-outline";
@@ -290,6 +323,7 @@ import { GrapeFiles } from "./view/grape-files";
 import { StartupLog } from "./view/startup-log";
 import { DeviceTranscriber, decodeForSpeech } from "./view/device-transcriber";
 import { ModelRegistry } from "./view/model-downloads";
+import { Translator } from "./view/translator";
 import { obsidianOcrDeps } from "./view/ocr-deps";
 import { cleanupText, removeOtherOcrModels } from "./view/ocr-models";
 import { OcrOfferModal } from "./view/ocr-offer";
@@ -297,9 +331,11 @@ import { isBusy } from "./downloads/model-manifest";
 import { OcrService } from "./view/ocr-service";
 import { OcrStatus } from "./view/ocr-status";
 import { OCR_TIERS, effectiveOcrTier, ocrTiersFor } from "./recognition/ocr/ocr-model";
-import { HandwritingReader } from "./view/handwriting";
+import { HandwritingReader, readingText } from "./view/handwriting";
+import { writerGlyphs } from "./view/calc-notes";
 import { ReadingGuard } from "./recognition/reading-guard";
 import {
+  type DrawnSheet,
   HandwritingLearner,
   type LearningHost,
   learnedModelPath,
@@ -308,7 +344,7 @@ import {
   writePracticePage,
   writeSymbolPractice,
 } from "./view/handwriting-learning";
-import { buildPracticeFile, isSymbolSet } from "./recognition/practice";
+import { buildDrawnFile, buildPracticeFile, isSymbolSet } from "./recognition/practice";
 import { newCorrections, relearnDue } from "./recognition/hwr/learned-model";
 import { NOTEBOOK_FILE_SUFFIX, PRACTICE_FILE_SUFFIX, SINGLE_PAGE_FILE_SUFFIX } from "./constants";
 import { DEFAULT_PAGE_GEOMETRY } from "./model/document";
@@ -439,6 +475,13 @@ export default class GoodObsidianPlugin extends Plugin {
   /** Models downloaded on first use, listed under Settings › Models on this device (model-downloads.ts). */
   readonly models = new ModelRegistry(this.app, () => this.pluginDir);
 
+  /** Translating selected text on this device (translator.ts). */
+  readonly translator = new Translator({
+    app: this.app,
+    models: this.models,
+    pluginDir: () => this.pluginDir,
+  });
+
   /** Transcribing recordings on this device: one job at a time (device-transcriber.ts). */
   readonly speech = new DeviceTranscriber({
     app: this.app,
@@ -462,6 +505,7 @@ export default class GoodObsidianPlugin extends Plugin {
       tier: () => effectiveOcrTier(this.settings.ocrModel, Platform.isMobile),
       mobile: () => Platform.isMobile,
       offer: (ask) => this.offerOcrReader(ask),
+      guard: () => this.ocrGuard,
     }).deps,
   );
 
@@ -508,6 +552,8 @@ export default class GoodObsidianPlugin extends Plugin {
    * from being read again at every launch (set up in `onload`).
    */
   readingGuard!: ReadingGuard;
+  /** The same for reading PDF pages (ocr-service.ts); null until the plugin has loaded. */
+  ocrGuard: ReadingGuard | null = null;
 
   /** Learning the user's handwriting, in the background; one run at a time. */
   readonly learner = new HandwritingLearner(() => this.learningHost());
@@ -530,7 +576,7 @@ export default class GoodObsidianPlugin extends Plugin {
       pluginDir: this.pluginDir,
       settings: this.settings,
       saveSettings: () => this.saveSettings(),
-      createPracticeFile: (set, only) => this.createPracticeFile(set, only),
+      createPracticeFile: (set, only, drawn) => this.createPracticeFile(set, only, drawn),
       reloadReader: () => this.handwriting.dispose(),
       baseId: this.grape.id,
       baseModel: async () => {
@@ -576,7 +622,7 @@ export default class GoodObsidianPlugin extends Plugin {
     // an arbitrary user-configured URL (the custom endpoint has a slot of its own).
     // Registered before the settings load, which check the saved provider
     // against this registry; the config is read lazily, on each request.
-    const cloud = new LlmProvider(() => this.textAiConfig());
+    const cloud = new LlmProvider(() => this.transcriptionAiConfig());
     this.providers.set(cloud.id, cloud);
 
     await this.loadSettings();
@@ -598,16 +644,53 @@ export default class GoodObsidianPlugin extends Plugin {
     this.applyLook();
     this.register(() => this.wearLook([]));
     this.register(() => {
-      if (typeof document !== "undefined") document.body.classList.remove(SIMPLE_CLASS);
+      if (typeof document !== "undefined") document.body.classList.remove(...allSimpleClasses());
     });
     // Fonts fetched for text boxes leave the document with the plugin.
     this.register(disposeVaultFonts);
     this.registerView(VIEW_TYPE_INK, (leaf) => new InkView(leaf, this));
     this.registerView(
+      VIEW_TYPE_NOTE,
+      (leaf) =>
+        new TextNoteView(leaf, {
+          pressure: () => this.settings.pressureWidth,
+          highlighterAlpha: () => this.settings.highlighterAlpha,
+          onlyStylus: () => this.settings.onlyStylusMode,
+          openLibrary: () => void this.openLibrary(),
+          newNote: (folder) => void this.createTextNote(folder),
+          fullScreenOffered: () => this.fullScreenOffered,
+          fullScreen: () => this.fullScreen,
+          toggleFullScreen: () => this.toggleFullScreen(),
+          loadCalculator: () => parseCalculatorData(this.settings.calculator),
+          saveCalculator: (data) => this.saveCalculator(data),
+          reading: {
+            enabled: () => this.settings.handwritingOnDevice !== false,
+            guard: this.readingGuard,
+            read: async (strokes) => {
+              const reading = await this.handwriting.readPage(strokes);
+              return {
+                text: readingText(reading),
+                lines: reading.lines.map((line) => ({ text: line.text, words: line.words })),
+              };
+            },
+          },
+          maths: {
+            enabled: () =>
+              this.settings.calcNotes === true && this.settings.handwritingOnDevice !== false,
+            columns: () =>
+              this.settings.columnSums === true && this.settings.handwritingOnDevice !== false,
+            reader: this.handwriting,
+            glyphs: () => writerGlyphs(this.app, this.learningHost()),
+          },
+          plugin: this,
+        }),
+    );
+    this.registerView(
       VIEW_TYPE_LIBRARY,
       (leaf) =>
         new LibraryView(leaf, {
           newNotebook: (folder) => this.openNewNotebookDialog(folder),
+          newNote: (folder) => void this.createTextNote(folder),
           newBoard: (folder) => this.openNewNotebookDialog(folder, "endless"),
           importFromApp: (folder) => this.openImportNotebook(folder),
           importImage: (file, folder) => void this.createNotebookFromImage(file, folder),
@@ -618,6 +701,8 @@ export default class GoodObsidianPlugin extends Plugin {
           dismissHomeCard: (kind) => this.dismissHomeCard(kind),
           simpleLook: () => this.settings.simpleLook,
           setSimpleLook: (on) => this.setSimpleLook(on),
+          simpleParts: () => this.settings.simpleLookShow,
+          setSimpleParts: (parts) => this.setSimpleParts(parts),
           update: () => this.updates.available,
           openUpdate: () => this.openUpdatePage(),
           checkUpdate: () => this.updates.checkNow(),
@@ -638,6 +723,11 @@ export default class GoodObsidianPlugin extends Plugin {
           stars: () => this.settings.libraryStars,
           setStars: (stars) => {
             this.settings.libraryStars = stars;
+            void this.saveSettings();
+          },
+          hidden: () => this.settings.libraryHidden,
+          setHidden: (hidden) => {
+            this.settings.libraryHidden = hidden;
             void this.saveSettings();
           },
           folderStyles: () => this.settings.libraryFolders,
@@ -745,6 +835,16 @@ export default class GoodObsidianPlugin extends Plugin {
                 this.openImportNotebook(folder && !folder.isRoot() ? folder.path : ""),
               ),
           );
+          // And a text note, typed rather than written.
+          menu.addItem((item) =>
+            item
+              .setTitle(t("notebooks.note.new"))
+              .setIcon(ICON_TEXT_NOTE)
+              .setSection("action-primary")
+              .onClick(
+                () => void this.createTextNote(folder && !folder.isRoot() ? folder.path : ""),
+              ),
+          );
         }
         if (!(file instanceof TFile) || file.extension.toLowerCase() !== "pdf") return;
         menu.addItem((item) =>
@@ -760,6 +860,13 @@ export default class GoodObsidianPlugin extends Plugin {
                 initial,
               ).open();
             }),
+        );
+        // Beside a notebook's notes, as a tab: the notebook is picked, opened on it.
+        menu.addItem((item) =>
+          item
+            .setTitle(t("notebooks.menu.keepBeside"))
+            .setIcon("panel-top")
+            .onClick(() => this.keepPdfBesideNotebook(file)),
         );
         const view = this.app.workspace.getActiveViewOfType(InkView);
         if (!view) return;
@@ -796,6 +903,8 @@ export default class GoodObsidianPlugin extends Plugin {
             ),
           );
         this.keepFolderNotebookPaired(file, oldPath);
+        void this.followPagesFolder(file, oldPath);
+        followNoteFiles(this.app, file, oldPath);
         this.libraryPathChanged(oldPath, file.path);
         this.calculatorFileMoved(oldPath, file.path);
         this.practiceNotebookMoved(oldPath, file.path);
@@ -836,9 +945,12 @@ export default class GoodObsidianPlugin extends Plugin {
       this.learner.dispose();
       this.handwriting.dispose();
       this.speech.dispose();
+      this.translator.dispose();
       this.ocr.dispose();
       this.models.dispose();
     });
+    // Translation models already downloaded show in Settings › Models on this device.
+    this.app.workspace.onLayoutReady(() => void this.translator.registerStored());
     const ocrStatus = new OcrStatus(this.ocr);
     this.register(() => ocrStatus.dispose());
     // A release that still bundles Grape writes it to the handwriting folder,
@@ -964,6 +1076,12 @@ export default class GoodObsidianPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "create-text-note",
+      name: t("notebooks.note.command.new"),
+      callback: () => void this.createTextNote(),
+    });
+
+    this.addCommand({
       id: "create-notebook-with-last-settings",
       name: t("notebooks.command.createWithLastSettings"),
       callback: () => void this.createNotebookWithLastSettings(),
@@ -997,6 +1115,12 @@ export default class GoodObsidianPlugin extends Plugin {
       id: "show-tips",
       name: t("notebooks.command.tips"),
       callback: () => this.openTips(),
+    });
+
+    this.addCommand({
+      id: "report-bug",
+      name: t("notebooks.command.reportBug"),
+      callback: () => this.openReport(),
     });
 
     this.addCommand({
@@ -1139,6 +1263,13 @@ export default class GoodObsidianPlugin extends Plugin {
 
     this.notebookCommand("toggle-text-layer", t("notebooks.command.toggleTextLayer"), (view) =>
       view.toggleTextPanel(),
+    );
+    // A copy in one file, for a device that cannot update yet (#274).
+    this.notebookCommand("export-one-file", t("notebooks.command.exportOneFile"), (view) =>
+      view.exportOneFile(),
+    );
+    this.notebookCommand("transcribe-page", t("notebooks.command.transcribePage"), (view) =>
+      view.transcribePageNow(),
     );
     this.notebookCommand("recognize-handwriting", t("notebooks.command.transcribe"), (view) =>
       this.runRecognition(view),
@@ -1290,6 +1421,8 @@ export default class GoodObsidianPlugin extends Plugin {
     // "Ask AI starts on the open page" is gone (2026-11-17): a chat starts
     // with no page picked, and Ask's own reach button took its row's place.
     delete loaded.askAttachPage;
+    // Smart folders were tried on a local build and taken out (2026-11-22).
+    delete loaded.smartFolders;
     // A list of its own, read as pens: the default's must stay as it is.
     // Each with an id, for a button of its own on the bar (FineNotes#211).
     this.settings.savedPens = withPenIds(savedPensOf(this.settings.savedPens));
@@ -1316,6 +1449,8 @@ export default class GoodObsidianPlugin extends Plugin {
     delete loaded.toolbarOff;
     delete loaded.toolbarHome;
     this.settings.libraryStars = starsOf(this.settings.libraryStars);
+    this.settings.libraryHidden = starsOf(this.settings.libraryHidden);
+    this.settings.simpleLookShow = simplePartsOf(this.settings.simpleLookShow);
     this.settings.libraryFolders = folderStylesOf(this.settings.libraryFolders);
     // Stylus only shown nowhere cannot be on: nothing would show it or turn it off.
     if (isItemOff(this.toolbarLayoutNow(), "stylus")) this.settings.onlyStylusMode = false;
@@ -1326,10 +1461,16 @@ export default class GoodObsidianPlugin extends Plugin {
       ? Math.max(-50, Math.min(100, lineStep))
       : 0;
     this.settings.openRouterSkipCompressed = this.settings.openRouterSkipCompressed === true;
-    const models: unknown = this.settings.llmModels;
-    if (typeof models !== "object" || models === null || Array.isArray(models)) {
-      this.settings.llmModels = {};
-    }
+    this.settings.llmModels = modelMemoryOf(this.settings.llmModels);
+    this.settings.llmTranscribeModels = modelMemoryOf(this.settings.llmTranscribeModels);
+    this.settings.llmFallbackModels = modelMemoryOf(this.settings.llmFallbackModels);
+    this.settings.llmTranscribeModel = modelIdOf(this.settings.llmTranscribeModel);
+    this.settings.llmFallbackModel = modelIdOf(this.settings.llmFallbackModel);
+    this.settings.transcribeVendor = TRANSCRIBE_VENDOR_CHOICES.includes(
+      this.settings.transcribeVendor,
+    )
+      ? this.settings.transcribeVendor
+      : "same";
     this.settings.zoomBoxAutoAdvance = this.settings.zoomBoxAutoAdvance === true;
     this.settings.magnifierZoomBox = this.settings.magnifierZoomBox === true;
     // "Crosshair cursor" was a toggle until FineNotes#27: on is now the ink dot.
@@ -1576,8 +1717,8 @@ export default class GoodObsidianPlugin extends Plugin {
   applySimpleLook(): void {
     if (typeof document === "undefined") return;
     const body = document.body;
-    body.classList.remove(SIMPLE_CLASS);
-    body.classList.add(...simpleClasses(this.settings.simpleLook));
+    body.classList.remove(...allSimpleClasses());
+    body.classList.add(...simpleClasses(this.settings.simpleLook, this.settings.simpleLookShow));
   }
 
   private lookWorn: string[] = [];
@@ -1615,9 +1756,25 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   setSimpleLook(on: boolean): void {
+    // A sidebar the look shows starts closed, behind its button.
+    if (on && !this.settings.simpleLook) this.collapseSidebars(this.settings.simpleLookShow);
     this.settings.simpleLook = on;
     this.settings.simpleLookHinted = true;
     void this.saveSettings();
+  }
+
+  /** Show these parts of Obsidian in the simple look; a sidebar brought back starts closed. */
+  setSimpleParts(parts: SimplePart[]): void {
+    const was = this.settings.simpleLookShow;
+    const next = simplePartsOf(parts);
+    if (this.settings.simpleLook) this.collapseSidebars(next.filter((p) => !was.includes(p)));
+    this.settings.simpleLookShow = next;
+    void this.saveSettings();
+  }
+
+  private collapseSidebars(parts: readonly SimplePart[]): void {
+    if (parts.includes("leftSidebar")) this.app.workspace.leftSplit?.collapse();
+    if (parts.includes("rightSidebar")) this.app.workspace.rightSplit?.collapse();
   }
 
   async saveSettings(): Promise<void> {
@@ -1644,9 +1801,41 @@ export default class GoodObsidianPlugin extends Plugin {
       this.manifest.version,
     );
     const crash = this.readingGuard.crash;
+    if (crash) {
+      const name = crash.path.split("/").pop() ?? crash.path;
+      new Notice(t("notebooks.notice.readingCrash", { page: crash.page, name }), 20_000);
+    }
+    this.setUpOcrGuard();
+  }
+
+  /**
+   * The OCR's own crash marks, beside the handwriting reader's: a PDF whose
+   * reading took Obsidian down on this device is not read here again
+   * (ocr-service.ts). Lifted while the app is in the background, which
+   * iPadOS may end at any time through no fault of the PDF.
+   */
+  private setUpOcrGuard(): void {
+    const key = "finenotes:device-ocr";
+    const guard = new ReadingGuard(
+      {
+        load: () => {
+          const raw: unknown = this.app.loadLocalStorage(key);
+          return raw;
+        },
+        save: (value) => this.app.saveLocalStorage(key, value),
+      },
+      this.manifest.version,
+    );
+    this.ocrGuard = guard;
+    if (typeof document !== "undefined") {
+      this.registerDomEvent(document, "visibilitychange", () =>
+        guard.setHidden(document.visibilityState === "hidden"),
+      );
+    }
+    const crash = guard.crash;
     if (!crash) return;
     const name = crash.path.split("/").pop() ?? crash.path;
-    new Notice(t("notebooks.notice.readingCrash", { page: crash.page, name }), 20_000);
+    new Notice(t("notebooks.notice.ocrCrash", { page: crash.page, name }), 20_000);
   }
 
   // --- API keys and AI configuration -----------------------------------------
@@ -1728,7 +1917,7 @@ export default class GoodObsidianPlugin extends Plugin {
     }
   }
 
-  /** The text/vision vendor: transcription and questions. */
+  /** The text/vision vendor: questions, and transcription with {@link transcriptionAiConfig}. */
   textAiConfig(): AiVendorConfig {
     const vendor = this.settings.llmVendor;
     return {
@@ -1737,7 +1926,58 @@ export default class GoodObsidianPlugin extends Plugin {
       apiKey: this.apiKeyFor(vendor),
       baseUrl: this.settings.llmBaseUrl,
       skipCompressed: this.settings.openRouterSkipCompressed,
+      fallbackModel: this.settings.llmFallbackModel,
     };
+  }
+
+  /** Who transcribes pages: the AI service, or the one chosen for transcription (FineNotes#265). */
+  transcriptionVendor(): LlmVendor {
+    return resolveTranscribeVendor(this.settings.transcribeVendor, this.settings.llmVendor);
+  }
+
+  /**
+   * {@link textAiConfig} for page transcription: its own model when one is
+   * set, and its own service and key when one is chosen. The fallback model
+   * is the AI service's, so it only goes with that service.
+   */
+  transcriptionAiConfig(): AiVendorConfig {
+    const config = this.textAiConfig();
+    const vendor = this.transcriptionVendor();
+    if (vendor === config.vendor) {
+      return {
+        ...config,
+        model: transcriptionModel(config.model, this.settings.llmTranscribeModel),
+      };
+    }
+    return {
+      ...config,
+      vendor,
+      model: this.settings.llmTranscribeModel,
+      apiKey: this.apiKeyFor(vendor),
+      fallbackModel: "",
+    };
+  }
+
+  /** Change who transcribes pages, keeping each service's transcription model. */
+  async switchTranscribeVendor(next: TranscribeVendorChoice): Promise<void> {
+    switchTranscribeVendor(this.settings, next);
+    await this.saveSettings();
+  }
+
+  /** In memory only: pages written on in a notebook closed before they were transcribed, by path. */
+  private waitingPages = new Map<string, string[]>();
+
+  /** Keep a closing notebook's pages that were waiting for automatic transcription. */
+  keepWaitingPages(path: string, pageIds: readonly string[]): void {
+    if (pageIds.length > 0) this.waitingPages.set(path, [...pageIds]);
+    else this.waitingPages.delete(path);
+  }
+
+  /** Take back the pages a notebook left waiting when it was closed (once). */
+  takeWaitingPages(path: string): string[] {
+    const ids = this.waitingPages.get(path) ?? [];
+    this.waitingPages.delete(path);
+    return ids;
   }
 
   /** The image vendor, or null when the configured one cannot make images. */
@@ -1757,6 +1997,7 @@ export default class GoodObsidianPlugin extends Plugin {
       vendor: this.settings.llmVendor,
       baseUrl: this.settings.llmBaseUrl,
       imageVendor: this.settings.imageVendor,
+      transcribeVendor: this.settings.transcribeVendor,
       speechService: this.settings.speechService,
       speechBaseUrl: this.speechBaseUrl(),
       hasKey: (slot) => this.apiKeyFor(slot) !== "",
@@ -1977,7 +2218,42 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   /** Tips: the collections, or `page` when one is given. */
-  openTips(page: TipsPage | null = null): void {
+  /** Report a bug: Tips' search, asking what went wrong, then GitHub's form. */
+  openReport(): void {
+    this.openTips(null, true);
+  }
+
+  /**
+   * This device's system, read when Tips opens so the report row can open
+   * GitHub at once: `window.open` after an `await` may lose the tap that
+   * allowed it.
+   */
+  private osFacts: OsFacts | null = null;
+
+  /** Read this device's system once, in the background. */
+  private learnOs(): void {
+    if (this.osFacts) return;
+    void readOsFacts().then((facts) => {
+      this.osFacts = facts;
+    });
+  }
+
+  /** GitHub's bug form, filled in with `title` and what FineNotes knows of this device. */
+  private openBugForm(title: string): void {
+    const facts = this.osFacts;
+    window.open(
+      bugReportUrl({
+        title,
+        plugin: this.manifest.version,
+        obsidian: apiVersion,
+        device: bugFormDevice(Platform),
+        os: facts ? osName(facts) : null,
+      }),
+    );
+  }
+
+  openTips(page: TipsPage | null = null, reporting = false): void {
+    this.learnOs();
     new TipsModal(
       this.app,
       {
@@ -1988,6 +2264,7 @@ export default class GoodObsidianPlugin extends Plugin {
         features: this.featureHost(),
       },
       page,
+      reporting,
     ).open();
   }
 
@@ -2065,6 +2342,7 @@ export default class GoodObsidianPlugin extends Plugin {
       ask: (query) => {
         window.open(`${ASK_URL}&title=${encodeURIComponent(query)}`);
       },
+      report: (query) => this.openBugForm(query),
     };
   }
 
@@ -2563,6 +2841,25 @@ export default class GoodObsidianPlugin extends Plugin {
    * background run (`background`) never asks, and goes ahead only where that
    * consent was already given.
    */
+  /** Automatic transcription's wait after failures, shared by every notebook (`auto-backoff.ts`). */
+  private autoBackoff: AutoBackoff = NO_BACKOFF;
+
+  /** How long automatic transcription still waits after a failure, in ms; 0: it may run. */
+  autoTranscriptionWait(): number {
+    return autoWaitLeft(this.autoBackoff, Date.now());
+  }
+
+  /** An automatic transcription failed: wait before the next. True when this failure is the one to show. */
+  autoTranscriptionFailed(): boolean {
+    this.autoBackoff = afterAutoFailure(this.autoBackoff, Date.now());
+    return showsAutoFailure(this.autoBackoff);
+  }
+
+  /** A transcription, automatic or by hand, went through: automatic runs may go again. */
+  transcriptionWorked(): void {
+    this.autoBackoff = NO_BACKOFF;
+  }
+
   async runRecognition(target: RecognitionTarget, background = false): Promise<void> {
     const engine = this.activeProvider();
     if (engine.requiresNetwork && !(await this.maySendPages(background))) return;
@@ -2570,9 +2867,9 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   private maySendPages(background: boolean): Promise<boolean> {
-    if (background) return Promise.resolve(this.consentedTo(this.settings.llmVendor));
+    if (background) return Promise.resolve(this.consentedTo(this.transcriptionVendor()));
     return this.confirmAiSend(
-      this.textAiConfig(),
+      this.transcriptionAiConfig(),
       t("notebooks.consent.pagesAction"),
       t("notebooks.consent.pagesWhat"),
     );
@@ -2727,7 +3024,14 @@ export default class GoodObsidianPlugin extends Plugin {
 
   /** Put the class on the tab groups whose tab in front is a notebook, and only on those. */
   syncFullScreen(): void {
-    const places = this.openNotebooks().flatMap((view) => {
+    const views = [
+      ...this.openNotebooks(),
+      ...this.app.workspace
+        .getLeavesOfType(VIEW_TYPE_NOTE)
+        .map((leaf) => leaf.view)
+        .filter((view) => view instanceof TextNoteView),
+    ];
+    const places = views.flatMap((view) => {
       const group = view.containerEl.closest<HTMLElement>(".workspace-tabs");
       return group ? [{ group, shown: view.containerEl.isShown() }] : [];
     });
@@ -2907,8 +3211,11 @@ export default class GoodObsidianPlugin extends Plugin {
     // eslint-disable-next-line @typescript-eslint/unbound-method -- only ever called with a leaf as `this` (below), and put back as-is on unload
     const setViewState = WorkspaceLeaf.prototype.setViewState;
     const route = (state: ViewState): ViewState => {
-      const type = this.router.typeToOpen(state.type, state.state?.file, (path) =>
-        this.isInkPath(path),
+      const type = this.router.typeToOpen(
+        state.type,
+        state.state?.file,
+        (path) => this.isInkPath(path),
+        isTextNoteName,
       );
       return type === state.type ? state : { ...state, type };
     };
@@ -2992,7 +3299,9 @@ export default class GoodObsidianPlugin extends Plugin {
   private moveInkNotesOver(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE)) {
       const file = leaf.view instanceof MarkdownView ? leaf.view.file : null;
-      if (file && this.router.wantsNotebook(file.path, () => this.isInkFile(file))) {
+      if (file && isTextNoteName(file.name)) {
+        void this.showIn(leaf, VIEW_TYPE_NOTE, file);
+      } else if (file && this.router.wantsNotebook(file.path, () => this.isInkFile(file))) {
         void this.showIn(leaf, VIEW_TYPE_INK, file);
       }
     }
@@ -3413,6 +3722,20 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   /**
+   * A notebook kept as one file per page per device moved (#274): its page
+   * folder follows, exactly (`movePagesFolder`). Its id is in its file.
+   */
+  private async followPagesFolder(file: TAbstractFile, oldPath: string): Promise<void> {
+    if (!(file instanceof TFile) || !this.isInkFile(file)) return;
+    try {
+      const id = notebookIdOfText(await this.app.vault.cachedRead(file));
+      if (id !== null) await movePagesFolder(this.app, oldPath, file.path, id);
+    } catch (error) {
+      console.error("FineNotes: could not follow a notebook's pages", error);
+    }
+  }
+
+  /**
    * A notebook and its own folder keep one name: renaming either renames
    * the other (`followPairRename`). Run after Obsidian's own rename has
    * finished, through `fileManager.renameFile` so links follow too.
@@ -3440,19 +3763,23 @@ export default class GoodObsidianPlugin extends Plugin {
   }
 
   /**
-   * The library's stars and folder looks follow a file or folder renamed or
+   * The library's stars, hidden items and folder looks follow a file or folder renamed or
    * moved to `to`, and go with one deleted (no `to`). Here rather than in
    * the library, so they follow while Home is closed too.
    */
   private libraryPathChanged(from: string, to?: string): void {
-    const { libraryStars: stars, libraryFolders: styles } = this.settings;
-    const nextStars = to === undefined ? dropPaths(stars, from) : movePaths(stars, from, to);
+    const { libraryStars: stars, libraryHidden: hidden, libraryFolders: styles } = this.settings;
+    const follow = (paths: string[]): string[] =>
+      to === undefined ? dropPaths(paths, from) : movePaths(paths, from, to);
+    const nextStars = follow(stars);
+    const nextHidden = follow(hidden);
     const nextStyles = to === undefined ? dropStyles(styles, from) : moveStyles(styles, from, to);
-    const starsChanged =
-      nextStars.length !== stars.length || nextStars.some((p, i) => p !== stars[i]);
+    const same = (a: string[], b: string[]): boolean =>
+      a.length === b.length && a.every((p, i) => p === b[i]);
     const stylesChanged = JSON.stringify(nextStyles) !== JSON.stringify(styles);
-    if (!starsChanged && !stylesChanged) return;
+    if (same(nextStars, stars) && same(nextHidden, hidden) && !stylesChanged) return;
     this.settings.libraryStars = nextStars;
+    this.settings.libraryHidden = nextHidden;
     this.settings.libraryFolders = nextStyles;
     void this.saveSettings();
   }
@@ -3524,7 +3851,8 @@ export default class GoodObsidianPlugin extends Plugin {
       if (choices.type === "notebook" && choices.scroll === "horizontal") {
         doc.scroll = "horizontal";
       }
-      const content = buildInkFile(newNoteBody(heading, new Date().toISOString()), doc);
+      // Made in one file per page per device (#274) from the start.
+      const content = devicePagesNotebookText(newNoteBody(heading, new Date().toISOString()), doc);
       const file = await this.app.vault.create(
         normalizePath(joinVaultPath(paths.folder, name)),
         content,
@@ -3538,6 +3866,36 @@ export default class GoodObsidianPlugin extends Plugin {
       const tab = this.app.workspace.getLeaf(fromHome ? "tab" : false);
       if (fromHome) unstackTabsOf(tab);
       await tab.setViewState({ type: VIEW_TYPE_INK, active: true, state: { file: file.path } });
+      await this.app.workspace.revealLeaf(tab);
+      return file;
+    } catch (error) {
+      new Notice(t("notebooks.notice.createFailed", { reason: errorMessage(error) }), 8000);
+      return null;
+    }
+  }
+
+  /**
+   * A new text note (`Untitled.note.md`, named after its title once it has
+   * one) in `folder`, opened ready to type. Made from Home it gets a tab of
+   * its own, as a notebook does.
+   */
+  async createTextNote(folder?: string): Promise<TFile | null> {
+    const dir = this.outsideNotebook(folder ?? this.newNotebookFolder());
+    try {
+      if (dir && !this.app.vault.getFolderByPath(dir)) await this.app.vault.createFolder(dir);
+      const name = freeNoteName(t("notebooks.note.untitled"), (candidate) =>
+        Boolean(this.app.vault.getAbstractFileByPath(normalizePath(joinVaultPath(dir, candidate)))),
+      );
+      let sequence = 0;
+      const file = await this.app.vault.create(
+        normalizePath(joinVaultPath(dir, name)),
+        newNoteFile(new Date().toISOString(), () => `b${++sequence}`),
+      );
+      const fromHome =
+        this.app.workspace.getMostRecentLeaf()?.view.getViewType() === VIEW_TYPE_LIBRARY;
+      const tab = this.app.workspace.getLeaf(fromHome ? "tab" : false);
+      if (fromHome) unstackTabsOf(tab);
+      await tab.setViewState({ type: VIEW_TYPE_NOTE, active: true, state: { file: file.path } });
       await this.app.workspace.revealLeaf(tab);
       return file;
     } catch (error) {
@@ -3600,6 +3958,33 @@ export default class GoodObsidianPlugin extends Plugin {
     if (board) boards.add(path);
     else boards.delete(path);
     this.app.saveLocalStorage(BOARDS_KEY, JSON.stringify([...boards]));
+  }
+
+  /**
+   * "Keep beside notebook…" on a PDF: pick a notebook, open it (or the tab
+   * it is open in), and keep the PDF beside its notes, shown as its tab.
+   */
+  keepPdfBesideNotebook(pdf: TFile): void {
+    new NotebookPickModal(
+      this.app,
+      this.transferTargets(),
+      this.recentTransferTargets(),
+      (target) => void this.openBeside(target.path, pdf.path),
+    ).open();
+  }
+
+  private async openBeside(notebookPath: string, pdfPath: string): Promise<void> {
+    const file = this.app.vault.getFileByPath(notebookPath);
+    if (!file) return;
+    let view = this.openNotebooks().find((open) => open.file?.path === notebookPath);
+    if (!view) {
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
+      view = leaf.view instanceof InkView ? leaf.view : undefined;
+    } else {
+      this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
+    }
+    if (view) await view.keepPdfBeside(pdfPath);
   }
 
   /** The notebooks pages went to last, most recent first (kept on this device). */
@@ -3706,20 +4091,31 @@ export default class GoodObsidianPlugin extends Plugin {
    * Practice set `set` as a new `.practice.md` file in FineNotes
    * assets/Handwriting sheets, opened at its cover. Sheets made elsewhere before
    * 2.6 stay where they are: learning finds them anywhere in the vault.
-   * `only`: the symbol sheet's lines to write, when not all of them.
+   * `only`: the symbol sheet's lines to write, when not all of them;
+   * `drawn`: a drawn sheet's lines (`DRAWN_SET`).
    */
-  async createPracticeFile(set: number, only?: readonly number[]): Promise<TFile | null> {
+  async createPracticeFile(
+    set: number,
+    only?: readonly number[],
+    drawn?: DrawnSheet,
+  ): Promise<TFile | null> {
     const dir = HANDWRITING_FOLDER;
     try {
       if (dir && !this.app.vault.getFolderByPath(dir)) await this.app.vault.createFolder(dir);
       const parent = dir ? this.app.vault.getFolderByPath(dir) : this.app.vault.getRoot();
       const taken = new Set(parent?.children.map((child) => child.name) ?? []);
-      const base = isSymbolSet(set) ? "Symbol practice" : `Handwriting practice ${set}`;
+      const base = isSymbolSet(set)
+        ? "Symbol practice"
+        : drawn
+          ? `Practice sheet ${drawn.sheet}`
+          : `Handwriting practice ${set}`;
       const name = uniqueFileName(base, PRACTICE_FILE_SUFFIX, taken);
       const geometry = { ...DEFAULT_PAGE_GEOMETRY, width: this.settings.paperWidth };
       const content = buildInkFile(
         newNoteBody(stripInkSuffix(name), new Date().toISOString()),
-        buildPracticeFile(set, geometry, only),
+        drawn
+          ? buildDrawnFile(geometry, drawn.lines, drawn.draw, drawn.sheet)
+          : buildPracticeFile(set, geometry, only),
       );
       const file = await this.app.vault.create(normalizePath(joinVaultPath(dir, name)), content);
       const tab = this.app.workspace.getLeaf(false);

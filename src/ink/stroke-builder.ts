@@ -55,6 +55,14 @@ export interface StrokeBuilderOptions {
   /** How the positions are smoothed first; `"off"` by default. */
   smoothing?: Smoothing;
   /**
+   * The grid the pen's positions arrive rounded to, page px (one whole
+   * screen px, or one device px). With `"centred"` and no stabilization, a
+   * sample is placed no further than half a step from where it came on
+   * either axis, as rounding moved it no further (FineNotes#275). Absent:
+   * no limit.
+   */
+  grid?: number;
+  /**
    * Stroke stabilization, the pen's own setting: the centred window reaches
    * at least this far along the stroke on each side of a sample, page px
    * ({@link stabilizationReach}). With `"centred"` the window is the wider of
@@ -97,6 +105,13 @@ const MAX_FILL = 64;
  * and he confirmed it on the iPad (1.2.1-beta.1). The price is the newest 3
  * samples (~25 ms there), which stay provisional ({@link StrokeBuilder.tail})
  * until the samples after them arrive.
+ *
+ * The window is counted in samples, so its reach on screen does not shrink
+ * with the writing: 7 samples 2 px apart span ~13 px, wider than a letter
+ * written at a practice sheet's whole-page zoom (~8 px), and the quadratic
+ * flattened such letters ("Five" read "Fi~", FineNotes#275). Given the
+ * rounding grid ({@link StrokeBuilderOptions.grid}), a sample moves at most
+ * half a step: enough to take the steps out, not a letter's shape.
  */
 export const CENTRED_HALF = 3;
 
@@ -149,6 +164,14 @@ const CENTRED_WEIGHTS: (readonly number[])[] = [
   [-3, 12, 17, 12, -3],
   [-2, 3, 6, 7, 6, 3, -2],
 ];
+
+/**
+ * `value` moved no further than `limit` from `from`: where rounding to a
+ * grid could have left a sample that was really at `value`.
+ */
+function withinStep(value: number, from: number, limit: number): number {
+  return Math.min(from + limit, Math.max(from - limit, value));
+}
 
 /**
  * The weights of the quadratic Savitzky-Golay window `half` samples each
@@ -386,6 +409,17 @@ export class StrokeBuilder {
   }
 
   /**
+   * Whether a reading the pen has not given yet (its first pressure, or its
+   * first tilt, where those are kept) would rewrite the points kept so far:
+   * ink drawn from them now could change when it comes.
+   */
+  get awaitingReading(): boolean {
+    const { pressureEnabled, tilt } = this.options;
+    if (pressureEnabled && Number.isNaN(this.lastReading)) return true;
+    return tilt === true && Number.isNaN(this.tiltFilter.current);
+  }
+
+  /**
    * The median pressure the pen actually read over the stroke, or null if
    * it read none (or pressure is off): what the next stroke assumes until
    * its own first reading comes in.
@@ -552,7 +586,11 @@ export class StrokeBuilder {
     this.take(x, y, this.held[i][2], this.held[i][3]);
   }
 
-  /** Where the `reach` samples on each side of the held sample `i` put it. */
+  /**
+   * Where the `reach` samples on each side of the held sample `i` put it:
+   * within half a {@link StrokeBuilderOptions.grid} step of the sample
+   * when one is given and stabilization is off.
+   */
   private placed(i: number, reach: number): [number, number] {
     const weights = centredWeights(reach);
     let x = 0;
@@ -564,7 +602,10 @@ export class StrokeBuilder {
       y += weights[j] * s[1];
       sum += weights[j];
     }
-    return [x / sum, y / sum];
+    const { grid, stabilize } = this.options;
+    if (!grid || grid <= 0 || (stabilize ?? 0) > 0) return [x / sum, y / sum];
+    const [sx, sy] = this.held[i];
+    return [withinStep(x / sum, sx, grid / 2), withinStep(y / sum, sy, grid / 2)];
   }
 
   /** A builder in the same state, for settling without touching this one. */

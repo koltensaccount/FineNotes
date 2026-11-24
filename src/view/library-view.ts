@@ -59,10 +59,22 @@ import {
   withFolderStyle,
 } from "../model/library-style";
 import { PdfBackdropCache } from "./pdf-backdrop";
-import { NotebookPages } from "./library-pages";
+import { NotebookPages, notebookStatOf } from "./library-pages";
+import { type FileStamp, devicePagesFolderOfFile } from "../model/device-pages";
+import { TextNotePages } from "./library-note";
+import { firstBlockOn } from "../model/note-pages";
+import { TEXT_NOTE_FILE_SUFFIX, isTextNoteName } from "../model/text-note-file";
 import type { Page } from "../model/document";
 import { type Tap, isDoubleTap, railFolders } from "../model/library-rail";
-import { SIMPLE_CLASS } from "../model/simple-mode";
+import {
+  SIMPLE_CLASS,
+  SIMPLE_PARTS,
+  SIMPLE_PART_ICONS,
+  SIMPLE_PART_NAMES,
+  type SimplePart,
+  simplePartClass,
+  toggleSimplePart,
+} from "../model/simple-mode";
 import type { HomeCardKind, Tip } from "../model/tips";
 import { tipScene } from "../model/tip-scenes";
 import { TipVisual } from "./tip-visual";
@@ -90,7 +102,9 @@ import {
   updateButtonLook,
 } from "../model/update-button";
 import { inkFileSuffix } from "../model/new-notebook";
+import { type ShowKind, showKindOf, shownBy } from "../model/note-listing";
 import { isStarred, starredFirst, toggleStar } from "../model/favorites";
+import { hiddenBy, hide, isHidden, shownItems, unhide } from "../model/library-hidden";
 import { LAST_PAGES_KEY, type LastPages, parseLastPages } from "../model/last-page";
 import {
   HOME_PREVIEW_PAGES,
@@ -108,6 +122,7 @@ import {
   hoistSingles,
   folderOf,
   notePreviewText,
+  onShelf,
   readProgress,
   placeholderEntry,
   searchEntries,
@@ -155,8 +170,13 @@ export interface LibraryHost {
   dismissHomeCard(kind: HomeCardKind): void;
   simpleLook(): boolean;
   setSimpleLook(on: boolean): void;
+  /** The parts of Obsidian the simple look shows again. */
+  simpleParts(): readonly SimplePart[];
+  setSimpleParts(parts: SimplePart[]): void;
   /** The New notebook / New board dialogs, made in `folder` ("" the root). */
   newNotebook(folder: string): void;
+  /** A new text note, made in `folder` and opened. */
+  newNote(folder: string): void;
   newBoard(folder: string): void;
   /** The import dialog for Goodnotes, Notability and other apps, into `folder`. */
   importFromApp(folder: string): void;
@@ -180,6 +200,9 @@ export interface LibraryHost {
   /** The starred notebooks and folders, by vault path. */
   stars(): readonly string[];
   setStars(stars: string[]): void;
+  /** The notebooks, files and folders hidden from Home, by vault path. */
+  hidden(): readonly string[];
+  setHidden(hidden: string[]): void;
   /** The colour and icon chosen for folders, by vault path. */
   folderStyles(): FolderStyles;
   setFolderStyles(styles: FolderStyles): void;
@@ -221,8 +244,10 @@ const RECENT_COUNT = 6;
 const RAIL_MIN_WIDTH = 720;
 /** Whether the folder rail is put away on this device (simple look, wide Home). */
 const RAIL_HIDDEN_KEY = "finenotes-library-rail-hidden";
-/** Whether Home lists notebooks only on this device. */
+/** Whether Home lists notebooks only on this device: the switch before the Show filter. */
 const ONLY_NOTEBOOKS_KEY = "finenotes-library-only-notebooks";
+/** What Home shows on this device: everything, notebooks or text notes (`ShowKind`). */
+const SHOW_KEY = "finenotes-library-show";
 /** A cover drawn from the notebook's own cover page, CSS px wide. */
 const COVER_WIDTH = 240;
 
@@ -273,6 +298,11 @@ export function unstackTabsOf(leaf: WorkspaceLeaf): void {
     setStacked?: (on: boolean) => void;
   } | null;
   if (group?.isStacked && typeof group.setStacked === "function") group.setStacked(false);
+}
+
+/** A file's stamp as Home keys reads on it: `<mtime>:<size>`. */
+function stampOf(stat: FileStamp): string {
+  return `${stat.mtime}:${stat.size}`;
 }
 
 export class LibraryView extends ItemView {
@@ -342,8 +372,15 @@ export class LibraryView extends ItemView {
   private railHidden = this.app.loadLocalStorage(RAIL_HIDDEN_KEY) === "1";
   /** The rail opened as a drawer over a narrow Home. */
   private drawerOpen = false;
-  /** Home lists notebooks only, no other files (the sort menu); kept on this device. */
-  private onlyNotebooks = this.app.loadLocalStorage(ONLY_NOTEBOOKS_KEY) === "1";
+  /** What Home lists (the view menu's Show): everything, notebooks or text notes; kept on this device. */
+  private showKind: ShowKind = showKindOf(
+    (this.app.loadLocalStorage(SHOW_KEY) as string | null) ??
+      (this.app.loadLocalStorage(ONLY_NOTEBOOKS_KEY) as string | null),
+  );
+  /** The rail brought out beside Obsidian's own left sidebar (simple look), until Home closes. */
+  private railWithSidebar = false;
+  /** Hidden items shown, dimmed, until Home closes (the Sort menu, while any are hidden). */
+  private showHidden = false;
   /** The simple look as of the last paint, so a change of it repaints. */
   private simple = false;
   private previewEl!: HTMLElement;
@@ -357,6 +394,8 @@ export class LibraryView extends ItemView {
   private lastTap: Tap | null = null;
   /** Notebooks read whole, for their cover and page pictures. */
   private pagesOf: NotebookPages | null = null;
+  /** Text notes laid out on pages, for their covers and the preview's strip. */
+  private notePagesOf: TextNotePages | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -541,8 +580,20 @@ export class LibraryView extends ItemView {
    */
   private railMode(): "side" | "drawer" | "none" {
     if (!document.body.hasClass(SIMPLE_CLASS)) return "none";
+    // Obsidian's own left sidebar is back: its file explorer does the rail's
+    // job, so the rail starts put away; its button still brings it (and the
+    // simple look's ⌄ at its foot) back.
+    if (this.leftSidebarBack()) {
+      if (this.narrowForRail()) return this.drawerOpen ? "drawer" : "none";
+      return this.railWithSidebar ? "side" : "none";
+    }
     if (this.narrowForRail()) return this.drawerOpen ? "drawer" : "none";
     return this.railHidden ? "none" : "side";
+  }
+
+  /** Whether the simple look shows Obsidian's left sidebar again. */
+  private leftSidebarBack(): boolean {
+    return document.body.hasClass(simplePartClass("leftSidebar"));
   }
 
   private hasRail(): boolean {
@@ -552,6 +603,7 @@ export class LibraryView extends ItemView {
   /** The rail's button: put the rail away or bring it back (wide), or open and close the drawer (narrow). */
   private toggleRail(): void {
     if (this.narrowForRail()) this.drawerOpen = !this.drawerOpen;
+    else if (this.leftSidebarBack()) this.railWithSidebar = !this.railWithSidebar;
     else {
       this.railHidden = !this.railHidden;
       this.app.saveLocalStorage(RAIL_HIDDEN_KEY, this.railHidden ? "1" : "0");
@@ -562,6 +614,11 @@ export class LibraryView extends ItemView {
   private pages(): NotebookPages {
     this.pagesOf ??= new NotebookPages(this.app, () => this.pdfCache());
     return this.pagesOf;
+  }
+
+  private notePages(): TextNotePages {
+    this.notePagesOf ??= new TextNotePages(this.app, () => this.contentEl);
+    return this.notePagesOf;
   }
 
   /** One key per vault for what Home keeps on this device. */
@@ -606,7 +663,11 @@ export class LibraryView extends ItemView {
       else this.stale = true;
     };
     const touched = (file: TAbstractFile): void => {
-      if (file instanceof TFile && !this.reads.has(file.path) && !this.isNotebook(file)) return;
+      // A file of a notebook kept as one file per page per device changes that notebook (#274).
+      const page = file instanceof TFile && devicePagesFolderOfFile(file.path) !== null;
+      if (file instanceof TFile && !page && !this.reads.has(file.path) && !this.isNotebook(file)) {
+        return;
+      }
       // A notebook saved while Home is a tab in the background is read when Home is shown.
       if (this.containerEl.isShown()) this.refreshSoon();
       else this.stale = true;
@@ -706,6 +767,8 @@ export class LibraryView extends ItemView {
     this.unloadPreviews();
     this.pagesOf?.dispose();
     this.pagesOf = null;
+    this.notePagesOf?.release();
+    this.notePagesOf = null;
     this.pdf?.destroy();
     this.pdf = null;
     if (this.workerHeld) releasePdfWorker();
@@ -782,13 +845,20 @@ export class LibraryView extends ItemView {
     ];
   }
 
+  /**
+   * A notebook's size and last change, counting its page files when it keeps
+   * its pages in one file per page per device (#274): what Home keys its reads on.
+   */
+  private stat(file: TFile): FileStamp {
+    return notebookStatOf(this.app, file);
+  }
+
   /** What a notebook's card shows: its last read, or its file's facts until it is read. */
   private entryOf(file: TFile): LibraryEntry {
     const read = this.reads.get(file.path);
-    const fresh = read && read.mtime === file.stat.mtime && read.size === file.stat.size;
-    const entry = fresh
-      ? read.entry
-      : (read?.entry ?? placeholderEntry(file.path, file.stat.mtime));
+    const stat = this.stat(file);
+    const fresh = read && read.mtime === stat.mtime && read.size === stat.size;
+    const entry = fresh ? read.entry : (read?.entry ?? placeholderEntry(file.path, stat.mtime));
     return { ...entry, created: file.stat.ctime };
   }
 
@@ -864,7 +934,7 @@ export class LibraryView extends ItemView {
         saveNotebookTexts(this.vaultKey(), textChanges);
         return;
       }
-      const { mtime, size } = file.stat;
+      const { mtime, size } = this.stat(file);
       // Only its text was missing (kept from before searching inside notebooks): its card stays.
       const textOnly = this.entryFresh(file);
       // Decoded in the read worker; its cover drawn from that same read, never a second one.
@@ -913,9 +983,7 @@ export class LibraryView extends ItemView {
     try {
       this.app.saveLocalStorage(
         READING_MARK_KEY,
-        file
-          ? JSON.stringify({ path: file.path, stamp: `${file.stat.mtime}:${file.stat.size}` })
-          : null,
+        file ? JSON.stringify({ path: file.path, stamp: stampOf(this.stat(file)) }) : null,
       );
     } catch {
       // No storage: nothing to guard with.
@@ -943,12 +1011,10 @@ export class LibraryView extends ItemView {
       return;
     }
     this.markReading(null);
-    const at = stale.findIndex(
-      (f) => f.path === path && `${f.stat.mtime}:${f.stat.size}` === stamp,
-    );
+    const at = stale.findIndex((f) => f.path === path && stampOf(this.stat(f)) === stamp);
     if (at < 0) return;
     const [file] = stale.splice(at, 1);
-    const { mtime, size } = file.stat;
+    const { mtime, size } = this.stat(file);
     const read = this.entryFresh(file)
       ? this.reads.get(file.path)
       : { mtime, size, entry: placeholderEntry(file.path, mtime) };
@@ -964,13 +1030,15 @@ export class LibraryView extends ItemView {
   /** Whether a notebook's card is from its file as it is now. */
   private entryFresh(file: TFile): boolean {
     const read = this.reads.get(file.path);
-    return !!read && read.mtime === file.stat.mtime && read.size === file.stat.size;
+    const stat = this.stat(file);
+    return !!read && read.mtime === stat.mtime && read.size === stat.size;
   }
 
   /** Whether a notebook's text for searching is from its file as it is now. */
   private textFresh(file: TFile): boolean {
     const text = this.texts.get(file.path);
-    return !!text && text.mtime === file.stat.mtime && text.size === file.stat.size;
+    const stat = this.stat(file);
+    return !!text && text.mtime === stat.mtime && text.size === stat.size;
   }
 
   // --- Painting ---------------------------------------------------------------
@@ -1024,7 +1092,7 @@ export class LibraryView extends ItemView {
       if (child !== kept) child.remove();
     }
 
-    const all = this.entries();
+    const all = shownItems(this.entries(), this.host.hidden(), (e) => e.path, this.showHidden);
     this.simple = document.body.hasClass(SIMPLE_CLASS);
     const mode = this.railMode();
     const rail = mode === "side";
@@ -1035,7 +1103,7 @@ export class LibraryView extends ItemView {
     this.railButton.toggleClass("is-active", mode !== "none");
     this.railButton.setAttribute("aria-pressed", String(mode !== "none"));
     // Folders are filed from every item, then filtered: "Notebooks only" hides files, never moves notebooks.
-    const keep = (e: LibraryEntry): boolean => !this.onlyNotebooks || e.kind === "notebook";
+    const keep = (e: LibraryEntry): boolean => shownBy(e, this.showKind);
     if (mode !== "none") this.paintRail(all, keep);
     else this.railEl.empty();
     if (this.previewPath !== null && !all.some((e) => e.path === this.previewPath))
@@ -1136,11 +1204,11 @@ export class LibraryView extends ItemView {
     // its notebooks and files together.
     const atTop = this.folder === "";
     if (atTop) {
-      const files = here.notebooks.filter((e) => e.kind !== "notebook");
+      const files = here.notebooks.filter((e) => !onShelf(e));
       if (files.length > 0)
         this.grid(sortEntries(files, this.sort, this.reverse), t("notebooks.home.files"));
     }
-    const rest = atTop ? all.filter((e) => e.kind === "notebook") : here.notebooks;
+    const rest = atTop ? all.filter(onShelf) : here.notebooks;
     if (rest.length > 0) {
       this.grid(
         sortEntries(rest, this.sort, this.reverse),
@@ -1167,6 +1235,7 @@ export class LibraryView extends ItemView {
           !c.name.startsWith(".") &&
           c.path !== INBOX_FOLDER &&
           made[c.path] !== undefined &&
+          (this.showHidden || !isHidden(this.host.hidden(), c.path)) &&
           !holdsFiles(c) &&
           !listed.some((l) => l.path === c.path),
       )
@@ -1212,7 +1281,7 @@ export class LibraryView extends ItemView {
       path,
       name: path.split("/").pop() ?? path,
       count: inside.length,
-      notebooks: inside.filter((e) => e.kind === "notebook").length,
+      notebooks: inside.filter(onShelf).length,
     };
   }
 
@@ -1247,6 +1316,7 @@ export class LibraryView extends ItemView {
       attr: { role: "button", tabindex: "0", "aria-label": folder.name },
     });
     this.enter(card, `folder:${folder.path}`);
+    card.toggleClass("is-off-home", isHidden(this.host.hidden(), folder.path));
     const style = this.host.folderStyles()[folder.path] ?? {};
     const cover = card.createDiv({ cls: "goodobsidian-library-cover is-folder" });
     cover.style.setProperty("--gob-folder", style.color ?? DEFAULT_FOLDER_COLOR);
@@ -1427,7 +1497,21 @@ export class LibraryView extends ItemView {
     cover.createSpan({ cls: "goodobsidian-library-cover-title", text: entry.title });
     if (entry.kind === "pdf" && entry.pdf) this.paintPdfCover(cover, entry.pdf);
     else if (entry.kind === "image") this.paintImageCover(cover, entry.path);
+    else if (entry.textNote) this.paintTextNoteCover(cover, entry.path);
     else if (entry.kind === "note") this.paintNoteCover(cover, entry.path);
+  }
+
+  /**
+   * A text note's first page as its cover, as a notebook shows its first
+   * page: laid out on a page and drawn (library-note.ts), kept as a small
+   * picture on this device like a notebook's pages.
+   */
+  private paintTextNoteCover(cover: HTMLElement, path: string): void {
+    cover.addClass("is-textnote");
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) return;
+    const sheet = cover.createDiv({ cls: "goodobsidian-library-textnote-page" });
+    this.pagePicture(sheet, file, 0, COVER_WIDTH, () => cover.addClass("is-ready"));
   }
 
   /**
@@ -1568,6 +1652,7 @@ export class LibraryView extends ItemView {
       attr: { role: "button", tabindex: "0", "aria-label": entry.title },
     });
     this.enter(card, entry.path, settled);
+    card.toggleClass("is-off-home", isHidden(this.host.hidden(), entry.path));
     this.cards.set(entry.path, [...(this.cards.get(entry.path) ?? []), { el: card, leftAt }]);
     const cover = card.createDiv({ cls: "goodobsidian-library-cover" });
     const notebook = entry.kind === "notebook";
@@ -1857,7 +1942,7 @@ export class LibraryView extends ItemView {
     };
     row(t("notebooks.home.title"), "house", null, "", 0, this.folder === "");
     rail.createDiv({ cls: "goodobsidian-library-rail-label", text: t("notebooks.home.folders") });
-    const made = Object.keys(styles);
+    const made = shownItems(Object.keys(styles), this.host.hidden(), (p) => p, this.showHidden);
     const listed = hoistSingles(all, (folder) => styles[folder] !== undefined).filter(keep);
     for (const folder of railFolders(listed, this.folder, made)) {
       const el = row(
@@ -1886,6 +1971,17 @@ export class LibraryView extends ItemView {
       cls: "goodobsidian-library-rail-name",
       text: t("settings.simpleLook.name"),
     });
+    // Its ⌄, as on every Home item: the parts of Obsidian to show again.
+    const caret = foot.createEl("button", {
+      cls: "clickable-icon goodobsidian-library-caret",
+      attr: {
+        type: "button",
+        "aria-label": t("settings.simpleLook.show"),
+        "aria-haspopup": "menu",
+      },
+    });
+    setIcon(caret, "chevron-down");
+    caret.addEventListener("click", (event) => this.openSimplePartsMenu(event));
     new ToggleComponent(foot).setValue(this.host.simpleLook()).onChange((on) => {
       this.host.setSimpleLook(on);
       this.paintNow();
@@ -1957,7 +2053,7 @@ export class LibraryView extends ItemView {
    */
   private ownCoverKey(file: TFile): string {
     const dpr = window.devicePixelRatio || 1;
-    return `cover:${file.path}@${file.stat.mtime}:${file.stat.size}:${Math.round(COVER_WIDTH * dpr)}`;
+    return `cover:${file.path}@${stampOf(this.stat(file))}:${Math.round(COVER_WIDTH * dpr)}`;
   }
 
   /** The cover page of a notebook just read, kept as its cover picture unless one is kept already. */
@@ -2002,7 +2098,8 @@ export class LibraryView extends ItemView {
       }
       // Not read since it changed: Home's own read draws the cover (keepOwnCover), then this card again.
       const read = this.reads.get(file.path);
-      if (!read || read.mtime !== file.stat.mtime || read.size !== file.stat.size) return;
+      const stat = this.stat(file);
+      if (!read || read.mtime !== stat.mtime || read.size !== stat.size) return;
       const canvas = await this.pages().render(file, 0, COVER_WIDTH);
       if (!canvas || this.closed) return;
       const url = await saveCover(vault, key, canvas);
@@ -2057,6 +2154,10 @@ export class LibraryView extends ItemView {
     setIcon(more, "more-horizontal");
     more.addEventListener("click", (event) => this.openCardMenu(event, entry));
 
+    if (entry.textNote) {
+      this.textNoteStrip(pane, info, entry);
+      return;
+    }
     if (entry.kind !== "notebook") return;
     const file = this.app.vault.getFileByPath(entry.path);
     if (!file) return;
@@ -2103,12 +2204,59 @@ export class LibraryView extends ItemView {
   }
 
   /**
+   * A text note's pages in its preview, cut as Home lays it out
+   * (note-pages.ts); a tap opens the note at the page's first paragraph.
+   * The page count joins the facts once the note is laid out.
+   */
+  private textNoteStrip(pane: HTMLElement, info: HTMLElement, entry: LibraryEntry): void {
+    const file = this.app.vault.getFileByPath(entry.path);
+    if (!file) return;
+    const strip = pane.createDiv({ cls: "goodobsidian-library-preview-pages" });
+    void this.notePages()
+      .count(file)
+      .then((total) => {
+        if (this.closed || !strip.isConnected || total === 0) return;
+        // Between the folder and the date, as a notebook's count is.
+        const facts = info.querySelectorAll(".goodobsidian-library-when");
+        const fact = createDiv({
+          cls: "goodobsidian-library-when",
+          text: tn("notebooks.home.pageCount", total),
+        });
+        const before = facts[1] ?? info.querySelector(".goodobsidian-library-preview-buttons");
+        if (before) info.insertBefore(fact, before);
+        for (let index = 0; index < Math.min(total, HOME_PREVIEW_PAGES); index++) {
+          const sheet = strip.createDiv({
+            cls: "goodobsidian-library-preview-page",
+            attr: {
+              role: "button",
+              tabindex: "0",
+              "aria-label": t("notebooks.home.pageOf", { page: index + 1, total }),
+            },
+          });
+          sheet.addEventListener("click", () => this.openItem(entry, index));
+          sheet.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") this.openItem(entry, index);
+          });
+          this.pagePicture(sheet, file, index, 110);
+        }
+      });
+  }
+
+  /**
    * Page `index` of `file` drawn into `sheet` at the width it is shown
    * (at least `minWidth` CSS px, at most 420), as a small picture kept on
    * this device: shown again, it is there at once and nothing is drawn.
    */
-  private pagePicture(sheet: HTMLElement, file: TFile, index: number, minWidth: number): void {
+  private pagePicture(
+    sheet: HTMLElement,
+    file: TFile,
+    index: number,
+    minWidth: number,
+    shown?: () => void,
+  ): void {
     const dpr = window.devicePixelRatio || 1;
+    // A text note's pages are Home's own cut of it, kept apart from a notebook's.
+    const note = isTextNoteName(file.name);
     const show = (url: string): void => {
       if (!sheet.isConnected) return;
       const img = createEl("img", {
@@ -2119,9 +2267,10 @@ export class LibraryView extends ItemView {
       sheet.empty();
       sheet.appendChild(img);
       sheet.addClass("is-ready");
+      shown?.();
     };
     const keyFor = (width: number): string =>
-      `page:${file.path}#${index}@${file.stat.mtime}:${file.stat.size}:${Math.round(width * dpr)}`;
+      `${note ? "notepage" : "page"}:${file.path}#${index}@${stampOf(this.stat(file))}:${Math.round(width * dpr)}`;
     const vault = this.vaultKey();
     this.whenSeen(sheet, async () => {
       if (this.closed || !sheet.isConnected) return;
@@ -2134,7 +2283,9 @@ export class LibraryView extends ItemView {
         show(kept);
         return;
       }
-      const canvas = await this.pages().render(file, index, width);
+      const canvas = note
+        ? await this.notePages().render(file, index, width)
+        : await this.pages().render(file, index, width);
       if (!canvas || this.closed) return;
       const url = await saveCover(vault, key, canvas);
       canvas.width = canvas.height = 0;
@@ -2250,7 +2401,12 @@ export class LibraryView extends ItemView {
     const extras = await this.searchExtras();
     const books: LibraryBook[] = [];
     // The notebooks edited last first: among equal pages, the one in use now is nearer the top.
-    const files = this.notebookFiles().sort((a, b) => b.stat.mtime - a.stat.mtime);
+    const files = shownItems(
+      this.notebookFiles(),
+      this.host.hidden(),
+      (f) => f.path,
+      this.showHidden,
+    ).sort((a, b) => b.stat.mtime - a.stat.mtime);
     for (const file of files) {
       const record = this.texts.get(file.path);
       if (!record) continue;
@@ -2331,10 +2487,30 @@ export class LibraryView extends ItemView {
       pageIndex !== undefined && notebook
         ? { pageIndex, ...(search ? { search } : {}) }
         : undefined;
+    if (pageIndex !== undefined && pageIndex > 0 && entry.textNote) {
+      void this.openNoteAt(leaf, file, existing !== null, pageIndex);
+      return;
+    }
     if (existing) {
       void this.app.workspace.revealLeaf(existing);
       if (at) leaf.setEphemeralState(at);
     } else void leaf.openFile(file, at ? { eState: at } : undefined);
+  }
+
+  /** A text note opened (or shown) at the first paragraph of page `pageIndex` of Home's cut of it. */
+  private async openNoteAt(
+    leaf: WorkspaceLeaf,
+    file: TFile,
+    open: boolean,
+    pageIndex: number,
+  ): Promise<void> {
+    const layout = await this.notePages().layout(file);
+    const block = layout ? firstBlockOn(layout.pages, pageIndex) : null;
+    const at = block !== null ? { noteBlock: block } : undefined;
+    if (open) {
+      void this.app.workspace.revealLeaf(leaf);
+      if (at) leaf.setEphemeralState(at);
+    } else await leaf.openFile(file, at ? { eState: at } : undefined);
   }
 
   /** A menu with room for a finger: every row is tall (styles.css). */
@@ -2429,17 +2605,37 @@ export class LibraryView extends ItemView {
           }),
       );
     }
-    menu.addItem((item) =>
-      item
-        .setTitle(t("notebooks.home.onlyNotebooks"))
-        .setIcon("notebook")
-        .setChecked(this.onlyNotebooks)
-        .onClick(() => {
-          this.onlyNotebooks = !this.onlyNotebooks;
-          this.app.saveLocalStorage(ONLY_NOTEBOOKS_KEY, this.onlyNotebooks ? "1" : "0");
-          this.paintNow(true);
-        }),
-    );
+    menu.addSeparator();
+    // Show: one choice of three, where "Notebooks only" was a switch.
+    for (const [show, label, icon] of [
+      ["all", "notebooks.home.showAll", "layers"],
+      ["notebooks", "notebooks.home.onlyNotebooks", "notebook"],
+      ["notes", "notebooks.home.showNotes", "notepad-text"],
+    ] as const) {
+      menu.addItem((item) =>
+        item
+          .setTitle(t(label))
+          .setIcon(icon)
+          .setChecked(this.showKind === show)
+          .onClick(() => {
+            this.showKind = show;
+            this.app.saveLocalStorage(SHOW_KEY, show);
+            this.paintNow(true);
+          }),
+      );
+    }
+    // Only while something is hidden: otherwise there is nothing to show.
+    if (this.showHidden || this.host.hidden().length > 0)
+      menu.addItem((item) =>
+        item
+          .setTitle(t("notebooks.home.showHidden"))
+          .setIcon("eye")
+          .setChecked(this.showHidden)
+          .onClick(() => {
+            this.showHidden = !this.showHidden;
+            this.paintNow(true);
+          }),
+      );
     menu.addSeparator();
     for (const option of SORTS) {
       const current = this.sort === option.by;
@@ -2631,6 +2827,12 @@ export class LibraryView extends ItemView {
     );
     menu.addItem((item) =>
       item
+        .setTitle(t("notebooks.note.new"))
+        .setIcon("notepad-text")
+        .onClick(() => this.host.newNote(this.folder)),
+    );
+    menu.addItem((item) =>
+      item
         .setTitle(t("notebooks.newNotebook.board"))
         .setIcon("infinity")
         .onClick(() => this.host.newBoard(this.folder)),
@@ -2741,7 +2943,12 @@ export class LibraryView extends ItemView {
         .setTitle(t("common.rename"))
         .setIcon("pencil")
         .onClick(() =>
-          this.rename(file, entry.title, inkFileSuffix(file.name) ?? `.${file.extension}`),
+          this.rename(
+            file,
+            entry.title,
+            inkFileSuffix(file.name) ??
+              (entry.textNote ? TEXT_NOTE_FILE_SUFFIX : `.${file.extension}`),
+          ),
         ),
     );
     // A copy and a PDF export are a notebook's; any other file has Obsidian's own.
@@ -2765,6 +2972,7 @@ export class LibraryView extends ItemView {
         .setIcon("folder-input")
         .onClick(() => this.move(file)),
     );
+    this.hideItem(menu, file.path);
     menu.addSeparator();
     menu.addItem((item) =>
       item
@@ -2814,6 +3022,7 @@ export class LibraryView extends ItemView {
         .setIcon("folder-input")
         .onClick(() => this.move(target)),
     );
+    this.hideItem(menu, target.path);
     menu.addSeparator();
     menu.addItem((item) =>
       item
@@ -2827,6 +3036,46 @@ export class LibraryView extends ItemView {
         }),
     );
     this.show(menu, event);
+  }
+
+  /** The parts of Obsidian the simple look shows again, ticked; one tap shows or hides one. */
+  private openSimplePartsMenu(event: MouseEvent): void {
+    const menu = this.newMenu();
+    menu.addItem((item) => item.setTitle(t("settings.simpleLook.show")).setIsLabel(true));
+    const shown = this.host.simpleParts();
+    for (const part of SIMPLE_PARTS) {
+      menu.addItem((item) =>
+        item
+          .setTitle(t(SIMPLE_PART_NAMES[part]))
+          .setIcon(SIMPLE_PART_ICONS[part])
+          .setChecked(shown.includes(part))
+          .onClick(() => {
+            this.host.setSimpleParts(toggleSimplePart(this.host.simpleParts(), part));
+            this.paintNow();
+          }),
+      );
+    }
+    this.show(menu, event);
+  }
+
+  /** "Hide from Home", or "Show on Home" for an item hidden now (itself, or the folder it is in). */
+  private hideItem(menu: Menu, path: string): void {
+    const hidden = this.host.hidden();
+    const by = hiddenBy(hidden, path);
+    menu.addItem((item) =>
+      item
+        .setTitle(t(by === null ? "notebooks.home.hide" : "notebooks.home.unhide"))
+        .setIcon(by === null ? "eye-off" : "eye")
+        .onClick(() => {
+          if (by === null) {
+            this.host.setHidden(hide(hidden, path));
+            // Once only: where hidden items are found again.
+            if (!this.showHidden && hidden.length === 0)
+              new Notice(t("notebooks.home.hiddenWhere"), 6000);
+          } else this.host.setHidden(unhide(hidden, path));
+          this.paintNow();
+        }),
+    );
   }
 
   /** The colours as a menu of their own, the current one ticked. */
