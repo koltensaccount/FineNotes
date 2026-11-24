@@ -608,6 +608,12 @@ export class EmbedInlineEditor {
       {
         onlyStylusMode: () => this.onlyStylus,
         fingerDrawing: () => !this.onlyStylus,
+        fingerTapUndo: () => plugin.settings.fingerTapUndo !== false,
+        lassoAnyPart: () => plugin.settings.lassoTouches !== false,
+        textDragSize: () => plugin.settings.textDragSize === true,
+        pencilTilt: () => plugin.settings.pencilTilt === true,
+        straightenHighlighter: () => plugin.settings.straightHighlighter !== false,
+        highlighterSnapsToText: () => plugin.settings.highlighterSnapText !== false,
         onCopyImage: (image) => copyPictureToSystemClipboard(app, image),
         onPasteImage: (file, at) => void this.pastePicture(file, at),
         onHistoryChange: (undo, redo) => this.toolbar?.setHistoryState(undo, redo),
@@ -633,6 +639,8 @@ export class EmbedInlineEditor {
     this.surface.setTool(this.toolState.tool);
     this.toolbar.setNight(this.paperIsDark);
     this.syncUndoRedo();
+    slotEl.tabIndex = -1;
+    slotEl.focus({ preventScroll: true });
 
     // Tap outside the active embed (and outside popovers/modals) finishes & trims cleanly.
     const onOutside = (e: PointerEvent): void => {
@@ -647,14 +655,26 @@ export class EmbedInlineEditor {
     this.cleanups.push(() => docObj.removeEventListener("pointerdown", onOutside, true));
 
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") {
+      if (e.defaultPrevented) return;
+      if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key === "Enter")) {
         e.preventDefault();
         e.stopPropagation();
         void this.close();
+        return;
+      }
+      if (this.surface?.handleKeyDown(e)) {
+        e.stopPropagation();
+      }
+    };
+    const onPaste = (e: ClipboardEvent): void => {
+      if (this.surface?.handlePaste(e)) {
+        e.stopPropagation();
       }
     };
     docObj.addEventListener("keydown", onKey, true);
+    docObj.addEventListener("paste", onPaste, true);
     this.cleanups.push(() => docObj.removeEventListener("keydown", onKey, true));
+    this.cleanups.push(() => docObj.removeEventListener("paste", onPaste, true));
   }
 
   private isTransparent(): boolean {
