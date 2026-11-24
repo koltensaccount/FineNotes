@@ -262,6 +262,8 @@ export class EmbedInlineEditor {
       slotEl.removeClass("is-inline-editing");
       embedHost?.removeClass("finenotes-inline-active-embed");
       scroller?.removeClass("finenotes-inline-active-scroller");
+      const p = this.doc?.pages[0];
+      if (p) slotEl.setCssStyles({ aspectRatio: `${p.geometry.width} / ${p.geometry.height}` });
     });
 
     const overlay = slotEl.createDiv({ cls: "goodobsidian-inline-overlay" });
@@ -316,6 +318,9 @@ export class EmbedInlineEditor {
     const stage = overlay.createDiv({ cls: "goodobsidian-inline-stage" });
     this.stageEl = stage;
     this.syncStageAspect();
+    const ro = new ResizeObserver(() => this.syncStageAspect());
+    ro.observe(stage);
+    this.cleanups.push(() => ro.disconnect());
 
     // Bottom drag handle for expandable inline sketches
     if (expandable) {
@@ -576,9 +581,11 @@ export class EmbedInlineEditor {
   private syncStageAspect(): void {
     const page = this.doc?.pages[0];
     if (!page || !this.stageEl) return;
-    this.req.slotEl.setCssStyles({
-      aspectRatio: `${page.geometry.width} / ${page.geometry.height}`,
-    });
+    const availW = this.stageEl.clientWidth || this.req.slotEl.clientWidth || page.geometry.width;
+    const scale = availW / page.geometry.width;
+    const scaledH = Math.max(140, Math.ceil(page.geometry.height * scale));
+    this.stageEl.setCssStyles({ height: `${scaledH}px` });
+    this.req.slotEl.setCssStyles({ aspectRatio: "" });
     this.req.slotEl.toggleClass("is-transparent", this.isTransparent());
   }
 

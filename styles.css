@@ -1336,36 +1336,43 @@ select.goodobsidian-choice-select {
   overflow: visible;
   cursor: default;
   border: 1.5px solid var(--interactive-accent);
-  border-radius: var(--radius-m);
+  border-radius: var(--gob-radius-l, 12px);
 }
 .goodobsidian-page-embed-page.is-inline-editing > .goodobsidian-page-embed-canvas {
-  visibility: hidden;
+  display: none;
+}
+.finenotes-inline-active-embed {
+  overflow: visible;
 }
 .goodobsidian-inline-overlay {
-  position: absolute;
-  inset: 0;
+  position: relative;
   z-index: 10;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 .goodobsidian-inline-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 8px);
+  position: sticky;
+  top: 0;
   z-index: 30;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  border-radius: 14px;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  border-radius: var(--gob-radius-l, 12px) var(--gob-radius-l, 12px) 0 0;
+  background: var(--gob-frost, var(--background-primary));
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--background-modifier-border);
 }
 .goodobsidian-inline-toolbar-host {
   flex: 1 1 auto;
   min-width: 0;
+}
+.goodobsidian-inline-toolbar-host .goodobsidian-toolbar {
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 .goodobsidian-inline-trailing {
   display: inline-flex;
@@ -1384,10 +1391,15 @@ select.goodobsidian-choice-select {
 }
 .goodobsidian-inline-stage {
   position: relative;
-  flex: 1 1 auto;
+  width: 100%;
+  min-height: 140px;
+  overflow: hidden;
+  border-radius: 0 0 var(--gob-radius-l, 12px) var(--gob-radius-l, 12px);
+  touch-action: pan-y;
+}
+.goodobsidian-inline-stage .goodobsidian-surface {
   width: 100%;
   height: 100%;
-  touch-action: pan-y;
 }
 .goodobsidian-inline-resize-handle {
   position: absolute;
