@@ -228,7 +228,7 @@ export class NoteSettingsModal extends Modal {
     const pathRow = new Setting(card).setName(t("notebooks.companion.folder"));
     const pathWrap = pathRow.controlEl.createDiv({ cls: "goodobsidian-ns-companion-path" });
     const folderBtn = pathWrap.createEl("button", {
-      cls: "goodobsidian-ns-companion-folder",
+      cls: "clickable-icon goodobsidian-ns-companion-folder",
       attr: { type: "button", "aria-label": t("notebooks.companion.chooseFolderAria") },
     });
     const folderIcon = folderBtn.createSpan({ cls: "goodobsidian-ns-companion-folder-icon" });

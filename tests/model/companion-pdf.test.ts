@@ -406,3 +406,11 @@ it("fingerprints rendering metadata while excluding stroke identity and replay t
   doc.pages[0].strokes[0].shape = "line";
   expect(companionContent(doc, options, [])).not.toBe(before);
 });
+
+it("automatically fingerprints unknown future visual fields added to Page", () => {
+  const doc = emptyDocument(1024);
+  const options = { usePressure: false, highlighterAlpha: 0.4 };
+  const before = companionContent(doc, options, []);
+  (doc.pages[0] as unknown as Record<string, unknown>).futureDiagrams = [{ x: 10, y: 20 }];
+  expect(companionContent(doc, options, [])).not.toBe(before);
+});

@@ -169,23 +169,29 @@ export interface CompanionExportOptions {
   margins?: string;
 }
 
-/** Only exported graphics & export switches; navigation, audio and bookmarks are excluded. */
+/**
+ * Only exported graphics & export switches; navigation, audio and bookmarks are
+ * excluded. Uses an exclude-list on Page so any future visual element added to
+ * Page is automatically fingerprinted without touching Companion PDFs.
+ */
 export function companionContent(
   doc: Pick<InkDocument, "pages">,
   options: CompanionExportOptions,
   resources: unknown,
 ): string {
   return JSON.stringify({
-    pages: doc.pages.map((page) => ({
-      geometry: page.geometry,
-      backdrop: page.backdrop,
-      strokes: page.strokes.map(({ id: _id, t0: _t0, ...graphics }) => graphics),
-      images: page.images.map(({ id: _id, ...image }) => image),
-      textBoxes: page.textBoxes.map(({ id: _id, ...text }) => text),
-      tables: (page.tables ?? []).map(({ id: _id, ...table }) => table),
-      graphs: (page.graphs ?? []).map(({ id: _id, ...graph }) => graph),
-      equations: (page.equations ?? []).map(({ id: _id, ...eq }) => eq),
-    })),
+    pages: doc.pages.map((page) => {
+      const { id: _id, bookmarked: _bookmarked, title: _title, ...visual } = page;
+      return {
+        ...visual,
+        strokes: page.strokes.map(({ id: _sid, t0: _t0, ...graphics }) => graphics),
+        images: page.images.map(({ id: _iid, ...image }) => image),
+        textBoxes: page.textBoxes.map(({ id: _tid, ...text }) => text),
+        tables: (page.tables ?? []).map(({ id: _tbid, ...table }) => table),
+        graphs: (page.graphs ?? []).map(({ id: _gid, ...graph }) => graph),
+        equations: (page.equations ?? []).map(({ id: _eid, ...eq }) => eq),
+      };
+    }),
     options,
     resources,
   });

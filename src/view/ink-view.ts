@@ -6365,13 +6365,22 @@ export class InkView extends TextFileView {
       : persisted;
   }
 
-  private companionOptions() {
+  private pdfExportSources(preview = this.previewSources()): PdfExportSources {
     return {
-      usePressure: this.toolState.pressureEnabled,
-      highlighterAlpha: this.settings.highlighterAlpha,
+      ...preview,
       plainPaper: this.settings.exportPlainPaper === true,
       withoutTapes: this.settings.exportWithoutTapes === true,
       margins: exportMarginsOf(this.settings.exportMargins),
+    };
+  }
+
+  private companionOptions(sources: PdfExportSources) {
+    return {
+      usePressure: this.toolState.pressureEnabled,
+      highlighterAlpha: this.settings.highlighterAlpha,
+      plainPaper: sources.plainPaper === true,
+      withoutTapes: sources.withoutTapes === true,
+      margins: sources.margins,
     };
   }
 
@@ -6386,19 +6395,13 @@ export class InkView extends TextFileView {
     if (!id) throw new Error("Missing companion PDF identity.");
     const title = stripInkSuffix(note.basename);
     const subject = companionPdfSubject(id);
-    const options = this.companionOptions();
+    const sources = this.pdfExportSources();
     const { fingerprint, resources } = await fingerprintCompanionDoc(
       this.app,
       exportable,
       title,
-      options,
+      this.companionOptions(sources),
     );
-    const sources: PdfExportSources = {
-      ...this.previewSources(),
-      plainPaper: options.plainPaper,
-      withoutTapes: options.withoutTapes,
-      margins: options.margins,
-    };
     return {
       fingerprint,
       resources,
@@ -6448,7 +6451,7 @@ export class InkView extends TextFileView {
       this.app,
       this.persistedExportablePages(),
       stripInkSuffix(note.basename),
-      this.companionOptions(),
+      this.companionOptions(this.pdfExportSources()),
     );
     await this.plugin.companionPdfs.adoptExportedPdf(note, exportedPath, fingerprint);
     const savedBody = parseInkFile(await this.app.vault.read(note), this.settings.paperWidth).body;
@@ -6492,12 +6495,7 @@ export class InkView extends TextFileView {
     const preview = this.previewSources();
     // Plain paper or with the template, with the tapes or without, as the
     // dialog's switches were last left.
-    const exported = (): PdfExportSources => ({
-      ...preview,
-      plainPaper: this.settings.exportPlainPaper === true,
-      withoutTapes: this.settings.exportWithoutTapes === true,
-      margins: exportMarginsOf(this.settings.exportMargins),
-    });
+    const exported = (): PdfExportSources => this.pdfExportSources(preview);
     const taped = doc.pages.some((page) => page.strokes.some(isTape));
     new ExportPdfModal(this.app, {
       noun: this.isSinglePage ? "page" : "notebook",
