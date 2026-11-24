@@ -587,13 +587,8 @@ export interface GoodObsidianSettings {
    * where read (`parseCalculatorData`, model/calculator-store.ts).
    */
   calculator?: unknown;
-  /** Managed storage for Handwrite Here backing notebooks & embeds (fork compatibility). */
-  useManagedStorage?: boolean;
-  managedStorageRoot?: string;
-  /** Per-Markdown-note backing notebook associations for Handwrite Here. */
-  notebookAssociations?: Record<string, string>;
-  /** Whether inline handwriting embeds include a subtle paper background. */
-  embedBackground?: boolean;
+  /** Optional folder for auto-created inline handwriting notebooks (empty = Obsidian attachments folder). */
+  inlineHandwriteFolder?: string;
   /** Notebook-wide non-printing Writing Guides overlay state & style. */
   writingGuidesEnabled?: boolean;
   writingGuides?: Record<string, unknown>;

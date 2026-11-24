@@ -211,7 +211,7 @@ import {
   FN_ICON_SCAN_DOC,
   registerFineNotesIcons,
 } from "./view/finenotes-icons";
-import { HandwriteEmbedManager } from "./view/handwrite-embed";
+import { EmbedInlineEditor } from "./view/embed-inline-editor";
 import { registerHandwriteHere } from "./view/handwrite-here";
 import { CompanionPdfManager } from "./view/companion-pdf";
 import { FolderSuggestModal } from "./view/folder-suggest";
@@ -446,6 +446,10 @@ export default class GoodObsidianPlugin extends Plugin {
   override settings!: GoodObsidianSettings;
   /** `![[Notebook#page=3]]` previews in notes; repainted when the page appearance changes. */
   private pageEmbeds: PageEmbeds | null = null;
+
+  activateInlineEmbed(file: TFile, pageId: string): void {
+    this.pageEmbeds?.activateInline(file, pageId);
+  }
   /** Transcription engines by id. Manual always; the cloud one is added on load. */
   readonly providers = createProviderRegistry();
   /** Where API keys live: Obsidian's keychain when it has one (see key-store.ts). */
@@ -763,11 +767,8 @@ export default class GoodObsidianPlugin extends Plugin {
     syncActiveAccentContrast();
     this.registerEvent(this.app.workspace.on("css-change", () => syncActiveAccentContrast()));
     this.register(() => clearActiveAccentContrast());
-    // Handwrite Here inline handwriting + backward-compatible Markdown embeds.
-    const handwriteEmbeds = new HandwriteEmbedManager(this.app, this);
-    handwriteEmbeds.register();
-    registerHandwriteHere(this, handwriteEmbeds);
-    this.register(() => handwriteEmbeds.destroy());
+    // Handwrite Here inline handwriting command + editor menu.
+    registerHandwriteHere(this);
     // Companion PDFs: load v1 registry and recover any interrupted atomic write.
     this.companionPdfs.load(this.settings.companionPdfs);
     void this.companionPdfs.recoverAll();
@@ -885,6 +886,19 @@ export default class GoodObsidianPlugin extends Plugin {
         usePressure: () => this.settings.pressureWidth,
         highlighterAlpha: () => this.settings.highlighterAlpha,
         paper: () => shownPaperTheme(this.settings, document.body.hasClass("theme-dark")),
+        openInlineEditor: ({ slotEl, file, page, pageNumber, sourcePath, onClosed }) => {
+          const editor = new EmbedInlineEditor({
+            plugin: this,
+            app: this.app,
+            slotEl,
+            notebookFile: file,
+            pageId: page.id,
+            pageNumber,
+            sourcePath,
+            onClosed,
+          });
+          void editor.start();
+        },
       }),
     );
     this.registerEvent(

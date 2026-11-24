@@ -1750,6 +1750,15 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
             ),
             "folder-input",
           ),
+          this.tile(
+            drawnRow(
+              "Inline handwriting folder",
+              "Where Handwrite here saves notebooks; blank uses attachments folder.",
+              (s) => this.drawInlineHandwriteFolder(s),
+              ["inline handwriting", "handwrite here", "folder", "attachments"],
+            ),
+            "folder-input",
+          ),
           this.art(
             toggle(
               "notebookOwnFolder",
@@ -3080,6 +3089,22 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
         });
       new FolderInputSuggest(this.app, text.inputEl, (path) => {
         this.plugin.settings.newNotebookFolder = path;
+        void this.plugin.saveSettings();
+      });
+    });
+  }
+
+  private drawInlineHandwriteFolder(setting: Setting): void {
+    setting.addText((text) => {
+      text
+        .setPlaceholder("Obsidian attachments folder")
+        .setValue(this.plugin.settings.inlineHandwriteFolder ?? "")
+        .onChange(async (value) => {
+          this.plugin.settings.inlineHandwriteFolder = normalizeFolder(value);
+          await this.plugin.saveSettings();
+        });
+      new FolderInputSuggest(this.app, text.inputEl, (path) => {
+        this.plugin.settings.inlineHandwriteFolder = path;
         void this.plugin.saveSettings();
       });
     });
