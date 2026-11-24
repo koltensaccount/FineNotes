@@ -6456,11 +6456,11 @@ export class InkSurface {
   flashPage(pageIndex: number): void {
     const box = this.pageLayout.boxes[pageIndex];
     if (!box) return;
-    const pos = this.scroller.position;
-    const left = Math.round(box.x * this.scale - pos.x);
-    const top = Math.round(box.y * this.scale - pos.y);
-    const width = Math.round(box.width * this.scale);
-    const height = Math.round(box.height * this.scale);
+    const scale = this.unitScale;
+    const left = Math.round(this.offsetX + box.x * scale);
+    const top = Math.round((box.y - this.viewport.scrollY) * scale);
+    const width = Math.round(box.width * scale);
+    const height = Math.round(box.height * scale);
     const ring = this.surfaceEl.createDiv({ cls: "goodobsidian-page-flash" });
     ring.setCssProps({
       left: `${left}px`,
