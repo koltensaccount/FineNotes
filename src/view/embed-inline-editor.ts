@@ -27,7 +27,6 @@ import {
   inlineTrimHeight,
   isInlineSketchPage,
 } from "../model/inline-sketch";
-import { parseInkFile } from "../model/serialize";
 import { DARK_PAPER, LIGHT_PAPER } from "../canvas/backdrop";
 import {
   DEFAULT_WRITING_GUIDES,
@@ -44,7 +43,7 @@ import { toolStateFrom } from "./ink-view";
 import { SavedPenModal } from "./saved-pen-modal";
 import { penOfState, Toolbar, type ToolbarState } from "./toolbar";
 import { normalizeLayout, type BarItemId, type ToolbarLayout } from "./toolbar-layout";
-import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
+import { editClosedNotebook, notebookIsOpen, readClosedNotebook } from "./notebook-transaction";
 
 export interface EmbedInlineEditRequest {
   plugin: GoodObsidianPlugin;
@@ -206,25 +205,23 @@ export class EmbedInlineEditor {
       if (notebookIsOpen(app, notebookFile)) {
         throw new Error("Close the full notebook tab before editing inline.");
       }
-      const raw = await app.vault.read(notebookFile);
+      const fullDoc = await readClosedNotebook(app, notebookFile, plugin.settings.paperWidth);
       if (this.closed || this.closing || !slotEl.isConnected) {
         if (activeEditor === this) setActiveEditor(null);
         return;
       }
-      const parsed = parseInkFile(raw, plugin.settings.paperWidth);
-      if (!parsed.doc) throw new Error("Could not read notebook ink data.");
       const target =
-        parsed.doc.pages.find((p) => p.id === pageId) ?? parsed.doc.pages[this.req.pageNumber - 1];
+        fullDoc.pages.find((p) => p.id === pageId) ?? fullDoc.pages[this.req.pageNumber - 1];
       if (!target) throw new Error("Embedded page not found in notebook.");
 
       this.imageFolder = resolveAttachmentFolder(
-        parsed.doc,
+        fullDoc,
         "images",
         attachmentDefaults(plugin.settings),
       );
       const clone: Page = structuredClone(target);
       this.doc = {
-        version: parsed.doc.version,
+        version: fullDoc.version,
         view: { scrollY: 0, width: clone.geometry.width, scale: 1 },
         pages: [clone],
       };
@@ -846,11 +843,17 @@ export class EmbedInlineEditor {
       .catch(() => true)
       .then(async () => {
         try {
-          await editClosedNotebook(app, notebookFile, plugin.settings.paperWidth, (doc) => {
-            const idx = doc.pages.findIndex((p) => p.id === updatedPage.id);
-            if (idx >= 0) doc.pages[idx] = updatedPage;
-            else doc.pages.push(updatedPage);
-          });
+          await editClosedNotebook(
+            app,
+            notebookFile,
+            plugin.settings.paperWidth,
+            (doc) => {
+              const idx = doc.pages.findIndex((p) => p.id === updatedPage.id);
+              if (idx >= 0) doc.pages[idx] = updatedPage;
+              else doc.pages.push(updatedPage);
+            },
+            new Set([updatedPage.id]),
+          );
           this.savedRevision = Math.max(this.savedRevision, targetRev);
           return true;
         } catch (error) {
