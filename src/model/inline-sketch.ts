@@ -74,19 +74,31 @@ export function lowestInlineContentY(page: Page): number {
 }
 
 /**
+ * Target height while actively writing when the live pen reaches `y`: grows
+ * immediately in `INLINE_GROW_STEP` increments so the inline box gets taller
+ * on screen instead of scrolling internally.
+ */
+export function inlineGrowHeightForPoint(
+  page: Page,
+  y: number,
+  buffer = INLINE_GROW_MARGIN,
+): number {
+  const current = page.geometry.height;
+  if (y + buffer <= current) return current;
+  let next = current;
+  while (y + buffer > next && next < INLINE_MAX_HEIGHT) {
+    next = Math.min(INLINE_MAX_HEIGHT, next + INLINE_GROW_STEP);
+  }
+  return next;
+}
+
+/**
  * Target height after a stroke finishes: grows smoothly in `INLINE_GROW_STEP`
  * increments when ink reaches within `INLINE_GROW_MARGIN` of the bottom edge.
  * Never shrinks while actively writing.
  */
 export function inlineGrowHeight(page: Page): number {
-  const current = page.geometry.height;
-  const lowest = lowestInlineContentY(page);
-  if (lowest <= current - INLINE_GROW_MARGIN) return current;
-  let next = current;
-  while (lowest > next - INLINE_GROW_MARGIN && next < INLINE_MAX_HEIGHT) {
-    next = Math.min(INLINE_MAX_HEIGHT, next + INLINE_GROW_STEP);
-  }
-  return next;
+  return inlineGrowHeightForPoint(page, lowestInlineContentY(page), INLINE_GROW_MARGIN);
 }
 
 /**

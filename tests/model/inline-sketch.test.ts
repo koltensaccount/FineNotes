@@ -8,6 +8,7 @@ import {
   findLinkedNotebookInMarkdown,
   inlineClampedResizeHeight,
   inlineGrowHeight,
+  inlineGrowHeightForPoint,
   inlineTrimHeight,
   isInlineSketchPage,
   lowestInlineContentY,
@@ -38,6 +39,7 @@ describe("inline-sketch pure model", () => {
     });
     expect(lowestInlineContentY(page)).toBe(222);
     expect(inlineGrowHeight(page)).toBe(INLINE_DEFAULT_HEIGHT + INLINE_GROW_STEP);
+    expect(inlineGrowHeightForPoint(page, 230, 64)).toBe(INLINE_DEFAULT_HEIGHT + INLINE_GROW_STEP);
   });
 
   it("trims excess bottom whitespace on finish while respecting manual height and min floor", () => {

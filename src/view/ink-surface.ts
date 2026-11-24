@@ -5875,7 +5875,10 @@ export class InkSurface {
     // The options row opening or closing is no new pane: the page keeps its
     // size, as for the keyboard, and only moves (`followTopShift` below).
     this.updateZoomFloor(cssH, topShift !== 0);
-    if (locked) this.userZoom = 1;
+    if (locked) {
+      this.userZoom = 1;
+      this.scroller.setPosition(0, 0);
+    }
     // A panel opening beside a page that is zoomed in keeps the page the size
     // it was, instead of shrinking it with the pane (a notebook of wide
     // slides and narrow pages fits so small that the sidebar halved it).

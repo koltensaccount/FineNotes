@@ -23,6 +23,7 @@ import type { InkDocument, Page, Ruling, SyntheticBackdrop } from "../model/docu
 import {
   inlineClampedResizeHeight,
   inlineGrowHeight,
+  inlineGrowHeightForPoint,
   inlineTrimHeight,
   isInlineSketchPage,
 } from "../model/inline-sketch";
@@ -524,9 +525,9 @@ export class EmbedInlineEditor {
         onTextEditing: (style) => this.toolbar?.setTextTarget(style),
         onTextAnchor: (rect) => this.toolbar?.setTextAnchor(rect),
         textPillState: () => this.toolbar?.textPillState ?? "-",
-        growInlinePage: () => {
+        growInlinePage: (y, buffer) => {
           if (!expandable) return false;
-          return this.maybeGrowHeight();
+          return this.maybeGrowHeight(y, buffer);
         },
         onChange: () => {
           this.revision++;
@@ -584,14 +585,17 @@ export class EmbedInlineEditor {
     this.req.slotEl.toggleClass("is-transparent", this.isTransparent());
   }
 
-  private maybeGrowHeight(): boolean {
+  private maybeGrowHeight(liveY?: number, buffer?: number): boolean {
     const page = this.doc?.pages[0];
     if (!page) return false;
-    const nextH = inlineGrowHeight(page);
+    const nextH =
+      liveY !== undefined ? inlineGrowHeightForPoint(page, liveY, buffer) : inlineGrowHeight(page);
     if (nextH > page.geometry.height) {
       page.geometry = { ...page.geometry, height: nextH };
       this.syncStageAspect();
       this.surface?.layout();
+      const win = this.req.slotEl.ownerDocument.defaultView ?? window;
+      win.requestAnimationFrame(() => this.surface?.layout());
       return true;
     }
     return false;
