@@ -2553,6 +2553,7 @@ export class InkView extends TextFileView {
 
   /** De-duplicate unload and close Companion PDF updates. */
   private companionUnloadedFile: TFile | null = null;
+  private pendingHighlightPage = false;
   /** Canvas used only to measure text boxes that grow with their text. */
   private measureCtx: CanvasRenderingContext2D | null = null;
 
@@ -6094,13 +6095,15 @@ export class InkView extends TextFileView {
    */
   override setEphemeralState(state: unknown): void {
     super.setEphemeralState(state);
-    const { subpath, pageIndex, match, search } = (state ?? {}) as {
+    const { subpath, pageIndex, match, search, highlightPage } = (state ?? {}) as {
       subpath?: unknown;
       pageIndex?: unknown;
       match?: { content?: unknown; matches?: unknown };
       /** What Home's search found on `pageIndex`, to light up there. */
       search?: unknown;
+      highlightPage?: unknown;
     };
+    if (highlightPage === true) this.pendingHighlightPage = true;
     // A result of Obsidian's own search: its page, with the words lit up (2.5).
     const found =
       typeof match?.content === "string" && Array.isArray(match.matches)
@@ -6151,6 +6154,8 @@ export class InkView extends TextFileView {
     }
     this.pendingSubpath = null;
     this.pendingPageIndex = null;
+    const highlight = this.pendingHighlightPage;
+    this.pendingHighlightPage = false;
     const pages = surface.document.pages;
     let index: number | null = null;
     if (subpath !== null) index = pageFromSubpath(subpath, pages.length);
@@ -6178,7 +6183,13 @@ export class InkView extends TextFileView {
       }
     }
     if (region) surface.showRegion(region.index, region.region);
-    else if (index !== null) surface.goToPage(index);
+    else if (index !== null) {
+      surface.goToPage(index);
+      if (highlight) {
+        const targetIndex = index;
+        window.requestAnimationFrame(() => surface.flashPage(targetIndex));
+      }
+    }
     // Opened anew, with no page asked for: the PDF's tab it was left on.
     if (fresh && subpath === null && back === null) {
       const tab = this.loadLastTabs()[path];

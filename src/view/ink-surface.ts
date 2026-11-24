@@ -6452,6 +6452,25 @@ export class InkSurface {
     this.requestFrame();
   }
 
+  /** Briefly pulses an accent outline around `pageIndex` after jumping from an embed. */
+  flashPage(pageIndex: number): void {
+    const box = this.pageLayout.boxes[pageIndex];
+    if (!box) return;
+    const pos = this.scroller.position;
+    const left = Math.round(box.x * this.scale - pos.x);
+    const top = Math.round(box.y * this.scale - pos.y);
+    const width = Math.round(box.width * this.scale);
+    const height = Math.round(box.height * this.scale);
+    const ring = this.surfaceEl.createDiv({ cls: "goodobsidian-page-flash" });
+    ring.setCssProps({
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+    });
+    this.win.setTimeout(() => ring.remove(), 1500);
+  }
+
   /** The setting "Lock fit to width", read at each layout (`ScrollExtent.holdX`). */
   holdFitWidth: () => boolean = () => false;
 

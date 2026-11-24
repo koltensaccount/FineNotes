@@ -38,6 +38,7 @@
 
 import { type App, Component, Keymap, type TAbstractFile, TFile, setIcon } from "obsidian";
 import { DARK_PAPER, LIGHT_PAPER, type PaperTheme } from "../canvas/backdrop";
+import { VIEW_TYPE_INK } from "../constants";
 import { t, tn } from "../i18n/translate";
 import { paintedTextHeight } from "../canvas/renderer";
 import { isBoard, textLinesHeight } from "../model/board";
@@ -848,9 +849,10 @@ class NotebookEmbed extends Component {
     event.stopPropagation();
     const newTab = Keymap.isModEvent(event);
     const leaf = this.ctx.app.workspace.getLeaf(newTab);
-    void leaf.openFile(this.file, {
-      eState: { pageIndex: Math.max(0, page - 1), subpath: `#page=${page}` },
-    });
+    void leaf.setViewState(
+      { type: VIEW_TYPE_INK, state: { file: this.file.path }, active: true },
+      { pageIndex: Math.max(0, page - 1), highlightPage: true },
+    );
   }
 
   /**

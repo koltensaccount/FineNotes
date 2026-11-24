@@ -10,7 +10,7 @@
 import { type App, type TFile, Notice, setIcon } from "obsidian";
 import type GoodObsidianPlugin from "../main";
 import { attachmentDefaults, penPreferencesOf, shownPaperTheme } from "../settings-data";
-import { PALETTE, SIZES } from "../constants";
+import { PALETTE, SIZES, VIEW_TYPE_INK } from "../constants";
 import { pushRecentColor } from "../model/colors";
 import { InsertImage } from "../model/commands";
 import { resolveAttachmentFolder } from "../model/attachment-folders";
@@ -570,12 +570,10 @@ export class EmbedInlineEditor {
         e.stopPropagation();
         void this.close().then(async () => {
           const leaf = app.workspace.getLeaf(true);
-          await leaf.openFile(notebookFile, {
-            eState: {
-              pageIndex: Math.max(0, this.req.pageNumber - 1),
-              subpath: `#page=${this.req.pageNumber}`,
-            },
-          });
+          await leaf.setViewState(
+            { type: VIEW_TYPE_INK, state: { file: notebookFile.path }, active: true },
+            { pageIndex: Math.max(0, this.req.pageNumber - 1), highlightPage: true },
+          );
         });
       });
 

@@ -1397,6 +1397,29 @@ select.goodobsidian-choice-select {
   background: var(--interactive-accent);
   opacity: 0.7;
 }
+.goodobsidian-page-flash {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  border-radius: 8px;
+  border: 2.5px solid var(--interactive-accent);
+  box-shadow: 0 0 0 6px hsla(var(--interactive-accent-hsl), 0.22);
+  animation: goodobsidian-page-flash-fade 1.45s ease-out forwards;
+}
+@keyframes goodobsidian-page-flash-fade {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 
 /* `![[Physics.notebook]]`: every page, one under the other, as the
    notebook view stacks them (or, for a long notebook, a choice of them). */
