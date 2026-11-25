@@ -83,6 +83,9 @@ describe("inline-sketch pure model", () => {
     expect(findLinkedNotebookInMarkdown("![](School/Lecture%205.notebook.md#id=hw-8f2a1c09)")).toBe(
       "School/Lecture 5.notebook.md",
     );
+    expect(findLinkedNotebookInMarkdown("![](<School/Lecture 5.notebook.md#id=hw-8f2a1c09>)")).toBe(
+      "School/Lecture 5.notebook.md",
+    );
     expect(findLinkedNotebookInMarkdown("![](<School/Lecture 5.notebook.md>#id=hw-8f2a1c09)")).toBe(
       "School/Lecture 5.notebook.md",
     );
@@ -106,16 +109,20 @@ describe("inline-sketch pure model", () => {
     expect(initialInlineManualHeight(tall)).toBe(480);
   });
 
-  it("three-way merges local inline edits without erasing strokes synced from another device", () => {
+  it("three-way merges local inline edits while preserving remote additions, edits, and erasures", () => {
     const base = createInlineSketchPage("hw-m1");
     base.strokes.push(
-      { id: "s1", tool: "pen", color: "#000", size: 4, pts: [10, 10, 0.5] },
-      { id: "s2", tool: "pen", color: "#000", size: 4, pts: [20, 20, 0.5] },
+      { id: "s-local-del", tool: "pen", color: "#000", size: 4, pts: [10, 10, 0.5] },
+      { id: "s-remote-del", tool: "pen", color: "#000", size: 4, pts: [15, 15, 0.5] },
+      { id: "s-remote-edit", tool: "pen", color: "#000", size: 4, pts: [20, 20, 0.5] },
+      { id: "s-local-edit", tool: "pen", color: "#000", size: 4, pts: [25, 25, 0.5] },
     );
 
     const latest = structuredClone(base);
+    latest.strokes = latest.strokes.filter((s) => s.id !== "s-remote-del");
+    latest.strokes.find((s) => s.id === "s-remote-edit")!.color = "#00ff00";
     latest.strokes.push({
-      id: "s-remote",
+      id: "s-remote-add",
       tool: "pen",
       color: "#f00",
       size: 4,
@@ -123,14 +130,25 @@ describe("inline-sketch pure model", () => {
     });
 
     const local = structuredClone(base);
-    // Delete s1 locally, add s-local locally
-    local.strokes = [
-      local.strokes[1],
-      { id: "s-local", tool: "pen", color: "#00f", size: 4, pts: [40, 40, 0.5] },
-    ];
+    local.strokes = local.strokes.filter((s) => s.id !== "s-local-del");
+    local.strokes.find((s) => s.id === "s-local-edit")!.color = "#0000ff";
+    local.strokes.push({
+      id: "s-local-add",
+      tool: "pen",
+      color: "#00f",
+      size: 4,
+      pts: [40, 40, 0.5],
+    });
 
     const merged = mergeInlinePageEdits(base, latest, local);
-    expect(merged.strokes.map((s) => s.id)).toEqual(["s2", "s-local", "s-remote"]);
+    expect(merged.strokes.map((s) => s.id)).toEqual([
+      "s-remote-edit",
+      "s-local-edit",
+      "s-local-add",
+      "s-remote-add",
+    ]);
+    expect(merged.strokes.find((s) => s.id === "s-remote-edit")?.color).toBe("#00ff00");
+    expect(merged.strokes.find((s) => s.id === "s-local-edit")?.color).toBe("#0000ff");
   });
 
   it("parses and resolves #id=<pageId> embed targets", () => {

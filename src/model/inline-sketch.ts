@@ -151,13 +151,40 @@ function mergeById<T extends { id: string }>(
   latest: readonly T[] | undefined,
   local: readonly T[] | undefined,
 ): T[] {
-  const baseIds = new Set((base ?? []).map((item) => item.id));
+  const baseById = new Map<string, T>();
+  for (const item of base ?? []) baseById.set(item.id, item);
+
+  const latestById = new Map<string, T>();
+  for (const item of latest ?? []) latestById.set(item.id, item);
+
   const localItems = local ?? [];
   const localIds = new Set(localItems.map((item) => item.id));
-  const out = localItems.map((item) => structuredClone(item));
-  for (const item of latest ?? []) {
-    if (!baseIds.has(item.id) && !localIds.has(item.id)) {
-      out.push(structuredClone(item));
+  const out: T[] = [];
+
+  for (const localItem of localItems) {
+    const baseItem = baseById.get(localItem.id);
+    if (!baseItem) {
+      // Newly added locally.
+      out.push(structuredClone(localItem));
+      continue;
+    }
+    const localChanged = JSON.stringify(localItem) !== JSON.stringify(baseItem);
+    if (localChanged) {
+      // Explicitly modified locally.
+      out.push(structuredClone(localItem));
+      continue;
+    }
+    // Untouched locally: honor remote erasure or remote edit.
+    const latestItem = latestById.get(localItem.id);
+    if (latestItem) {
+      out.push(structuredClone(latestItem));
+    }
+  }
+
+  for (const latestItem of latest ?? []) {
+    if (!baseById.has(latestItem.id) && !localIds.has(latestItem.id)) {
+      // Newly added on another device.
+      out.push(structuredClone(latestItem));
     }
   }
   return out;
@@ -243,15 +270,21 @@ function decodeLinkTarget(raw: string): string {
  * existing backing notebook without needing a separate association registry.
  */
 export function findLinkedNotebookInMarkdown(markdown: string): string | null {
+  const candidates: Array<{ index: number; target: string }> = [];
+
   const wiki = /!\[\[([^\]|#]+)#id=hw-[A-Za-z0-9_-]+(?:\|[^\]]*)?\]\]/.exec(markdown);
-  const md = /!\[[^\]]*\]\((<[^>#]+>|[^)#\s]+)#id=hw-[A-Za-z0-9_-]+(?:\s+["'][^"']*["'])?\)/.exec(
+  if (wiki) candidates.push({ index: wiki.index, target: wiki[1].trim() });
+
+  const mdAngle = /!\[[^\]]*\]\(<([^>#]+)#id=hw-[A-Za-z0-9_-]+>(?:\s+["'][^"']*["'])?\)/.exec(
     markdown,
   );
-  if (wiki && (!md || wiki.index <= md.index)) {
-    return wiki[1].trim();
-  }
-  if (md) {
-    return decodeLinkTarget(md[1]);
-  }
-  return null;
+  if (mdAngle) candidates.push({ index: mdAngle.index, target: decodeLinkTarget(mdAngle[1]) });
+
+  const mdPlain =
+    /!\[[^\]]*\]\((<[^>#]+>|[^)#\s]+)#id=hw-[A-Za-z0-9_-]+(?:\s+["'][^"']*["'])?\)/.exec(markdown);
+  if (mdPlain) candidates.push({ index: mdPlain.index, target: decodeLinkTarget(mdPlain[1]) });
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.index - b.index);
+  return candidates[0].target;
 }
