@@ -17,6 +17,7 @@ import { resolveAttachmentFolder } from "../model/attachment-folders";
 import { newImageElement, placeImageBox } from "../model/images";
 import { addSavedPen, isPenId, samePen, savedPensOf } from "../model/saved-pens";
 import type { InkDocument, Page } from "../model/document";
+import { attachDotClock, dotClockOf } from "../model/dot-ids";
 import {
   initialInlineManualHeight,
   inlineClampedResizeHeight,
@@ -216,6 +217,8 @@ export class EmbedInlineEditor {
         view: { scrollY: 0, width: clone.geometry.width, scale: 1 },
         pages: [clone],
       };
+      const clock = dotClockOf(fullDoc);
+      if (clock) attachDotClock(this.doc, clock);
 
       this.mount();
     } catch (error) {

@@ -1,9 +1,10 @@
 import { type App, TFile, normalizePath } from "obsidian";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkDocument } from "../model/document";
+import { idsIn } from "../model/dot-ids";
 import { devicePagesFolderOf, isDevicePagesPayload, notebookIdOf } from "../model/device-pages";
 import { buildInkFile, parseInkFile } from "../model/serialize";
-import { readDevicePagesFolder, rememberNotebookId } from "./device-pages-files";
+import { rememberNotebookId } from "./device-pages-files";
 import { DevicePagesSession, deviceIdOf } from "./device-pages-session";
 
 const activeLocks = new Map<string, Promise<unknown>>();
@@ -46,8 +47,17 @@ export async function readClosedNotebook(
     rememberNotebookId(file.path, id);
     if (id) {
       const folder = devicePagesFolderOf(file.path, id);
-      const joined = await readDevicePagesFolder(app, parsed.payload, folder, paperWidth);
-      if (joined) return joined;
+      const session = new DevicePagesSession(
+        app,
+        file.path,
+        parsed.payload,
+        folder,
+        deviceIdOf(app),
+      );
+      const texts = await session.readFiles();
+      const load = session.load(texts, paperWidth);
+      session.clock.raise(idsIn(load.doc));
+      return load.doc;
     }
   }
   throw new Error("Could not read notebook ink data.");

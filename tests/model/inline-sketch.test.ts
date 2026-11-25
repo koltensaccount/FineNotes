@@ -15,6 +15,8 @@ import {
   lowestInlineContentY,
   mergeInlinePageEdits,
 } from "../../src/model/inline-sketch";
+import { DotClock, attachDotClock, dotClockOf } from "../../src/model/dot-ids";
+import { IdSequence, strokeIdsOf } from "../../src/view/id-sequence";
 import { embedPageLink, embedTarget, pageIndexById } from "../../src/view/page-embed-model";
 
 describe("inline-sketch pure model", () => {
@@ -149,6 +151,53 @@ describe("inline-sketch pure model", () => {
     ]);
     expect(merged.strokes.find((s) => s.id === "s-remote-edit")?.color).toBe("#00ff00");
     expect(merged.strokes.find((s) => s.id === "s-local-edit")?.color).toBe("#0000ff");
+  });
+
+  it("mints collision-free dot IDs when two devices add ink from the same starting page", () => {
+    const startPage = createInlineSketchPage("hw-m2");
+
+    // Device A opens inline editor on startPage with its DevicePages DotClock
+    const docA = {
+      version: 3,
+      view: { scrollY: 0, width: 1024, scale: 1 },
+      pages: [structuredClone(startPage)],
+    };
+    attachDotClock(docA, new DotClock("a1b2c3d4"));
+    const seqA = new IdSequence("s", () => docA);
+    seqA.restart(strokeIdsOf(docA));
+    const idA = seqA.next();
+    docA.pages[0].strokes.push({
+      id: idA,
+      tool: "pen",
+      color: "#000",
+      size: 4,
+      pts: [10, 10, 0.5],
+    });
+
+    // Device B opens inline editor on the exact same startPage with its own DotClock
+    const docB = {
+      version: 3,
+      view: { scrollY: 0, width: 1024, scale: 1 },
+      pages: [structuredClone(startPage)],
+    };
+    attachDotClock(docB, new DotClock("e5f60718"));
+    const seqB = new IdSequence("s", () => docB);
+    seqB.restart(strokeIdsOf(docB));
+    const idB = seqB.next();
+    docB.pages[0].strokes.push({
+      id: idB,
+      tool: "pen",
+      color: "#f00",
+      size: 4,
+      pts: [20, 20, 0.5],
+    });
+
+    expect(dotClockOf(docA)).toBeDefined();
+    expect(idA).not.toBe(idB);
+
+    // Device B saves after Device A has already synced its stroke
+    const merged = mergeInlinePageEdits(startPage, docA.pages[0], docB.pages[0]);
+    expect(merged.strokes.map((s) => s.id)).toEqual([idB, idA]);
   });
 
   it("parses and resolves #id=<pageId> embed targets", () => {
