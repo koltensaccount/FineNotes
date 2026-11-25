@@ -10,7 +10,7 @@
 
 import { type Editor, MarkdownView, Notice, TFile, normalizePath } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import { emptyDocument } from "../model/document";
+import { emptyDocument, type Page } from "../model/document";
 import {
   INLINE_SKETCH_PREFIX,
   createInlineSketchPage,
@@ -47,8 +47,9 @@ async function ensureFolder(plugin: GoodObsidianPlugin, folder: string): Promise
 async function createBackingNotebook(
   plugin: GoodObsidianPlugin,
   sourcePath: string,
-  preferredName?: string,
-): Promise<TFile> {
+  preferredName: string | undefined,
+  initialPage: Page,
+): Promise<{ file: TFile; created: boolean }> {
   const { app } = plugin;
   const base = cleanTitle(stripInkSuffix(preferredName ?? "Handwriting")) || "Handwriting";
   const fileName = `${base}.notebook.md`;
@@ -66,12 +67,13 @@ async function createBackingNotebook(
   }
 
   const found = app.vault.getFileByPath(targetPath);
-  if (found) return found;
+  if (found) return { file: found, created: false };
 
   const doc = emptyDocument(plugin.settings.paperWidth);
-  doc.pages = [];
+  doc.pages = [initialPage];
   const body = newNoteBody(base, new Date().toISOString());
-  return app.vault.create(targetPath, buildInkFile(body, doc));
+  const file = await app.vault.create(targetPath, buildInkFile(body, doc));
+  return { file, created: true };
 }
 
 async function resolveBackingNotebook(
@@ -79,7 +81,8 @@ async function resolveBackingNotebook(
   source: TFile,
   markdown: string,
   forcePick: boolean,
-): Promise<TFile | null> {
+  initialPage: Page,
+): Promise<{ file: TFile; created: boolean } | null> {
   const { app } = plugin;
   if (!plugin.settings.inlineHandwriteMode) {
     const chosen = await HandwriteSetupModal.prompt(app, "once");
@@ -109,12 +112,12 @@ async function resolveBackingNotebook(
       placeholder: "Choose a notebook for this handwriting block…",
     });
     if (!choice) return null;
-    if (choice.kind === "existing") return choice.file;
-    return createBackingNotebook(plugin, source.path, choice.name);
+    if (choice.kind === "existing") return { file: choice.file, created: false };
+    return createBackingNotebook(plugin, source.path, choice.name, initialPage);
   }
 
-  if (currentNotebook) return currentNotebook;
-  return createBackingNotebook(plugin, source.path, defaultCreateName);
+  if (currentNotebook) return { file: currentNotebook, created: false };
+  return createBackingNotebook(plugin, source.path, defaultCreateName, initialPage);
 }
 
 export async function insertInlineHandwriting(
@@ -123,18 +126,6 @@ export async function insertInlineHandwriting(
   source: TFile,
   options?: { forcePick?: boolean },
 ): Promise<void> {
-  const notebook = await resolveBackingNotebook(
-    plugin,
-    source,
-    editor.getValue(),
-    options?.forcePick === true,
-  );
-  if (!notebook) return;
-  if (notebookIsOpen(plugin.app, notebook)) {
-    new Notice("FineNotes: close the backing notebook tab before inserting inline handwriting.");
-    return;
-  }
-
   const pageId = newSketchId();
   const sketchPage = createInlineSketchPage(pageId, {
     transparent: true,
@@ -142,9 +133,25 @@ export async function insertInlineHandwriting(
     backdrop: plugin.settings.inlineLastBackdrop,
   });
 
-  await editClosedNotebook(plugin.app, notebook, plugin.settings.paperWidth, (doc) => {
-    doc.pages.push(sketchPage);
-  });
+  const resolved = await resolveBackingNotebook(
+    plugin,
+    source,
+    editor.getValue(),
+    options?.forcePick === true,
+    sketchPage,
+  );
+  if (!resolved) return;
+  const { file: notebook, created } = resolved;
+
+  if (!created) {
+    if (notebookIsOpen(plugin.app, notebook)) {
+      new Notice("FineNotes: close the backing notebook tab before inserting inline handwriting.");
+      return;
+    }
+    await editClosedNotebook(plugin.app, notebook, plugin.settings.paperWidth, (doc) => {
+      doc.pages.push(sketchPage);
+    });
+  }
 
   const link = plugin.app.fileManager.generateMarkdownLink(notebook, source.path, `#id=${pageId}`);
   const cursor = editor.getCursor();
