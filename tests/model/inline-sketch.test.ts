@@ -6,12 +6,14 @@ import {
   INLINE_MIN_HEIGHT,
   createInlineSketchPage,
   findLinkedNotebookInMarkdown,
+  initialInlineManualHeight,
   inlineClampedResizeHeight,
   inlineGrowHeight,
   inlineGrowHeightForPoint,
   inlineTrimHeight,
   isInlineSketchPage,
   lowestInlineContentY,
+  mergeInlinePageEdits,
 } from "../../src/model/inline-sketch";
 import { embedPageLink, embedTarget, pageIndexById } from "../../src/view/page-embed-model";
 
@@ -75,11 +77,60 @@ describe("inline-sketch pure model", () => {
     expect(inlineClampedResizeHeight(empty, 40)).toBe(INLINE_MIN_HEIGHT);
   });
 
-  it("finds existing linked backing notebook from Markdown embeds", () => {
+  it("finds existing linked backing notebook from wiki and Markdown embeds", () => {
     const md = "Some text\n\n![[School/Lecture 5.notebook#id=hw-8f2a1c09]]\n\nMore text";
     expect(findLinkedNotebookInMarkdown(md)).toBe("School/Lecture 5.notebook");
+    expect(findLinkedNotebookInMarkdown("![](School/Lecture%205.notebook.md#id=hw-8f2a1c09)")).toBe(
+      "School/Lecture 5.notebook.md",
+    );
+    expect(findLinkedNotebookInMarkdown("![](<School/Lecture 5.notebook.md>#id=hw-8f2a1c09)")).toBe(
+      "School/Lecture 5.notebook.md",
+    );
     expect(findLinkedNotebookInMarkdown("![[Lecture 5.notebook#page=2]]")).toBeNull();
     expect(findLinkedNotebookInMarkdown("Just text")).toBeNull();
+  });
+
+  it("preserves explicit manual height across reopened sessions", () => {
+    const defaultEmpty = createInlineSketchPage("hw-e1");
+    expect(initialInlineManualHeight(defaultEmpty)).toBeNull();
+
+    const resizedEmpty = createInlineSketchPage("hw-e2", { height: 420 });
+    expect(initialInlineManualHeight(resizedEmpty)).toBe(420);
+
+    const tight = createInlineSketchPage("hw-e3", { height: 170 });
+    tight.strokes.push({ id: "s1", tool: "pen", color: "#000", size: 4, pts: [50, 140, 0.5] });
+    expect(initialInlineManualHeight(tight)).toBeNull();
+
+    const tall = createInlineSketchPage("hw-e4", { height: 480 });
+    tall.strokes.push({ id: "s1", tool: "pen", color: "#000", size: 4, pts: [50, 140, 0.5] });
+    expect(initialInlineManualHeight(tall)).toBe(480);
+  });
+
+  it("three-way merges local inline edits without erasing strokes synced from another device", () => {
+    const base = createInlineSketchPage("hw-m1");
+    base.strokes.push(
+      { id: "s1", tool: "pen", color: "#000", size: 4, pts: [10, 10, 0.5] },
+      { id: "s2", tool: "pen", color: "#000", size: 4, pts: [20, 20, 0.5] },
+    );
+
+    const latest = structuredClone(base);
+    latest.strokes.push({
+      id: "s-remote",
+      tool: "pen",
+      color: "#f00",
+      size: 4,
+      pts: [30, 30, 0.5],
+    });
+
+    const local = structuredClone(base);
+    // Delete s1 locally, add s-local locally
+    local.strokes = [
+      local.strokes[1],
+      { id: "s-local", tool: "pen", color: "#00f", size: 4, pts: [40, 40, 0.5] },
+    ];
+
+    const merged = mergeInlinePageEdits(base, latest, local);
+    expect(merged.strokes.map((s) => s.id)).toEqual(["s2", "s-local", "s-remote"]);
   });
 
   it("parses and resolves #id=<pageId> embed targets", () => {

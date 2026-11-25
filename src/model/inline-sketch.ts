@@ -132,12 +132,126 @@ export function inlineClampedResizeHeight(page: Page, desiredHeight: number): nu
 }
 
 /**
- * Finds the link target of the first inline handwriting embed
- * (`![[Notebook#id=hw-...]]`) in a Markdown document, so "Handwrite here"
- * automatically reuses the note's existing backing notebook without needing a
- * separate association registry.
+ * Detects whether a reopened inline sketch page already has a user-chosen
+ * height larger than its auto-trimmed height (or different from the default
+ * when empty), so reopening and clicking Done preserves their dragged height.
+ */
+export function initialInlineManualHeight(page: Page): number | null {
+  const lowest = lowestInlineContentY(page);
+  const current = Math.round(page.geometry.height);
+  if (lowest <= 0) {
+    return current !== INLINE_DEFAULT_HEIGHT ? current : null;
+  }
+  const tight = Math.max(INLINE_MIN_HEIGHT, Math.ceil(lowest + INLINE_BOTTOM_PAD));
+  return current > tight ? current : null;
+}
+
+function mergeById<T extends { id: string }>(
+  base: readonly T[] | undefined,
+  latest: readonly T[] | undefined,
+  local: readonly T[] | undefined,
+): T[] {
+  const baseIds = new Set((base ?? []).map((item) => item.id));
+  const localItems = local ?? [];
+  const localIds = new Set(localItems.map((item) => item.id));
+  const out = localItems.map((item) => structuredClone(item));
+  for (const item of latest ?? []) {
+    if (!baseIds.has(item.id) && !localIds.has(item.id)) {
+      out.push(structuredClone(item));
+    }
+  }
+  return out;
+}
+
+function mergeOptionalById<T extends { id: string }>(
+  base: readonly T[] | undefined,
+  latest: readonly T[] | undefined,
+  local: readonly T[] | undefined,
+): T[] | undefined {
+  const merged = mergeById(base, latest, local);
+  return merged.length > 0 ? merged : undefined;
+}
+
+/**
+ * Three-way merges local inline edits (`local`) against the latest page on disk
+ * (`latest`) using the snapshot from when the session loaded or last saved
+ * (`base`). Preserves any strokes or elements synced from another device while
+ * this inline editor was open, while honoring explicit local additions and
+ * deletions.
+ */
+export function mergeInlinePageEdits(base: Page, latest: Page, local: Page): Page {
+  const backdropChanged = JSON.stringify(local.backdrop) !== JSON.stringify(base.backdrop);
+  const heightChanged = local.geometry.height !== base.geometry.height;
+  const mergedHeight = heightChanged
+    ? Math.max(
+        local.geometry.height,
+        latest.geometry.height > base.geometry.height ? latest.geometry.height : 0,
+      )
+    : latest.geometry.height;
+
+  const merged: Page = {
+    ...structuredClone(latest),
+    geometry: { ...local.geometry, height: mergedHeight },
+    backdrop: structuredClone(backdropChanged ? local.backdrop : latest.backdrop),
+    strokes: mergeById(base.strokes, latest.strokes, local.strokes),
+    images: mergeById(base.images, latest.images, local.images),
+    textBoxes: mergeById(base.textBoxes, latest.textBoxes, local.textBoxes),
+  };
+
+  const tables = mergeOptionalById(base.tables, latest.tables, local.tables);
+  if (tables) merged.tables = tables;
+  else delete merged.tables;
+
+  const graphs = mergeOptionalById(base.graphs, latest.graphs, local.graphs);
+  if (graphs) merged.graphs = graphs;
+  else delete merged.graphs;
+
+  const equations = mergeOptionalById(base.equations, latest.equations, local.equations);
+  if (equations) merged.equations = equations;
+  else delete merged.equations;
+
+  const comments = mergeOptionalById(base.comments, latest.comments, local.comments);
+  if (comments) merged.comments = comments;
+  else delete merged.comments;
+
+  const regions = mergeOptionalById(base.regions, latest.regions, local.regions);
+  if (regions) merged.regions = regions;
+  else delete merged.regions;
+
+  const connectors = mergeOptionalById(base.connectors, latest.connectors, local.connectors);
+  if (connectors) merged.connectors = connectors;
+  else delete merged.connectors;
+
+  return merged;
+}
+
+function decodeLinkTarget(raw: string): string {
+  const trimmed = raw.trim();
+  const unwrapped =
+    trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1).trim() : trimmed;
+  try {
+    return decodeURIComponent(unwrapped);
+  } catch {
+    return unwrapped;
+  }
+}
+
+/**
+ * Finds the link target of the first inline handwriting embed — whether wiki
+ * (`![[Notebook#id=hw-...]]`) or Markdown (`![](Notebook.notebook.md#id=hw-...)`)
+ * — in a Markdown document, so "Handwrite here" automatically reuses the note's
+ * existing backing notebook without needing a separate association registry.
  */
 export function findLinkedNotebookInMarkdown(markdown: string): string | null {
-  const match = /!\[\[([^\]|#]+)#id=hw-[A-Za-z0-9_-]+(?:\|[^\]]*)?\]\]/.exec(markdown);
-  return match ? match[1].trim() : null;
+  const wiki = /!\[\[([^\]|#]+)#id=hw-[A-Za-z0-9_-]+(?:\|[^\]]*)?\]\]/.exec(markdown);
+  const md = /!\[[^\]]*\]\((<[^>#]+>|[^)#\s]+)#id=hw-[A-Za-z0-9_-]+(?:\s+["'][^"']*["'])?\)/.exec(
+    markdown,
+  );
+  if (wiki && (!md || wiki.index <= md.index)) {
+    return wiki[1].trim();
+  }
+  if (md) {
+    return decodeLinkTarget(md[1]);
+  }
+  return null;
 }

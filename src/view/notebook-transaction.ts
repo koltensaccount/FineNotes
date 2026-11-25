@@ -1,4 +1,4 @@
-import { type App, type TFile } from "obsidian";
+import { type App, TFile, normalizePath } from "obsidian";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkDocument } from "../model/document";
 import { devicePagesFolderOf, isDevicePagesPayload, notebookIdOf } from "../model/device-pages";
@@ -7,6 +7,21 @@ import { readDevicePagesFolder, rememberNotebookId } from "./device-pages-files"
 import { DevicePagesSession, deviceIdOf } from "./device-pages-session";
 
 const activeLocks = new Map<string, Promise<unknown>>();
+
+function parentOf(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+async function ensureFolderRecursive(app: App, path: string): Promise<void> {
+  if (!path || app.vault.getAbstractFileByPath(path)) return;
+  await ensureFolderRecursive(app, parentOf(path));
+  try {
+    await app.vault.createFolder(path);
+  } catch (error) {
+    if (!app.vault.getAbstractFileByPath(path)) throw error;
+  }
+}
 
 export function notebookIsOpen(app: App, file: TFile): boolean {
   return app.workspace
@@ -93,11 +108,23 @@ export async function editClosedNotebook<T>(
       );
       const texts = await session.readFiles();
       const load = session.load(texts, paperWidth);
+      if (load.syncing || !session.writer) {
+        throw new Error("Notebook is still syncing; try again in a moment.");
+      }
       const result = await mutate(load.doc);
       if (notebookIsOpen(app, file)) {
         throw new Error("The notebook was opened in another tab while saving.");
       }
-      await session.save(load.doc, changedPageIds ?? null);
+      const writes = session.writer.save(load.doc, changedPageIds ?? null);
+      if (writes.length > 0) {
+        await ensureFolderRecursive(app, folder);
+        for (const { name, text } of writes) {
+          const path = normalizePath(`${folder}/${name}`);
+          const existing = app.vault.getAbstractFileByPath(path);
+          if (existing instanceof TFile) await app.vault.modify(existing, text);
+          else await app.vault.create(path, text);
+        }
+      }
       return result;
     }
 

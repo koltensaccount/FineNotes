@@ -84,7 +84,14 @@ async function resolveBackingNotebook(
     const chosen = await HandwriteSetupModal.prompt(app, "once");
     if (!chosen) return null;
     plugin.settings.inlineHandwriteMode = chosen;
-    await plugin.saveSettings();
+    try {
+      await plugin.saveSettings();
+    } catch (error) {
+      if (plugin.settings.inlineHandwriteMode === chosen) {
+        delete plugin.settings.inlineHandwriteMode;
+      }
+      throw error;
+    }
   }
 
   const mode = plugin.settings.inlineHandwriteMode ?? "once";
@@ -151,12 +158,19 @@ export async function insertInlineHandwriting(
 }
 
 export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
+  let inserting = false;
   const run = (editor: Editor, file: TFile, forcePick: boolean): void => {
-    void insertInlineHandwriting(plugin, editor, file, { forcePick }).catch((error: unknown) => {
-      new Notice(
-        `FineNotes: ${error instanceof Error ? error.message : "Could not insert handwriting."}`,
-      );
-    });
+    if (inserting) return;
+    inserting = true;
+    void insertInlineHandwriting(plugin, editor, file, { forcePick })
+      .catch((error: unknown) => {
+        new Notice(
+          `FineNotes: ${error instanceof Error ? error.message : "Could not insert handwriting."}`,
+        );
+      })
+      .finally(() => {
+        inserting = false;
+      });
   };
 
   plugin.addCommand({

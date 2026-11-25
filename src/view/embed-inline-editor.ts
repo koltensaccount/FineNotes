@@ -18,11 +18,13 @@ import { newImageElement, placeImageBox } from "../model/images";
 import { addSavedPen, isPenId, samePen, savedPensOf } from "../model/saved-pens";
 import type { InkDocument, Page } from "../model/document";
 import {
+  initialInlineManualHeight,
   inlineClampedResizeHeight,
   inlineGrowHeight,
   inlineGrowHeightForPoint,
   inlineTrimHeight,
   isInlineSketchPage,
+  mergeInlinePageEdits,
 } from "../model/inline-sketch";
 import { DARK_PAPER, LIGHT_PAPER, type PaperTheme } from "../canvas/backdrop";
 import {
@@ -122,6 +124,7 @@ export class EmbedInlineEditor {
   private guidePopover: WritingGuidePopover | null = null;
   private toolState: ToolbarState;
   private doc: InkDocument | null = null;
+  private basePage: Page | null = null;
   private stageEl: HTMLElement | null = null;
   private manualHeight: number | null = null;
   private closed = false;
@@ -204,6 +207,10 @@ export class EmbedInlineEditor {
         attachmentDefaults(plugin.settings),
       );
       const clone: Page = structuredClone(target);
+      this.basePage = structuredClone(target);
+      if (isInlineSketchPage(clone)) {
+        this.manualHeight = initialInlineManualHeight(clone);
+      }
       this.doc = {
         version: fullDoc.version,
         view: { scrollY: 0, width: clone.geometry.width, scale: 1 },
@@ -568,7 +575,8 @@ export class EmbedInlineEditor {
       openBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        void this.close().then(async () => {
+        void this.close().then(async (ok) => {
+          if (!ok) return;
           const leaf = app.workspace.getLeaf(true);
           await leaf.setViewState(
             { type: VIEW_TYPE_INK, state: { file: notebookFile.path }, active: true },
@@ -806,6 +814,7 @@ export class EmbedInlineEditor {
     if (this.revision === this.savedRevision || !this.doc) return this.saves;
     const targetRev = this.revision;
     const updatedPage: Page = structuredClone(this.doc.pages[0]);
+    const baseSnapshot: Page | null = this.basePage ? structuredClone(this.basePage) : null;
     const { app, notebookFile, plugin } = this.req;
     this.saves = this.saves
       .catch(() => true)
@@ -817,11 +826,17 @@ export class EmbedInlineEditor {
             plugin.settings.paperWidth,
             (doc) => {
               const idx = doc.pages.findIndex((p) => p.id === updatedPage.id);
-              if (idx >= 0) doc.pages[idx] = updatedPage;
-              else doc.pages.push(updatedPage);
+              if (idx >= 0) {
+                doc.pages[idx] = baseSnapshot
+                  ? mergeInlinePageEdits(baseSnapshot, doc.pages[idx], updatedPage)
+                  : updatedPage;
+              } else {
+                doc.pages.push(updatedPage);
+              }
             },
             new Set([updatedPage.id]),
           );
+          this.basePage = updatedPage;
           this.savedRevision = Math.max(this.savedRevision, targetRev);
           return true;
         } catch (error) {
@@ -841,10 +856,8 @@ export class EmbedInlineEditor {
         window.clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
-      this.guidePopover?.close();
-      this.guidePopover = null;
-      this.guideListeners.clear();
       const page = this.doc?.pages[0];
+      const prevHeight = page?.geometry.height;
       if (page && isInlineSketchPage(page)) {
         const trimmed = inlineTrimHeight(page, this.manualHeight);
         if (trimmed !== page.geometry.height) {
@@ -853,6 +866,16 @@ export class EmbedInlineEditor {
         }
       }
       const ok = await this.flushSave();
+      if (!ok && this.req.slotEl.isConnected && this.surface) {
+        if (page && prevHeight !== undefined && page.geometry.height !== prevHeight) {
+          page.geometry = { ...page.geometry, height: prevHeight };
+        }
+        this.closing = null;
+        return false;
+      }
+      this.guidePopover?.close();
+      this.guidePopover = null;
+      this.guideListeners.clear();
       this.closed = true;
       this.toolbar?.destroy();
       this.toolbar = null;

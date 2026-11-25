@@ -26395,6 +26395,18 @@ button.goodobsidian-color-swatch.clickable-icon,
 }
 
 /* Handwrite Here setup modal & fuzzy notebook picker */
+.modal.goodobsidian-hw-setup-modal {
+  max-height: min(90vh, 90dvh);
+  overflow-y: auto;
+}
+.goodobsidian-hw-setup > * {
+  flex-shrink: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.goodobsidian-hw-setup .goodobsidian-ask-actions {
+  flex-wrap: wrap;
+}
 .goodobsidian-hw-setup-sub {
   margin: 0 0 14px;
   font-size: var(--font-ui-small);
@@ -26413,6 +26425,7 @@ button.goodobsidian-color-swatch.clickable-icon,
   gap: 12px;
   width: 100%;
   height: auto;
+  white-space: normal;
   padding: 12px 14px;
   text-align: left;
   border-radius: var(--gob-radius-m);
@@ -26448,6 +26461,7 @@ button.goodobsidian-color-swatch.clickable-icon,
 }
 .goodobsidian-hw-setup-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: var(--font-ui-medium);

@@ -6157,8 +6157,13 @@ export class InkView extends TextFileView {
       return;
     }
     const pages = surface.document.pages;
-    if (targetPageId !== null && !pages.some((p) => p.id === targetPageId) && attempt < 20) {
-      window.setTimeout(() => this.applyPendingPage(attempt + 1), 50);
+    if (targetPageId !== null && !pages.some((p) => p.id === targetPageId)) {
+      if (attempt < 20) {
+        window.setTimeout(() => this.applyPendingPage(attempt + 1), 50);
+      }
+      // Keep `pendingPageId` & `pendingHighlightPage` pending so a delayed
+      // DevicePages sync can still land on and highlight the exact requested page
+      // instead of falling back to a wrong positional index.
       return;
     }
     this.pendingSubpath = null;

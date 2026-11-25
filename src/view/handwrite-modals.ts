@@ -72,6 +72,7 @@ export class HandwriteSetupModal extends Modal {
   override onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
+    this.modalEl.addClass("goodobsidian-hw-setup-modal");
     contentEl.addClass("goodobsidian-ask", "goodobsidian-hw-setup");
     this.setTitle("Where should inline handwriting live?");
 
