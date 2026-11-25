@@ -11,6 +11,7 @@ export const INLINE_DEFAULT_HEIGHT = 260;
 export const INLINE_MIN_HEIGHT = 120;
 export const INLINE_GROW_MARGIN = 64;
 export const INLINE_GROW_STEP = 160;
+export const INLINE_TOP_PAD = 28;
 export const INLINE_BOTTOM_PAD = 28;
 export const INLINE_RESIZE_PAD = 12;
 export const INLINE_MAX_HEIGHT = 4096;
@@ -43,6 +44,73 @@ export function createInlineSketchPage(
       ? { kind: "blank" }
       : { kind: "blank", paperColor: "transparent" };
   return page;
+}
+
+/** Highest Y coordinate (page px) reached by any drawn content on `page`, or `Infinity` when empty. */
+export function highestInlineContentY(page: Page): number {
+  let minY = Infinity;
+  for (const stroke of page.strokes) {
+    const pad = stroke.size / 2;
+    for (let i = 1; i < stroke.pts.length; i += 3) {
+      const y = stroke.pts[i] - pad;
+      if (y < minY) minY = y;
+    }
+  }
+  for (const image of page.images) {
+    if (image.y < minY) minY = image.y;
+  }
+  for (const text of page.textBoxes) {
+    if (text.y < minY) minY = text.y;
+  }
+  for (const table of page.tables ?? []) {
+    if (table.y < minY) minY = table.y;
+  }
+  for (const graph of page.graphs ?? []) {
+    if (graph.y < minY) minY = graph.y;
+  }
+  for (const eq of page.equations ?? []) {
+    if (eq.y < minY) minY = eq.y;
+  }
+  return minY;
+}
+
+/**
+ * Crops excess blank whitespace above the highest drawn content on an inline
+ * sketch page by shifting all content up to `INLINE_TOP_PAD`. On ruled/grid
+ * paper, snaps the shift to a multiple of the ruling spacing so handwriting
+ * stays aligned on its lines. Returns the vertical shift applied (0 if none).
+ */
+export function trimInlinePageTop(page: Page): number {
+  const highest = highestInlineContentY(page);
+  if (!Number.isFinite(highest) || highest <= INLINE_TOP_PAD) return 0;
+  let shiftY = Math.floor(highest - INLINE_TOP_PAD);
+  if (page.backdrop.kind !== "blank" && page.backdrop.kind !== "pdf") {
+    const spacing =
+      typeof page.backdrop.spacing === "number" && page.backdrop.spacing >= 4
+        ? page.backdrop.spacing
+        : 40;
+    shiftY = Math.floor(shiftY / spacing) * spacing;
+  }
+  if (shiftY <= 0) return 0;
+
+  for (const stroke of page.strokes) {
+    for (let i = 1; i < stroke.pts.length; i += 3) {
+      stroke.pts[i] -= shiftY;
+    }
+  }
+  for (const image of page.images) image.y -= shiftY;
+  for (const text of page.textBoxes) text.y -= shiftY;
+  for (const table of page.tables ?? []) table.y -= shiftY;
+  for (const graph of page.graphs ?? []) graph.y -= shiftY;
+  for (const eq of page.equations ?? []) eq.y -= shiftY;
+  for (const comment of page.comments ?? []) comment.y -= shiftY;
+  for (const region of page.regions ?? []) region.y -= shiftY;
+
+  page.geometry = {
+    ...page.geometry,
+    height: Math.max(INLINE_MIN_HEIGHT, page.geometry.height - shiftY),
+  };
+  return shiftY;
 }
 
 /** Lowest Y coordinate (page px) reached by any drawn content on `page`, or 0 when empty. */

@@ -4,8 +4,10 @@ import {
   INLINE_GROW_STEP,
   INLINE_MAX_HEIGHT,
   INLINE_MIN_HEIGHT,
+  INLINE_TOP_PAD,
   createInlineSketchPage,
   findLinkedNotebookInMarkdown,
+  highestInlineContentY,
   initialInlineManualHeight,
   inlineClampedResizeHeight,
   inlineGrowHeight,
@@ -14,6 +16,7 @@ import {
   isInlineSketchPage,
   lowestInlineContentY,
   mergeInlinePageEdits,
+  trimInlinePageTop,
 } from "../../src/model/inline-sketch";
 import { DotClock, attachDotClock, dotClockOf } from "../../src/model/dot-ids";
 import { IdSequence, strokeIdsOf } from "../../src/view/id-sequence";
@@ -65,6 +68,33 @@ describe("inline-sketch pure model", () => {
     expect(inlineTrimHeight(page)).toBe(142 + 28);
     expect(inlineTrimHeight(page, 400)).toBe(400);
     expect(inlineTrimHeight(page, 100)).toBe(170);
+  });
+
+  it("crops excess blank top whitespace on finish while keeping ruled lines aligned", () => {
+    const blank = createInlineSketchPage("hw-top-1", { height: 400 });
+    expect(highestInlineContentY(blank)).toBe(Infinity);
+    expect(trimInlinePageTop(blank)).toBe(0);
+
+    blank.strokes.push({
+      id: "s1",
+      tool: "pen",
+      color: "#000",
+      size: 4,
+      pts: [50, 120, 0.5, 100, 220, 0.5],
+    });
+    // Highest point with stroke radius 2 is 118; shifts up to INLINE_TOP_PAD (28) -> shift 90
+    const shifted = trimInlinePageTop(blank);
+    expect(shifted).toBe(118 - INLINE_TOP_PAD);
+    expect(highestInlineContentY(blank)).toBe(INLINE_TOP_PAD);
+    expect(inlineTrimHeight(blank)).toBe(222 - shifted + 28);
+
+    // On ruled paper (spacing 40), shift snaps to a multiple of 40 so ink stays on its lines
+    const ruled = createInlineSketchPage("hw-top-2", {
+      height: 400,
+      backdrop: { kind: "legal", spacing: 40, paperColor: "#ffffff" },
+    });
+    ruled.strokes.push({ id: "s1", tool: "pen", color: "#000", size: 4, pts: [50, 130, 0.5] });
+    expect(trimInlinePageTop(ruled)).toBe(80);
   });
 
   it("clamps manual bottom resize so content is never clipped", () => {

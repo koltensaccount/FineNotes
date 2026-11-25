@@ -20,6 +20,7 @@ import { DEFAULT_PAGE_GEOMETRY, type InkDocument, type Page } from "../model/doc
 import { attachDotClock, dotClockOf } from "../model/dot-ids";
 import {
   INLINE_DEFAULT_HEIGHT,
+  INLINE_MIN_HEIGHT,
   initialInlineManualHeight,
   inlineClampedResizeHeight,
   inlineGrowHeight,
@@ -27,6 +28,7 @@ import {
   inlineTrimHeight,
   isInlineSketchPage,
   mergeInlinePageEdits,
+  trimInlinePageTop,
 } from "../model/inline-sketch";
 import { DARK_PAPER, LIGHT_PAPER, type PaperTheme } from "../canvas/backdrop";
 import {
@@ -844,8 +846,16 @@ export class EmbedInlineEditor {
         this.saveTimer = null;
       }
       const page = this.doc?.pages[0];
-      const prevHeight = page?.geometry.height;
+      const beforeTrim = page ? structuredClone(page) : null;
+      const prevManualHeight = this.manualHeight;
       if (page && isInlineSketchPage(page)) {
+        const shifted = trimInlinePageTop(page);
+        if (shifted > 0) {
+          if (this.manualHeight !== null) {
+            this.manualHeight = Math.max(INLINE_MIN_HEIGHT, this.manualHeight - shifted);
+          }
+          this.revision++;
+        }
         const trimmed = inlineTrimHeight(page, this.manualHeight);
         if (trimmed !== page.geometry.height) {
           page.geometry = { ...page.geometry, height: trimmed };
@@ -854,8 +864,9 @@ export class EmbedInlineEditor {
       }
       const ok = await this.flushSave();
       if (!ok && this.req.slotEl.isConnected && this.surface) {
-        if (page && prevHeight !== undefined && page.geometry.height !== prevHeight) {
-          page.geometry = { ...page.geometry, height: prevHeight };
+        if (beforeTrim && this.doc) {
+          this.doc.pages[0] = beforeTrim;
+          this.manualHeight = prevManualHeight;
         }
         this.closing = null;
         return false;

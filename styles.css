@@ -1373,7 +1373,7 @@ select.goodobsidian-choice-select {
 .goodobsidian-inline-stage {
   position: relative;
   width: 100%;
-  min-height: 140px;
+  min-height: 0;
   overflow: hidden;
   border-radius: 0 0 var(--gob-radius-l, 12px) var(--gob-radius-l, 12px);
   touch-action: pan-y;
