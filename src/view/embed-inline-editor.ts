@@ -815,6 +815,7 @@ export class EmbedInlineEditor {
 
   private flushSave(): Promise<boolean> {
     if (this.revision === this.savedRevision || !this.doc) return this.saves;
+    const clock = dotClockOf(this.doc) ?? null;
     const targetRev = this.revision;
     const updatedPage: Page = structuredClone(this.doc.pages[0]);
     const baseSnapshot: Page | null = this.basePage ? structuredClone(this.basePage) : null;
@@ -838,6 +839,7 @@ export class EmbedInlineEditor {
               }
             },
             new Set([updatedPage.id]),
+            clock,
           );
           this.basePage = updatedPage;
           this.savedRevision = Math.max(this.savedRevision, targetRev);

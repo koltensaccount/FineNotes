@@ -1,7 +1,7 @@
 import { type App, TFile, normalizePath } from "obsidian";
 import { VIEW_TYPE_INK } from "../constants";
 import type { InkDocument } from "../model/document";
-import { idsIn } from "../model/dot-ids";
+import { idsIn, type DotClock } from "../model/dot-ids";
 import { devicePagesFolderOf, isDevicePagesPayload, notebookIdOf } from "../model/device-pages";
 import { buildInkFile, parseInkFile } from "../model/serialize";
 import { rememberNotebookId } from "./device-pages-files";
@@ -56,6 +56,7 @@ export async function readClosedNotebook(
       );
       const texts = await session.readFiles();
       const load = session.load(texts, paperWidth);
+      if (load.syncing) throw new Error("Notebook is still syncing; try again in a moment.");
       session.clock.raise(idsIn(load.doc));
       return load.doc;
     }
@@ -67,6 +68,8 @@ export async function readClosedNotebook(
  * Serialized read-modify-write transaction for a closed backing notebook.
  * Supports both classic single-file notebooks and `DevicePages` notebooks, and
  * prevents concurrent inline sessions or commands from clobbering each other.
+ * An inline editor supplies its clock so element IDs and change stamps share
+ * one counter across saves, including while a vault write is in flight.
  */
 export async function editClosedNotebook<T>(
   app: App,
@@ -74,6 +77,7 @@ export async function editClosedNotebook<T>(
   paperWidth: number,
   mutate: (doc: InkDocument) => T | Promise<T>,
   changedPageIds?: ReadonlySet<string> | null,
+  clock: DotClock | null = null,
 ): Promise<T> {
   const key = file.path;
   const prev = activeLocks.get(key) ?? Promise.resolve();
@@ -114,7 +118,9 @@ export async function editClosedNotebook<T>(
         file.path,
         parsed.payload,
         folder,
-        deviceIdOf(app),
+        clock?.device ?? deviceIdOf(app),
+        null,
+        clock,
       );
       const texts = await session.readFiles();
       const load = session.load(texts, paperWidth);
