@@ -848,15 +848,20 @@ class NotebookEmbed extends Component {
     event.preventDefault();
     event.stopPropagation();
     const newTab = Keymap.isModEvent(event);
-    const leaf = this.ctx.app.workspace.getLeaf(newTab);
-    void leaf.setViewState(
-      { type: VIEW_TYPE_INK, state: { file: this.file.path }, active: true },
-      {
-        pageIndex: Math.max(0, page - 1),
-        ...(pageId ? { pageId } : {}),
-        highlightPage: true,
-      },
-    );
+    if (pageId && typeof this.ctx.app.workspace.getLeaf === "function") {
+      const leaf = this.ctx.app.workspace.getLeaf(newTab);
+      void leaf.setViewState(
+        { type: VIEW_TYPE_INK, state: { file: this.file.path }, active: true },
+        {
+          pageIndex: Math.max(0, page - 1),
+          pageId,
+          highlightPage: true,
+        },
+      );
+      return;
+    }
+    const target = `${this.ctx.linktext}#page=${page}`;
+    void this.ctx.app.workspace.openLinkText(target, this.ctx.sourcePath, newTab);
   }
 
   /**

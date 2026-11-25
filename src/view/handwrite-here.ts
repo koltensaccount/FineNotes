@@ -24,6 +24,7 @@ import {
   stripInkSuffix,
 } from "../model/new-notebook";
 import { buildInkFile } from "../model/serialize";
+import { HandwriteSetupModal, InlineNotebookPickerModal } from "./handwrite-modals";
 import { embedInsertion } from "./page-embed-model";
 import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
 
@@ -42,19 +43,13 @@ async function ensureFolder(plugin: GoodObsidianPlugin, folder: string): Promise
   }
 }
 
-async function resolveBackingNotebook(
+async function createBackingNotebook(
   plugin: GoodObsidianPlugin,
-  source: TFile,
-  markdown: string,
+  sourcePath: string,
+  preferredName?: string,
 ): Promise<TFile> {
   const { app } = plugin;
-  const linked = findLinkedNotebookInMarkdown(markdown);
-  if (linked) {
-    const existing = app.metadataCache.getFirstLinkpathDest(linked, source.path);
-    if (existing instanceof TFile) return existing;
-  }
-
-  const base = cleanTitle(stripInkSuffix(source.basename)) || "Handwriting";
+  const base = cleanTitle(stripInkSuffix(preferredName ?? "Handwriting")) || "Handwriting";
   const fileName = `${base}.notebook.md`;
   const customFolder = normalizeFolder(plugin.settings.inlineHandwriteFolder ?? "");
   let targetPath: string;
@@ -63,7 +58,7 @@ async function resolveBackingNotebook(
     targetPath = normalizePath(joinVaultPath(customFolder, fileName));
   } else {
     targetPath = normalizePath(
-      await app.fileManager.getAvailablePathForAttachment(fileName, source.path),
+      await app.fileManager.getAvailablePathForAttachment(fileName, sourcePath),
     );
     const parent = targetPath.includes("/") ? targetPath.slice(0, targetPath.lastIndexOf("/")) : "";
     await ensureFolder(plugin, parent);
@@ -78,12 +73,55 @@ async function resolveBackingNotebook(
   return app.vault.create(targetPath, buildInkFile(body, doc));
 }
 
+async function resolveBackingNotebook(
+  plugin: GoodObsidianPlugin,
+  source: TFile,
+  markdown: string,
+  forcePick: boolean,
+): Promise<TFile | null> {
+  const { app } = plugin;
+  if (!plugin.settings.inlineHandwriteMode) {
+    const chosen = await HandwriteSetupModal.prompt(app, "once");
+    if (!chosen) return null;
+    plugin.settings.inlineHandwriteMode = chosen;
+    await plugin.saveSettings();
+  }
+
+  const mode = plugin.settings.inlineHandwriteMode ?? "once";
+  const linked = findLinkedNotebookInMarkdown(markdown);
+  const linkedDest = linked ? app.metadataCache.getFirstLinkpathDest(linked, source.path) : null;
+  const currentNotebook = linkedDest instanceof TFile ? linkedDest : null;
+  const defaultCreateName = cleanTitle(stripInkSuffix(source.basename)) || "Handwriting";
+
+  const shouldPick = forcePick || mode === "always" || (mode === "once" && !currentNotebook);
+  if (shouldPick) {
+    const choice = await InlineNotebookPickerModal.pick(app, {
+      defaultCreateName,
+      currentNotebook,
+      placeholder: "Choose a notebook for this handwriting block…",
+    });
+    if (!choice) return null;
+    if (choice.kind === "existing") return choice.file;
+    return createBackingNotebook(plugin, source.path, choice.name);
+  }
+
+  if (currentNotebook) return currentNotebook;
+  return createBackingNotebook(plugin, source.path, defaultCreateName);
+}
+
 export async function insertInlineHandwriting(
   plugin: GoodObsidianPlugin,
   editor: Editor,
   source: TFile,
+  options?: { forcePick?: boolean },
 ): Promise<void> {
-  const notebook = await resolveBackingNotebook(plugin, source, editor.getValue());
+  const notebook = await resolveBackingNotebook(
+    plugin,
+    source,
+    editor.getValue(),
+    options?.forcePick === true,
+  );
+  if (!notebook) return;
   if (notebookIsOpen(plugin.app, notebook)) {
     new Notice("FineNotes: close the backing notebook tab before inserting inline handwriting.");
     return;
@@ -113,6 +151,14 @@ export async function insertInlineHandwriting(
 }
 
 export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
+  const run = (editor: Editor, file: TFile, forcePick: boolean): void => {
+    void insertInlineHandwriting(plugin, editor, file, { forcePick }).catch((error: unknown) => {
+      new Notice(
+        `FineNotes: ${error instanceof Error ? error.message : "Could not insert handwriting."}`,
+      );
+    });
+  };
+
   plugin.addCommand({
     id: "handwrite-here",
     name: "Handwrite here",
@@ -120,11 +166,19 @@ export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
       const file = ctx.file;
       if (!file || plugin.isInkFile(file)) return false;
       if (checking) return true;
-      void insertInlineHandwriting(plugin, editor, file).catch((error: unknown) => {
-        new Notice(
-          `FineNotes: ${error instanceof Error ? error.message : "Could not insert handwriting."}`,
-        );
-      });
+      run(editor, file, false);
+      return true;
+    },
+  });
+
+  plugin.addCommand({
+    id: "handwrite-here-choose",
+    name: "Handwrite here (choose notebook…)",
+    editorCheckCallback: (checking, editor, ctx) => {
+      const file = ctx.file;
+      if (!file || plugin.isInkFile(file)) return false;
+      if (checking) return true;
+      run(editor, file, true);
       return true;
     },
   });
@@ -137,13 +191,7 @@ export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
         item
           .setTitle("Handwrite here")
           .setIcon("pen-tool")
-          .onClick(() => {
-            void insertInlineHandwriting(plugin, editor, file).catch((error: unknown) => {
-              new Notice(
-                `FineNotes: ${error instanceof Error ? error.message : "Could not insert handwriting."}`,
-              );
-            });
-          }),
+          .onClick(() => run(editor, file, false)),
       );
     }),
   );

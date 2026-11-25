@@ -589,6 +589,8 @@ export interface GoodObsidianSettings {
   calculator?: unknown;
   /** Optional folder for auto-created inline handwriting notebooks (empty = Obsidian attachments folder). */
   inlineHandwriteFolder?: string;
+  /** How Handwrite here picks a backing notebook: unset triggers the first-time setup prompt. */
+  inlineHandwriteMode?: "once" | "auto" | "always";
   /** Notebook-wide non-printing Writing Guides overlay state & style. */
   writingGuidesEnabled?: boolean;
   writingGuides?: Record<string, unknown>;

@@ -518,6 +518,7 @@ describe("the rows", () => {
       ["pages", "Paper", "Paper width", "render"],
       ["pages", "New notebooks", "New notebooks go in", "render"],
       ["pages", "New notebooks", "Inline handwriting folder", "render"],
+      ["pages", "New notebooks", "Inline handwriting notebook", "render"],
       ["pages", "New notebooks", "Each notebook gets its own folder", "toggle:notebookOwnFolder"],
       [
         "pages",

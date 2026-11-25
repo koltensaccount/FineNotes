@@ -1759,6 +1759,15 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
             ),
             "folder-input",
           ),
+          this.tile(
+            drawnRow(
+              "Inline handwriting notebook",
+              "How Handwrite here chooses which notebook stores each block.",
+              (s) => this.drawInlineHandwriteMode(s),
+              ["inline handwriting", "handwrite here", "notebook", "ask", "auto"],
+            ),
+            "dropdown",
+          ),
           this.art(
             toggle(
               "notebookOwnFolder",
@@ -3107,6 +3116,22 @@ export class GoodObsidianSettingTab extends PluginSettingTab {
         this.plugin.settings.inlineHandwriteFolder = path;
         void this.plugin.saveSettings();
       });
+    });
+  }
+
+  private drawInlineHandwriteMode(setting: Setting): void {
+    setting.addDropdown((dropdown) => {
+      dropdown
+        .addOption("once", "Ask once per note")
+        .addOption("auto", "Automatic (one per note)")
+        .addOption("always", "Always ask")
+        .setValue(this.plugin.settings.inlineHandwriteMode ?? "once")
+        .onChange(async (value) => {
+          if (value === "once" || value === "auto" || value === "always") {
+            this.plugin.settings.inlineHandwriteMode = value;
+            await this.plugin.saveSettings();
+          }
+        });
     });
   }
 

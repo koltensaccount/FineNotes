@@ -26393,3 +26393,108 @@ button.goodobsidian-color-swatch.clickable-icon,
   background: var(--gob-well);
   color: var(--text-normal);
 }
+
+/* Handwrite Here setup modal & fuzzy notebook picker */
+.goodobsidian-hw-setup-sub {
+  margin: 0 0 14px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.goodobsidian-hw-setup-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.goodobsidian-hw-setup-card.clickable-icon {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  height: auto;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--gob-radius-m);
+  border: var(--gob-hairline);
+  background: var(--gob-well);
+  color: var(--text-normal);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.goodobsidian-hw-setup-card.clickable-icon.is-active {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 10%, var(--gob-well));
+}
+.goodobsidian-hw-setup-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  flex: none;
+  color: var(--text-muted);
+}
+.goodobsidian-hw-setup-card.is-active .goodobsidian-hw-setup-icon {
+  color: var(--interactive-accent);
+}
+.goodobsidian-hw-setup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.goodobsidian-hw-setup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.goodobsidian-hw-setup-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+  color: var(--interactive-accent);
+}
+.goodobsidian-hw-setup-desc {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.goodobsidian-hw-setup-hint {
+  margin: 12px 0 14px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+.goodobsidian-hw-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.goodobsidian-hw-pick-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+  flex: none;
+}
+.goodobsidian-hw-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.goodobsidian-hw-pick-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.goodobsidian-hw-pick-sub {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
