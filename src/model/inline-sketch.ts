@@ -3,6 +3,7 @@
  * `![[Notebook#id=hw-…]]`. No DOM, no Obsidian.
  */
 
+import { resolveSpacing } from "../canvas/backdrop";
 import { blankPage, type Page, type SyntheticBackdrop } from "./document";
 
 export const INLINE_SKETCH_PREFIX = "hw-";
@@ -85,10 +86,7 @@ export function trimInlinePageTop(page: Page): number {
   if (!Number.isFinite(highest) || highest <= INLINE_TOP_PAD) return 0;
   let shiftY = Math.floor(highest - INLINE_TOP_PAD);
   if (page.backdrop.kind !== "blank" && page.backdrop.kind !== "pdf") {
-    const spacing =
-      typeof page.backdrop.spacing === "number" && page.backdrop.spacing >= 4
-        ? page.backdrop.spacing
-        : 40;
+    const spacing = resolveSpacing(page.backdrop.spacing, page.backdrop.kind);
     shiftY = Math.floor(shiftY / spacing) * spacing;
   }
   if (shiftY <= 0) return 0;
@@ -193,6 +191,13 @@ export function inlineTrimHeight(page: Page, manualHeight?: number | null): numb
     return Math.min(INLINE_MAX_HEIGHT, Math.max(tight, Math.round(manualHeight)));
   }
   return Math.min(INLINE_MAX_HEIGHT, tight);
+}
+
+/** Finish the merged page for storage without changing the inline editor's live page. */
+export function finishInlineSketchPage(page: Page, manualHeight: number | null): void {
+  const shifted = trimInlinePageTop(page);
+  const adjustedHeight = manualHeight === null ? null : manualHeight - shifted;
+  page.geometry = { ...page.geometry, height: inlineTrimHeight(page, adjustedHeight) };
 }
 
 /** Clamps a user-dragged bottom-handle height so existing content is never clipped. */

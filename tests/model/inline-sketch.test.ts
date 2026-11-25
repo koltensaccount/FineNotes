@@ -7,6 +7,7 @@ import {
   INLINE_TOP_PAD,
   createInlineSketchPage,
   findLinkedNotebookInMarkdown,
+  finishInlineSketchPage,
   highestInlineContentY,
   initialInlineManualHeight,
   inlineClampedResizeHeight,
@@ -95,6 +96,41 @@ describe("inline-sketch pure model", () => {
     });
     ruled.strokes.push({ id: "s1", tool: "pen", color: "#000", size: 4, pts: [50, 130, 0.5] });
     expect(trimInlinePageTop(ruled)).toBe(80);
+  });
+
+  it("uses the rendered template pitch when cropping default Narrow paper", () => {
+    const page = createInlineSketchPage("hw-narrow", {
+      height: 400,
+      backdrop: { kind: "ruled-narrow" },
+    });
+    page.strokes.push({ id: "s1", tool: "pen", color: "#000", size: 4, pts: [50, 130, 0.5] });
+    expect(trimInlinePageTop(page)).toBe(84);
+  });
+
+  it("crops the merged page after preserving a remote move and erasure", () => {
+    const base = createInlineSketchPage("hw-merged", { height: 400 });
+    base.strokes.push(
+      { id: "moved", tool: "pen", color: "#000", size: 4, pts: [50, 120, 0.5] },
+      { id: "erased", tool: "pen", color: "#000", size: 4, pts: [50, 100, 0.5] },
+    );
+    const latest = structuredClone(base);
+    latest.strokes.pop();
+    latest.strokes[0].pts[1] = 180;
+    const local = structuredClone(base);
+    local.strokes.push({ id: "added", tool: "pen", color: "#000", size: 4, pts: [50, 160, 0.5] });
+
+    const merged = mergeInlinePageEdits(base, latest, local);
+    finishInlineSketchPage(merged, null);
+
+    expect(merged.strokes.map(({ id, pts }) => [id, pts[1]])).toEqual([
+      ["moved", 50],
+      ["added", 30],
+    ]);
+    expect(local.strokes.map(({ id, pts }) => [id, pts[1]])).toEqual([
+      ["moved", 120],
+      ["erased", 100],
+      ["added", 160],
+    ]);
   });
 
   it("clamps manual bottom resize so content is never clipped", () => {

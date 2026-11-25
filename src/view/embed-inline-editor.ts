@@ -20,15 +20,13 @@ import { DEFAULT_PAGE_GEOMETRY, type InkDocument, type Page } from "../model/doc
 import { attachDotClock, dotClockOf } from "../model/dot-ids";
 import {
   INLINE_DEFAULT_HEIGHT,
-  INLINE_MIN_HEIGHT,
+  finishInlineSketchPage,
   initialInlineManualHeight,
   inlineClampedResizeHeight,
   inlineGrowHeight,
   inlineGrowHeightForPoint,
-  inlineTrimHeight,
   isInlineSketchPage,
   mergeInlinePageEdits,
-  trimInlinePageTop,
 } from "../model/inline-sketch";
 import { DARK_PAPER, LIGHT_PAPER, type PaperTheme } from "../canvas/backdrop";
 import {
@@ -650,7 +648,6 @@ export class EmbedInlineEditor {
     slotEl.tabIndex = -1;
     slotEl.focus({ preventScroll: true });
 
-    const docObj = slotEl.ownerDocument;
     const onKey = (e: KeyboardEvent): void => {
       if (e.defaultPrevented) return;
       if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key === "Enter")) {
@@ -668,10 +665,10 @@ export class EmbedInlineEditor {
         e.stopPropagation();
       }
     };
-    docObj.addEventListener("keydown", onKey, true);
-    docObj.addEventListener("paste", onPaste, true);
-    this.cleanups.push(() => docObj.removeEventListener("keydown", onKey, true));
-    this.cleanups.push(() => docObj.removeEventListener("paste", onPaste, true));
+    slotEl.addEventListener("keydown", onKey, true);
+    slotEl.addEventListener("paste", onPaste, true);
+    this.cleanups.push(() => slotEl.removeEventListener("keydown", onKey, true));
+    this.cleanups.push(() => slotEl.removeEventListener("paste", onPaste, true));
   }
 
   private isTransparent(): boolean {
@@ -797,30 +794,34 @@ export class EmbedInlineEditor {
     }, 500);
   }
 
-  private flushSave(): Promise<boolean> {
-    if (this.revision === this.savedRevision || !this.doc) return this.saves;
+  private flushSave(finishing = false): Promise<boolean> {
+    if (!this.doc) return this.saves;
+    const page = this.doc.pages[0];
+    const trim = finishing && isInlineSketchPage(page);
+    if (!trim && this.revision === this.savedRevision) return this.saves;
+    const manualHeight = this.manualHeight;
     const clock = dotClockOf(this.doc) ?? null;
     const targetRev = this.revision;
-    const updatedPage: Page = structuredClone(this.doc.pages[0]);
-    const baseSnapshot: Page | null = this.basePage ? structuredClone(this.basePage) : null;
+    const updatedPage: Page = structuredClone(page);
     const { app, notebookFile, plugin } = this.req;
     this.saves = this.saves
       .catch(() => true)
       .then(async () => {
         try {
+          const base = this.basePage;
           await editClosedNotebook(
             app,
             notebookFile,
             plugin.settings.paperWidth,
             (doc) => {
               const idx = doc.pages.findIndex((p) => p.id === updatedPage.id);
-              if (idx >= 0) {
-                doc.pages[idx] = baseSnapshot
-                  ? mergeInlinePageEdits(baseSnapshot, doc.pages[idx], updatedPage)
-                  : updatedPage;
-              } else {
-                doc.pages.push(updatedPage);
-              }
+              const merged =
+                idx >= 0 && base
+                  ? mergeInlinePageEdits(base, doc.pages[idx], updatedPage)
+                  : structuredClone(updatedPage);
+              if (trim) finishInlineSketchPage(merged, manualHeight);
+              if (idx >= 0) doc.pages[idx] = merged;
+              else doc.pages.push(merged);
             },
             new Set([updatedPage.id]),
             clock,
@@ -845,28 +846,15 @@ export class EmbedInlineEditor {
         window.clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
-      const page = this.doc?.pages[0];
-      const beforeTrim = page ? structuredClone(page) : null;
-      const prevManualHeight = this.manualHeight;
-      if (page && isInlineSketchPage(page)) {
-        const shifted = trimInlinePageTop(page);
-        if (shifted > 0) {
-          if (this.manualHeight !== null) {
-            this.manualHeight = Math.max(INLINE_MIN_HEIGHT, this.manualHeight - shifted);
-          }
-          this.revision++;
-        }
-        const trimmed = inlineTrimHeight(page, this.manualHeight);
-        if (trimmed !== page.geometry.height) {
-          page.geometry = { ...page.geometry, height: trimmed };
-          this.revision++;
-        }
-      }
-      const ok = await this.flushSave();
-      if (!ok && this.req.slotEl.isConnected && this.surface) {
-        if (beforeTrim && this.doc) {
-          this.doc.pages[0] = beforeTrim;
-          this.manualHeight = prevManualHeight;
+      const { slotEl } = this.req;
+      const wasInert = slotEl.inert;
+      const hadFocus = slotEl.contains(slotEl.ownerDocument.activeElement);
+      slotEl.inert = true;
+      const ok = await this.flushSave(true);
+      slotEl.inert = wasInert;
+      if (!ok && slotEl.isConnected && this.surface) {
+        if (hadFocus && slotEl.ownerDocument.activeElement === slotEl.ownerDocument.body) {
+          slotEl.focus({ preventScroll: true });
         }
         this.closing = null;
         return false;
