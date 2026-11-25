@@ -1018,6 +1018,7 @@ class PageSlot {
       attr: { type: "button", "aria-label": "Write inline" },
     });
     setIcon(writeBtn, "pen-tool");
+    writeBtn.addEventListener("pointerdown", (event) => event.stopPropagation());
     writeBtn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1028,6 +1029,7 @@ class PageSlot {
       attr: { type: "button", "aria-label": "Open in notebook" },
     });
     setIcon(openBtn, "external-link");
+    openBtn.addEventListener("pointerdown", (event) => event.stopPropagation());
     openBtn.addEventListener("click", (event) =>
       this.embed.open(event, this.number, this.page?.id ?? this.embed.target.pageId),
     );

@@ -6449,6 +6449,7 @@ export class InkSurface {
   refreshInlinePage(pageId: string): void {
     this.renderer?.invalidatePage(pageId);
     this.layout();
+    if (this.builder) this.drawWet();
     this.requestFrame();
   }
 
@@ -11649,6 +11650,7 @@ export class InkSurface {
     this.layout();
     const grown = this.pageLayout.boxes[box.index] ?? box;
     this.activePage = grown;
+    if (this.builder) this.drawWet();
     return grown;
   }
 

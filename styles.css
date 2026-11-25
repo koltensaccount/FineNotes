@@ -1326,6 +1326,11 @@ select.goodobsidian-choice-select {
   .goodobsidian-page-embed-actions {
   opacity: 1;
 }
+@media (hover: none) {
+  .markdown-source-view.mod-cm6 .goodobsidian-page-embed-actions {
+    opacity: 0.85;
+  }
+}
 .goodobsidian-page-embed-action.clickable-icon {
   width: 28px;
   height: 28px;

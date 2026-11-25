@@ -19,6 +19,7 @@ import { addSavedPen, isPenId, samePen, savedPensOf } from "../model/saved-pens"
 import { DEFAULT_PAGE_GEOMETRY, type InkDocument, type Page } from "../model/document";
 import { attachDotClock, dotClockOf } from "../model/dot-ids";
 import {
+  INLINE_DEFAULT_HEIGHT,
   initialInlineManualHeight,
   inlineClampedResizeHeight,
   inlineGrowHeight,
@@ -76,7 +77,6 @@ const INLINE_BAR_ITEMS = new Set<BarItemId>([
   "image",
   "sticker",
   "sticky",
-  "calculator",
 ]);
 
 const DEFAULT_INLINE_LAYOUT: ToolbarLayout = {
@@ -212,6 +212,9 @@ export class EmbedInlineEditor {
       this.basePage = structuredClone(target);
       if (isInlineSketchPage(clone)) {
         this.manualHeight = initialInlineManualHeight(clone);
+        if (clone.geometry.height < INLINE_DEFAULT_HEIGHT) {
+          clone.geometry = { ...clone.geometry, height: INLINE_DEFAULT_HEIGHT };
+        }
       }
       this.doc = {
         version: fullDoc.version,
@@ -681,7 +684,7 @@ export class EmbedInlineEditor {
     if (!page || !this.stageEl) return;
     const availW = this.stageEl.clientWidth || this.req.slotEl.clientWidth || page.geometry.width;
     const scale = availW / page.geometry.width;
-    const scaledH = Math.max(140, Math.ceil(page.geometry.height * scale));
+    const scaledH = Math.max(40, Math.ceil(page.geometry.height * scale));
     this.stageEl.setCssStyles({ height: `${scaledH}px` });
     this.req.slotEl.setCssStyles({ aspectRatio: "" });
     this.req.slotEl.toggleClass("is-transparent", this.isTransparent());
