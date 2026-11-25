@@ -483,7 +483,9 @@ export class PageEmbeds extends Component {
         ? document.body.hasClass("theme-dark")
           ? DARK_PAPER
           : LIGHT_PAPER
-        : paper;
+        : !isTransparent && slot.embed.target.pageId !== undefined
+          ? LIGHT_PAPER
+          : paper;
     const look = effectivePaper.night ? (effectivePaper.keepPdf ? "|dark-keep-pdf" : "|dark") : "";
     const crop = slot.crop;
     const cut = crop ? `#${crop.x},${crop.y},${crop.width},${crop.height}` : "";

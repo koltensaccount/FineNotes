@@ -9,14 +9,14 @@
 
 import { type App, type TFile, Notice, setIcon } from "obsidian";
 import type GoodObsidianPlugin from "../main";
-import { attachmentDefaults, penPreferencesOf, shownPaperTheme } from "../settings-data";
+import { attachmentDefaults, penPreferencesOf } from "../settings-data";
 import { PALETTE, SIZES, VIEW_TYPE_INK } from "../constants";
 import { pushRecentColor } from "../model/colors";
 import { InsertImage } from "../model/commands";
 import { resolveAttachmentFolder } from "../model/attachment-folders";
 import { newImageElement, placeImageBox } from "../model/images";
 import { addSavedPen, isPenId, samePen, savedPensOf } from "../model/saved-pens";
-import type { InkDocument, Page } from "../model/document";
+import { DEFAULT_PAGE_GEOMETRY, type InkDocument, type Page } from "../model/document";
 import { attachDotClock, dotClockOf } from "../model/dot-ids";
 import {
   initialInlineManualHeight,
@@ -39,6 +39,7 @@ import { TemplatePickerModal } from "./template-picker";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { pickImageFiles, prepareImageBytes, saveImageAttachment } from "./image-import";
 import { copyPictureToSystemClipboard } from "./picture-clipboard";
+import { VaultBackdropRenderer } from "./backdrop-renderer";
 import { VaultImageCache } from "./image-cache";
 import { InkSurface } from "./ink-surface";
 import { toolStateFrom } from "./ink-view";
@@ -245,7 +246,7 @@ export class EmbedInlineEditor {
       const base = this.paperIsDark ? DARK_PAPER : LIGHT_PAPER;
       return { ...base, desk: "transparent" };
     }
-    return shownPaperTheme(this.req.plugin.settings, this.paperIsDark);
+    return { ...LIGHT_PAPER, desk: "transparent" };
   }
 
   private mount(): void {
@@ -504,11 +505,16 @@ export class EmbedInlineEditor {
           setTransparentBackground: (transparent) => {
             const p = this.doc?.pages[0];
             if (!p) return;
-            p.backdrop = transparent
-              ? { kind: "blank", paperColor: "transparent" }
-              : { kind: "blank", paperColor: "#ffffff" };
+            const nextBackdrop = transparent
+              ? { kind: "blank" as const, paperColor: "transparent" }
+              : { kind: "blank" as const, paperColor: "#ffffff" };
+            p.backdrop = nextBackdrop;
+            plugin.settings.inlineLastBackdrop = structuredClone(nextBackdrop);
+            void plugin.saveSettings();
             this.revision++;
-            this.surface?.setPaperTheme(this.effectivePaperTheme());
+            const theme = this.effectivePaperTheme();
+            this.surface?.setPaperTheme(theme);
+            this.toolbar?.setNight(theme.night === true);
             this.surface?.setWritingGuides(this.guidesEnabled && transparent, this.guideStyle);
             this.syncStageAspect();
             this.surface?.refreshInlinePage(p.id);
@@ -556,11 +562,15 @@ export class EmbedInlineEditor {
         new TemplatePickerModal(app, {
           mode: "change",
           initial,
-          geometry: p.geometry,
+          geometry: expandable ? DEFAULT_PAGE_GEOMETRY : p.geometry,
           onApply: ({ backdrop }) => {
             p.backdrop = backdrop;
+            plugin.settings.inlineLastBackdrop = structuredClone(backdrop);
+            void plugin.saveSettings();
             this.revision++;
-            this.surface?.setPaperTheme(this.effectivePaperTheme());
+            const theme = this.effectivePaperTheme();
+            this.surface?.setPaperTheme(theme);
+            this.toolbar?.setNight(theme.night === true);
             this.surface?.setWritingGuides(false, this.guideStyle);
             this.syncStageAspect();
             this.surface?.refreshInlinePage(p.id);
@@ -646,11 +656,12 @@ export class EmbedInlineEditor {
       },
     );
     this.surface.setInlineWidthLocked(true);
+    this.surface.setBackdropPainter(new VaultBackdropRenderer(null));
     this.images.onReady = (path) => this.surface?.imageReady(path);
     this.surface.setImagePainter(this.images);
     this.surface.setWritingGuides(this.guidesEnabled && this.isTransparent(), this.guideStyle);
     this.surface.setTool(this.toolState.tool);
-    this.toolbar.setNight(this.paperIsDark);
+    this.toolbar.setNight(this.effectivePaperTheme().night === true);
     this.syncUndoRedo();
     slotEl.tabIndex = -1;
     slotEl.focus({ preventScroll: true });

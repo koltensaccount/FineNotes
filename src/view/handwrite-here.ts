@@ -138,6 +138,7 @@ export async function insertInlineHandwriting(
   const sketchPage = createInlineSketchPage(pageId, {
     transparent: true,
     width: plugin.settings.paperWidth,
+    backdrop: plugin.settings.inlineLastBackdrop,
   });
 
   await editClosedNotebook(plugin.app, notebook, plugin.settings.paperWidth, (doc) => {

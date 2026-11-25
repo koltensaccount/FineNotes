@@ -28,6 +28,11 @@ describe("inline-sketch pure model", () => {
 
     const paper = createInlineSketchPage("hw-paper", { transparent: false });
     expect(paper.backdrop).toEqual({ kind: "blank" });
+
+    const remembered = createInlineSketchPage("hw-legal", {
+      backdrop: { kind: "legal", paperColor: "#ffffff" },
+    });
+    expect(remembered.backdrop).toEqual({ kind: "legal", paperColor: "#ffffff" });
   });
 
   it("grows smoothly on pen-up near the bottom without shrinking while writing", () => {

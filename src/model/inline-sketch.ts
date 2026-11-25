@@ -3,7 +3,7 @@
  * `![[Notebook#id=hw-…]]`. No DOM, no Obsidian.
  */
 
-import { blankPage, type Page } from "./document";
+import { blankPage, type Page, type SyntheticBackdrop } from "./document";
 
 export const INLINE_SKETCH_PREFIX = "hw-";
 export const INLINE_SKETCH_WIDTH = 1024;
@@ -26,14 +26,20 @@ export function isInlineSketchPage(page: Pick<Page, "id">): boolean {
 /** Creates a compact, expandable inline sketch page (transparent by default). */
 export function createInlineSketchPage(
   id: string,
-  options?: { transparent?: boolean; width?: number; height?: number },
+  options?: {
+    transparent?: boolean;
+    width?: number;
+    height?: number;
+    backdrop?: SyntheticBackdrop;
+  },
 ): Page {
   const page = blankPage(id);
   const width = options?.width ?? INLINE_SKETCH_WIDTH;
   const height = options?.height ?? INLINE_DEFAULT_HEIGHT;
   page.geometry = { width, height };
-  page.backdrop =
-    options?.transparent === false
+  page.backdrop = options?.backdrop
+    ? structuredClone(options.backdrop)
+    : options?.transparent === false
       ? { kind: "blank" }
       : { kind: "blank", paperColor: "transparent" };
   return page;

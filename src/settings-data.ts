@@ -9,6 +9,7 @@
  */
 
 import type { CompanionStore } from "./model/companion-pdf";
+import type { SyntheticBackdrop } from "./model/document";
 import type { FolderStyles } from "./model/library-style";
 import type { SimplePart } from "./model/simple-mode";
 import { LLM_PROVIDER_ID } from "./recognition/llm-request";
@@ -591,6 +592,8 @@ export interface GoodObsidianSettings {
   inlineHandwriteFolder?: string;
   /** How Handwrite here picks a backing notebook: unset triggers the first-time setup prompt. */
   inlineHandwriteMode?: "once" | "auto" | "always";
+  /** Last backdrop chosen for an inline handwriting block (unset = transparent). */
+  inlineLastBackdrop?: SyntheticBackdrop;
   /** Notebook-wide non-printing Writing Guides overlay state & style. */
   writingGuidesEnabled?: boolean;
   writingGuides?: Record<string, unknown>;
