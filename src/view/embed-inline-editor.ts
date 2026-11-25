@@ -470,13 +470,13 @@ export class EmbedInlineEditor {
     const barEl = toolbarHost.querySelector<HTMLElement>(".goodobsidian-toolbar");
     const endGroup = barEl?.querySelector<HTMLElement>(".goodobsidian-bar-doc") ?? barEl;
     if (endGroup) {
-      // 1. Native Writing Guides popover (includes Transparent Background toggle)
+      // 1. Native Writing Guides popover (writing overlay only; never alters paper background)
       const guidesBtn = endGroup.createEl("button", {
         cls: "clickable-icon",
-        attr: { type: "button", "aria-label": "Writing guides & background" },
+        attr: { type: "button", "aria-label": "Writing guides" },
       });
       setIcon(guidesBtn, FN_ICON_WRITING_GUIDES);
-      guidesBtn.toggleClass("is-active", this.guidesEnabled && this.isTransparent());
+      guidesBtn.toggleClass("is-active", this.guidesEnabled);
       guidesBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -488,48 +488,30 @@ export class EmbedInlineEditor {
         const host: WritingGuideHost = {
           state: () => ({
             enabled: this.guidesEnabled,
-            transparentBackground: this.isTransparent(),
             style: this.guideStyle,
             eligible: true,
-            paper: this.paperIsDark ? "#1e1f22" : "#ffffff",
+            paper: this.isTransparent()
+              ? this.paperIsDark
+                ? "#1e1f22"
+                : "#ffffff"
+              : ((this.doc?.pages[0]?.backdrop.kind !== "pdf"
+                  ? this.doc?.pages[0]?.backdrop.paperColor
+                  : undefined) ?? "#ffffff"),
             scale: 1,
           }),
           enable: (on) => {
             this.guidesEnabled = on;
             plugin.settings.writingGuidesEnabled = on;
             void plugin.saveSettings();
-            guidesBtn.toggleClass("is-active", on && this.isTransparent());
-            this.surface?.setWritingGuides(on && this.isTransparent(), this.guideStyle);
-            for (const fn of this.guideListeners) fn();
-          },
-          setTransparentBackground: (transparent) => {
-            const p = this.doc?.pages[0];
-            if (!p) return;
-            const nextBackdrop = transparent
-              ? { kind: "blank" as const, paperColor: "transparent" }
-              : { kind: "blank" as const, paperColor: "#ffffff" };
-            p.backdrop = nextBackdrop;
-            plugin.settings.inlineLastBackdrop = structuredClone(nextBackdrop);
-            void plugin.saveSettings();
-            this.revision++;
-            const theme = this.effectivePaperTheme();
-            this.surface?.setPaperTheme(theme);
-            this.toolbar?.setNight(theme.night === true);
-            this.surface?.setWritingGuides(this.guidesEnabled && transparent, this.guideStyle);
-            this.syncStageAspect();
-            this.surface?.refreshInlinePage(p.id);
-            this.scheduleSave();
-            guidesBtn.toggleClass("is-active", this.guidesEnabled && transparent);
+            guidesBtn.toggleClass("is-active", on);
+            this.surface?.setWritingGuides(on, this.guideStyle);
             for (const fn of this.guideListeners) fn();
           },
           configure: (patch) => {
             this.guideStyle = writingGuidesOf({ ...this.guideStyle, ...patch });
             plugin.settings.writingGuides = { ...this.guideStyle };
             void plugin.saveSettings();
-            this.surface?.setWritingGuides(
-              this.guidesEnabled && this.isTransparent(),
-              this.guideStyle,
-            );
+            this.surface?.setWritingGuides(this.guidesEnabled, this.guideStyle);
             for (const fn of this.guideListeners) fn();
           },
           subscribe: (fn) => {
@@ -545,7 +527,7 @@ export class EmbedInlineEditor {
       // 2. Native FineNotes Paper & Templates picker (`TemplatePickerModal`)
       const paperBtn = endGroup.createEl("button", {
         cls: "clickable-icon",
-        attr: { type: "button", "aria-label": "Paper template" },
+        attr: { type: "button", "aria-label": "Paper template & background" },
       });
       setIcon(paperBtn, "file-spreadsheet");
       paperBtn.addEventListener("click", (e) => {
@@ -553,16 +535,13 @@ export class EmbedInlineEditor {
         e.stopPropagation();
         const p = this.doc?.pages[0];
         if (!p) return;
-        const initial =
-          p.backdrop.kind === "pdf"
-            ? { kind: "blank" as const }
-            : p.backdrop.paperColor === "transparent"
-              ? { kind: "blank" as const }
-              : p.backdrop;
+        const initial = p.backdrop.kind === "pdf" ? { kind: "blank" as const } : p.backdrop;
         new TemplatePickerModal(app, {
           mode: "change",
           initial,
           geometry: expandable ? DEFAULT_PAGE_GEOMETRY : p.geometry,
+          allowTransparent: expandable,
+          hideSizeControls: expandable,
           onApply: ({ backdrop }) => {
             p.backdrop = backdrop;
             plugin.settings.inlineLastBackdrop = structuredClone(backdrop);
@@ -571,10 +550,10 @@ export class EmbedInlineEditor {
             const theme = this.effectivePaperTheme();
             this.surface?.setPaperTheme(theme);
             this.toolbar?.setNight(theme.night === true);
-            this.surface?.setWritingGuides(false, this.guideStyle);
             this.syncStageAspect();
             this.surface?.refreshInlinePage(p.id);
             this.scheduleSave();
+            for (const fn of this.guideListeners) fn();
           },
         }).open();
       });
@@ -659,7 +638,7 @@ export class EmbedInlineEditor {
     this.surface.setBackdropPainter(new VaultBackdropRenderer(null));
     this.images.onReady = (path) => this.surface?.imageReady(path);
     this.surface.setImagePainter(this.images);
-    this.surface.setWritingGuides(this.guidesEnabled && this.isTransparent(), this.guideStyle);
+    this.surface.setWritingGuides(this.guidesEnabled, this.guideStyle);
     this.surface.setTool(this.toolState.tool);
     this.toolbar.setNight(this.effectivePaperTheme().night === true);
     this.syncUndoRedo();

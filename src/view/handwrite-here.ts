@@ -24,6 +24,7 @@ import {
   stripInkSuffix,
 } from "../model/new-notebook";
 import { buildInkFile } from "../model/serialize";
+import { FN_ICON_HANDWRITE_HERE } from "./finenotes-icons";
 import { HandwriteSetupModal, InlineNotebookPickerModal } from "./handwrite-modals";
 import { embedInsertion } from "./page-embed-model";
 import { editClosedNotebook, notebookIsOpen } from "./notebook-transaction";
@@ -177,6 +178,7 @@ export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
   plugin.addCommand({
     id: "handwrite-here",
     name: "Handwrite here",
+    icon: FN_ICON_HANDWRITE_HERE,
     editorCheckCallback: (checking, editor, ctx) => {
       const file = ctx.file;
       if (!file || plugin.isInkFile(file)) return false;
@@ -189,6 +191,7 @@ export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
   plugin.addCommand({
     id: "handwrite-here-choose",
     name: "Handwrite here (choose notebook…)",
+    icon: FN_ICON_HANDWRITE_HERE,
     editorCheckCallback: (checking, editor, ctx) => {
       const file = ctx.file;
       if (!file || plugin.isInkFile(file)) return false;
@@ -205,7 +208,7 @@ export function registerHandwriteHere(plugin: GoodObsidianPlugin): void {
       menu.addItem((item) =>
         item
           .setTitle("Handwrite here")
-          .setIcon("pen-tool")
+          .setIcon(FN_ICON_HANDWRITE_HERE)
           .onClick(() => run(editor, file, false)),
       );
     }),

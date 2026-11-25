@@ -26512,3 +26512,16 @@ button.goodobsidian-color-swatch.clickable-icon,
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
+.goodobsidian-paper-swatch.is-transparent-swatch .goodobsidian-paper-swatch-disc {
+  background-image:
+    linear-gradient(45deg, var(--background-modifier-border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--background-modifier-border) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--background-modifier-border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--background-modifier-border) 75%);
+  background-size: 8px 8px;
+  background-position:
+    0 0,
+    0 4px,
+    4px -4px,
+    -4px 0;
+}
