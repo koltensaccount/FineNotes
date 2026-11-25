@@ -978,6 +978,7 @@ class PageSlot {
     this.mountInlineControls();
     this.el.addEventListener("pointerdown", (event) => {
       if (event.pointerType !== "pen" || !this.page || !this.isLivePreviewEditable()) return;
+      if ((event.target as Element | null)?.closest(".goodobsidian-page-embed-actions")) return;
       event.preventDefault();
       event.stopPropagation();
       this.embed.embeds.startInline(this);

@@ -645,18 +645,7 @@ export class EmbedInlineEditor {
     slotEl.tabIndex = -1;
     slotEl.focus({ preventScroll: true });
 
-    // Tap outside the active embed (and outside popovers/modals) finishes & trims cleanly.
-    const onOutside = (e: PointerEvent): void => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (slotEl.contains(target)) return;
-      if ((target as Element).closest?.(".goodobsidian-popover, .modal-container")) return;
-      void this.close();
-    };
     const docObj = slotEl.ownerDocument;
-    docObj.addEventListener("pointerdown", onOutside, true);
-    this.cleanups.push(() => docObj.removeEventListener("pointerdown", onOutside, true));
-
     const onKey = (e: KeyboardEvent): void => {
       if (e.defaultPrevented) return;
       if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key === "Enter")) {
